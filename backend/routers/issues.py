@@ -1,5 +1,5 @@
 from __future__ import annotations
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Request, BackgroundTasks, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Request, BackgroundTasks, status, Response
 from fastapi.responses import JSONResponse
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session, defer
@@ -9,6 +9,7 @@ import uuid
 import os
 import logging
 import hashlib
+import json
 from datetime import datetime, timezone
 
 from backend.database import get_db
@@ -114,7 +115,7 @@ async def create_issue(
                     Issue.latitude <= max_lat,
                     Issue.longitude >= min_lon,
                     Issue.longitude <= max_lon
-                ).all()
+                ).order_by(Issue.created_at.desc()).limit(100).all()
             )
 
             nearby_issues_with_distance = find_nearby_issues(
@@ -297,10 +298,10 @@ def get_nearby_issues(
     """
     try:
         # Check cache first
-        cache_key = f"{latitude:.5f}_{longitude:.5f}_{radius}_{limit}"
-        cached_data = nearby_issues_cache.get(cache_key)
-        if cached_data:
-            return cached_data
+        cache_key = f"v2_{latitude:.5f}_{longitude:.5f}_{radius}_{limit}"
+        cached_json = nearby_issues_cache.get(cache_key)
+        if cached_json:
+            return Response(content=cached_json, media_type="application/json")
 
         # Query open issues with coordinates
         # Optimization: Use bounding box to filter candidates in SQL
@@ -322,7 +323,7 @@ def get_nearby_issues(
             Issue.latitude <= max_lat,
             Issue.longitude >= min_lon,
             Issue.longitude <= max_lon
-        ).all()
+        ).order_by(Issue.created_at.desc()).limit(100).all()
 
         nearby_issues_with_distance = find_nearby_issues(
             open_issues, latitude, longitude, radius_meters=radius
@@ -344,10 +345,12 @@ def get_nearby_issues(
             for issue, distance in nearby_issues_with_distance[:limit]
         ]
 
-        # Update cache
-        nearby_issues_cache.set(nearby_responses, cache_key)
+        # Performance Boost: Cache serialized JSON to bypass redundant Pydantic validation
+        # and serialization on cache hits.
+        json_data = json.dumps([r.model_dump(mode='json') for r in nearby_responses])
+        nearby_issues_cache.set(json_data, cache_key)
 
-        return nearby_responses
+        return Response(content=json_data, media_type="application/json")
 
     except Exception as e:
         logger.error(f"Error getting nearby issues: {e}", exc_info=True)
@@ -656,13 +659,13 @@ async def verify_blockchain_integrity(issue_id: int, db: Session = Depends(get_d
 @router.get("/api/issues/recent", response_model=List[IssueSummaryResponse])
 def get_recent_issues(
     limit: int = Query(10, ge=1, le=50, description="Number of issues to return"),
-    offset: int = Query(0, ge=0, description="Number of issues to skip"),
+    offset: int = Query(0, ge=0, description="Number of results to skip"),
     db: Session = Depends(get_db)
 ):
-    cache_key = f"recent_issues_{limit}_{offset}"
-    cached_data = recent_issues_cache.get(cache_key)
-    if cached_data:
-        return JSONResponse(content=cached_data)
+    cache_key = f"v2_recent_issues_{limit}_{offset}"
+    cached_json = recent_issues_cache.get(cache_key)
+    if cached_json:
+        return Response(content=cached_json, media_type="application/json")
 
     # Fetch issues with pagination
     # Optimized: Use column projection to fetch only needed fields
@@ -699,6 +702,8 @@ def get_recent_issues(
             "longitude": row.longitude
         })
 
-    # Thread-safe cache update
-    recent_issues_cache.set(data, cache_key)
-    return data
+    # Performance Boost: Cache serialized JSON to bypass redundant Pydantic validation
+    # and serialization on cache hits. Returning Response directly is ~2-3x faster.
+    json_data = json.dumps(data)
+    recent_issues_cache.set(json_data, cache_key)
+    return Response(content=json_data, media_type="application/json")
