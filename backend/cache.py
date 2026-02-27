@@ -3,35 +3,36 @@ import logging
 import threading
 from typing import Any, Optional
 from datetime import datetime, timedelta
+from collections import OrderedDict
 
 logger = logging.getLogger(__name__)
 
 class ThreadSafeCache:
     """
     Thread-safe cache implementation with TTL and memory management.
-    Fixes race conditions and implements proper cache expiration.
+    Uses OrderedDict for O(1) LRU eviction.
     """
     
     def __init__(self, ttl: int = 300, max_size: int = 100):
-        self._data = {}
+        self._data = OrderedDict()
         self._timestamps = {}
         self._ttl = ttl  # Time to live in seconds
         self._max_size = max_size  # Maximum number of cache entries
         self._lock = threading.RLock()  # Reentrant lock for thread safety
-        self._access_count = {}  # Track access frequency for LRU eviction
         
     def get(self, key: str = "default") -> Optional[Any]:
         """
         Thread-safe get operation with automatic cleanup.
+        Optimized: Moves accessed item to end (MRU) in O(1).
         """
         with self._lock:
             current_time = time.time()
             
             # Check if key exists and is not expired
-            if key in self._data and key in self._timestamps:
+            if key in self._data:
                 if current_time - self._timestamps[key] < self._ttl:
-                    # Update access count for LRU
-                    self._access_count[key] = self._access_count.get(key, 0) + 1
+                    # Update access order for LRU (move to end = MRU)
+                    self._data.move_to_end(key)
                     return self._data[key]
                 else:
                     # Expired entry - remove it
@@ -42,6 +43,7 @@ class ThreadSafeCache:
     def set(self, data: Any, key: str = "default") -> None:
         """
         Thread-safe set operation with memory management.
+        Optimized: O(1) eviction of LRU item when full.
         """
         with self._lock:
             current_time = time.time()
@@ -49,14 +51,19 @@ class ThreadSafeCache:
             # Clean up expired entries before adding new one
             self._cleanup_expired()
             
-            # If cache is full, evict least recently used entry
-            if len(self._data) >= self._max_size and key not in self._data:
-                self._evict_lru()
+            # Update order if key exists
+            if key in self._data:
+                self._data.move_to_end(key)
+            # If cache is full, evict the oldest item (least recently used)
+            elif len(self._data) >= self._max_size:
+                # popitem(last=False) removes the first (LRU) item in O(1)
+                lru_key, _ = self._data.popitem(last=False)
+                self._timestamps.pop(lru_key, None)
+                logger.debug(f"Evicted LRU cache entry: {lru_key}")
             
             # Set new data atomically
             self._data[key] = data
             self._timestamps[key] = current_time
-            self._access_count[key] = 1
             
             logger.debug(f"Cache set: key={key}, size={len(self._data)}")
     
@@ -75,7 +82,6 @@ class ThreadSafeCache:
         with self._lock:
             self._data.clear()
             self._timestamps.clear()
-            self._access_count.clear()
             logger.debug("Cache cleared")
     
     def get_stats(self) -> dict:
@@ -103,7 +109,6 @@ class ThreadSafeCache:
         """
         self._data.pop(key, None)
         self._timestamps.pop(key, None)
-        self._access_count.pop(key, None)
     
     def _cleanup_expired(self) -> None:
         """
@@ -122,18 +127,6 @@ class ThreadSafeCache:
         if expired_keys:
             logger.debug(f"Cleaned up {len(expired_keys)} expired cache entries")
     
-    def _evict_lru(self) -> None:
-        """
-        Internal method to evict least recently used entry.
-        Must be called within lock context.
-        """
-        if not self._access_count:
-            return
-        
-        # Find key with lowest access count
-        lru_key = min(self._access_count.keys(), key=lambda k: self._access_count[k])
-        self._remove_key(lru_key)
-        logger.debug(f"Evicted LRU cache entry: {lru_key}")
 
 class SimpleCache:
     """
