@@ -148,10 +148,20 @@ class CivicIntelligenceEngine:
                     "reason": f"Cluster density analysis (clusters: {cluster_count}, issues: {len(issues_24h)})"
                 })
 
-            # 5. Civic Intelligence Index
+            # 5. Improve Category Keywords
+            # Extract common keywords from today's issues per category
+            category_keywords_update = trend_analyzer.extract_category_keywords(issues_24h)
+            for category, new_keywords_data in category_keywords_update.items():
+                new_keywords_list = [kw for kw, count in new_keywords_data]
+                if new_keywords_list:
+                    adaptive_weights.update_category_keywords(category, new_keywords_list)
+                    # We don't log every keyword addition to weight_changes to avoid clutter,
+                    # but it is logged in adaptive_weights log.
+
+            # 6. Civic Intelligence Index
             index_data = self._calculate_index(db, issues_24h, trends)
 
-            # 6. Snapshot
+            # 7. Snapshot
             snapshot = {
                 "date": now.isoformat(),
                 "trends": trends,
@@ -200,6 +210,12 @@ class CivicIntelligenceEngine:
 
         # Clamp 0-100
         score = max(0.0, min(100.0, score))
+        score = round(score, 1)
+
+        # Calculate Delta from previous day
+        previous_snapshot = self._get_previous_snapshot()
+        previous_score = previous_snapshot.get('civic_index', {}).get('score', 70.0)
+        delta = round(score - previous_score, 1)
 
         # Top emerging concern
         top_cat = "None"
@@ -218,7 +234,8 @@ class CivicIntelligenceEngine:
             highest_severity_region = f"Lat {top_cluster['latitude']:.4f}, Lon {top_cluster['longitude']:.4f}"
 
         return {
-            "score": round(score, 1),
+            "score": score,
+            "delta": delta,
             "new_issues_count": total_new,
             "resolved_issues_count": resolved_count,
             "top_emerging_concern": top_cat,

@@ -222,3 +222,56 @@ def test_civic_intelligence_run(mock_listdir, mock_json_dump, mock_file_open, mo
     # We expect "Fire" to be marked as a spike because it went from 2 to 10
     if "spikes" in snapshot["trends"]:
         assert "Fire" in snapshot["trends"]["spikes"]
+
+    # Verify Civic Index Delta
+    assert "delta" in snapshot["civic_index"]
+
+@patch('backend.civic_intelligence.SessionLocal')
+@patch('backend.civic_intelligence.trend_analyzer')
+@patch('backend.civic_intelligence.adaptive_weights')
+@patch('builtins.open', new_callable=mock_open)
+@patch('json.dump')
+@patch('os.listdir')
+def test_civic_intelligence_keyword_updates(mock_listdir, mock_json_dump, mock_file_open, mock_weights, mock_trend_analyzer, mock_db_session):
+    engine = CivicIntelligenceEngine()
+
+    # Mock DB
+    mock_session = MagicMock()
+    mock_db_session.return_value = mock_session
+
+    # Mock previous snapshot
+    mock_listdir.return_value = ['2023-01-01.json']
+    previous_snapshot_content = json.dumps({})
+    read_mock = mock_open(read_data=previous_snapshot_content)
+    write_mock = mock_open()
+
+    def open_side_effect(file, mode='r', *args, **kwargs):
+        if 'r' in mode:
+            return read_mock(file, mode, *args, **kwargs)
+        return write_mock(file, mode, *args, **kwargs)
+
+    mock_file_open.side_effect = open_side_effect
+
+    # Mock DB queries to return empty lists (simplifying test to focus on keywords)
+    mock_session.query.return_value.filter.return_value.all.return_value = []
+    mock_session.query.return_value.filter.return_value.count.return_value = 0
+
+    # Mock Trend Analyzer
+    mock_trend_analyzer.analyze.return_value = {
+        "category_distribution": {},
+        "clusters": []
+    }
+
+    # Mock extract_category_keywords to return a new keyword
+    mock_trend_analyzer.extract_category_keywords.return_value = {
+        "Pothole": [("crater", 5)]
+    }
+
+    # Mock get_duplicate_search_radius to return a valid float
+    mock_weights.get_duplicate_search_radius.return_value = 50.0
+
+    # Run
+    engine.run_daily_cycle()
+
+    # Verify keyword update called
+    mock_weights.update_category_keywords.assert_called_with("Pothole", ["crater"])

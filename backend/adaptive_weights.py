@@ -106,4 +106,26 @@ class AdaptiveWeights:
         self._save_weights()
         logger.info(f"Updated duplicate search radius to {new_radius:.1f}m")
 
+    def update_category_keywords(self, category: str, new_keywords: List[str]):
+        """
+        Updates the keywords for a category by adding new ones.
+        """
+        self._check_reload()
+        keywords_map = self._weights.get('category_keywords', {})
+        current_keywords = keywords_map.get(category, [])
+
+        updated = False
+        for kw in new_keywords:
+            kw = kw.lower().strip()
+            if kw and kw not in current_keywords:
+                current_keywords.append(kw)
+                updated = True
+
+        if updated:
+            keywords_map[category] = current_keywords
+            self._weights['category_keywords'] = keywords_map
+            self._weights['last_updated'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+            self._save_weights()
+            logger.info(f"Updated keywords for {category}: added {len(new_keywords)} new keywords")
+
 adaptive_weights = AdaptiveWeights()

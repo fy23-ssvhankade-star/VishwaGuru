@@ -90,4 +90,36 @@ class TrendAnalyzer:
         results.sort(key=lambda x: x['count'], reverse=True)
         return results
 
+    def extract_category_keywords(self, issues: List[Issue]) -> Dict[str, List[Tuple[str, int]]]:
+        """
+        Analyze issues grouped by category to find common keywords within that category.
+        Returns a dict: { category_name: [(keyword, count), ...] }
+        """
+        issues_by_cat = {}
+        for issue in issues:
+            if not issue.category or not issue.description:
+                continue
+
+            if issue.category not in issues_by_cat:
+                issues_by_cat[issue.category] = []
+            issues_by_cat[issue.category].append(issue)
+
+        result = {}
+        for category, cat_issues in issues_by_cat.items():
+            # Skip categories with too few issues to form a pattern
+            if len(cat_issues) < 5:
+                continue
+
+            keywords = self._extract_keywords(cat_issues)
+            # Filter keywords that are just the category name itself
+            clean_keywords = []
+            for kw, count in keywords:
+                if kw not in category.lower() and count >= 3: # Must appear at least 3 times
+                    clean_keywords.append((kw, count))
+
+            if clean_keywords:
+                result[category] = clean_keywords
+
+        return result
+
 trend_analyzer = TrendAnalyzer()

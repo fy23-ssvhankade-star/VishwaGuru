@@ -35,11 +35,19 @@ The system learns from manual interventions:
     *   If volume is high (>50) but no clusters: Increase radius (x1.05) as the current radius might be too strict.
     *   If volume is low (<10) and radius is large: Decay radius (x0.95) to improve precision.
 
-### 4. Civic Intelligence Index
+### 4. Improve Category Keywords
+*   **Input:** Text descriptions of today's issues grouped by category.
+*   **Logic:**
+    *   Identify common keywords within each category that appear frequently (>= 3 times) in unrelated reports.
+    *   If a new keyword is found that isn't already in the `category_keywords` dictionary for that category, add it.
+    *   **Goal:** To continuously improve the auto-categorization accuracy by learning new vocabulary used by citizens (e.g., learning that "crater" is often used for Potholes).
+
+### 5. Civic Intelligence Index
 A daily score (0-100) reflecting the city's civic health.
 *   **Base Score:** 70
 *   **Bonus:** +2.0 per resolved issue.
 *   **Penalty:** -0.5 per new issue.
+*   **Delta:** Calculates the change (+/-) from yesterday's score to track progress.
 *   **Output:** Includes "Top Emerging Concern" and "Highest Severity Region".
 
 ## Data Storage & Auditability
@@ -60,3 +68,4 @@ A daily score (0-100) reflecting the city's civic health.
 The system evolves by:
 1.  **Self-Correction:** If admins constantly upgrade "Pothole" severity, the system learns that "Pothole" is more critical than initially configured.
 2.  **Dynamic Sensitivity:** The duplicate detection radius "breathes" (expands/contracts) based on the density of reports, adapting to urban density changes or event-driven spikes.
+3.  **Vocabulary Expansion:** The system learns new keywords for categories automatically, adapting to local slang or new terminology used by citizens.
