@@ -13,7 +13,6 @@ services:
           type: web
           name: vishwaguru-backend
           property: port
-      # Exclude PYTHONPATH to avoid conflicts with sys.path logic in code
       # Required API Keys (must be set in Render dashboard)
       - key: GEMINI_API_KEY
         sync: false

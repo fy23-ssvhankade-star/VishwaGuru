@@ -99,6 +99,7 @@ async def create_issue(
             min_lat, max_lat, min_lon, max_lon = get_bounding_box(latitude, longitude, 50.0)
 
             # Performance Boost: Use column projection to avoid loading full model instances
+            # Fix: Added category filter to prevent false positives across different categories (Issue #DEDUP-001)
             open_issues = await run_in_threadpool(
                 lambda: db.query(
                     Issue.id,
@@ -111,6 +112,7 @@ async def create_issue(
                     Issue.status
                 ).filter(
                     Issue.status == "open",
+                    Issue.category == category,
                     Issue.latitude >= min_lat,
                     Issue.latitude <= max_lat,
                     Issue.longitude >= min_lon,
@@ -660,16 +662,18 @@ async def verify_blockchain_integrity(issue_id: int, db: Session = Depends(get_d
 def get_recent_issues(
     limit: int = Query(10, ge=1, le=50, description="Number of issues to return"),
     offset: int = Query(0, ge=0, description="Number of results to skip"),
+    category: str = Query(None, description="Filter issues by category"),
     db: Session = Depends(get_db)
 ):
-    cache_key = f"v2_recent_issues_{limit}_{offset}"
+    # Added category to cache key to support filtering (Issue #FEAT-002)
+    cache_key = f"v2_recent_issues_{limit}_{offset}_{category or 'all'}"
     cached_json = recent_issues_cache.get(cache_key)
     if cached_json:
         return Response(content=cached_json, media_type="application/json")
 
     # Fetch issues with pagination
     # Optimized: Use column projection to fetch only needed fields
-    results = db.query(
+    query = db.query(
         Issue.id,
         Issue.category,
         Issue.description,
@@ -680,7 +684,12 @@ def get_recent_issues(
         Issue.location,
         Issue.latitude,
         Issue.longitude
-    ).order_by(Issue.created_at.desc()).offset(offset).limit(limit).all()
+    )
+
+    if category:
+        query = query.filter(Issue.category == category)
+
+    results = query.order_by(Issue.created_at.desc()).offset(offset).limit(limit).all()
 
     # Convert to Pydantic models for validation and serialization
     data = []
