@@ -129,7 +129,7 @@ class ThreadSafeCache:
         """
         if not self._access_count:
             return
-        
+
         # Find key with lowest access count
         lru_key = min(self._access_count.keys(), key=lambda k: self._access_count[k])
         self._remove_key(lru_key)
