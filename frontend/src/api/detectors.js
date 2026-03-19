@@ -29,6 +29,15 @@ const createDetectorApi = (endpoint) => async (data) => {
 
     // Let's change createDetectorApi to expect FormData.
     return await apiClient.postForm(endpoint, data);
+
+  // Emotion Detection (HF integration)
+  emotion: async (formData) => {
+    return apiClient.post('/api/detect-emotion', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
 };
 
 export const detectorsApi = {
@@ -56,4 +65,13 @@ export const detectorsApi = {
     transcribe: async (formData) => {
         return await apiClient.postForm('/transcribe-audio', formData);
     },
+
+  // Emotion Detection (HF integration)
+  emotion: async (formData) => {
+    return apiClient.post('/api/detect-emotion', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
 };
