@@ -236,6 +236,8 @@ async def create_issue(
         # Invalidate cache so new issue appears
         try:
             recent_issues_cache.clear()
+        recent_issues_cache.clear()
+        user_issues_cache.clear()
         except Exception as e:
             logger.error(f"Error clearing cache: {e}")
 
@@ -282,6 +284,11 @@ async def upvote_issue(issue_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Issue not found")
 
     await run_in_threadpool(db.commit)
+
+    try:
+        user_issues_cache.clear()
+    except Exception as e:
+        logger.error(f"Error clearing cache: {e}")
 
     # Fetch only the updated upvote count using column projection
     new_upvotes = await run_in_threadpool(
@@ -526,6 +533,11 @@ def update_issue_status(
     db.commit()
     db.refresh(issue)
 
+    try:
+        user_issues_cache.clear()
+    except Exception as e:
+        logger.error(f"Error clearing cache: {e}")
+
     # Send notification to citizen
     background_tasks.add_task(send_status_notification, issue.id, old_status, request.status.value, request.notes)
 
@@ -577,6 +589,8 @@ def subscribe_push_notifications(
         message="Push subscription created"
     )
 
+from backend.cache import user_issues_cache
+
 @router.get("/issues/user", response_model=List[IssueSummaryResponse])
 def get_user_issues(
     user_email: str = Query(..., description="Email of the user"),
@@ -588,6 +602,11 @@ def get_user_issues(
     Get issues reported by a specific user (identified by email).
     Optimized: Uses column projection to avoid loading full model instances and large fields.
     """
+    cache_key = f"user_{user_email}_{limit}_{offset}"
+    cached_json = user_issues_cache.get(cache_key)
+    if cached_json:
+        return Response(content=cached_json, media_type="application/json")
+
     results = db.query(
         Issue.id,
         Issue.category,
@@ -613,7 +632,7 @@ def get_user_issues(
             "id": row.id,
             "category": row.category,
             "description": short_desc,
-            "created_at": row.created_at,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
             "image_path": row.image_path,
             "status": row.status,
             "upvotes": row.upvotes if row.upvotes is not None else 0,
@@ -622,7 +641,9 @@ def get_user_issues(
             "longitude": row.longitude
         })
 
-    return data
+    json_data = json.dumps(data)
+    user_issues_cache.set(data=json_data, key=cache_key)
+    return Response(content=json_data, media_type="application/json")
 
 @router.get("/issues/{issue_id}/blockchain-verify", response_model=BlockchainVerificationResponse)
 async def verify_blockchain_integrity(issue_id: int, db: Session = Depends(get_db)):
