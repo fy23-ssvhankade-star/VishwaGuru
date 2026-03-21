@@ -236,7 +236,8 @@ async def create_issue(
         # Invalidate cache so new issue appears
         try:
             recent_issues_cache.clear()
-            user_issues_cache.clear()
+        recent_issues_cache.clear()
+        user_issues_cache.clear()
         except Exception as e:
             logger.error(f"Error clearing cache: {e}")
 
