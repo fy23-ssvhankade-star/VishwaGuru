@@ -126,9 +126,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="VishwaGuru Backend",
     description="AI-powered civic issue reporting and resolution platform",
-    version="1.0.0"
-    # Temporarily disable lifespan for local dev debugging
-    # lifespan=lifespan
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # Add centralized exception handlers
