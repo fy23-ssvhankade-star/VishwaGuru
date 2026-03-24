@@ -94,9 +94,3 @@ if __name__ == "__main__":
 
     print(f"Old Results: {res_old}")
     print(f"New Agg Results: {res_agg}")
-def benchmark_new_single(db: Session, grievance_id: int, iterations=1000):
-    start = time.perf_counter()
-    for _ in range(iterations):
-        # We can't easily join them perfectly without cross product, but what if we do subqueries?
-        # Actually it's probably better to just leave it. Let's look for N+1 queries instead.
-        pass
