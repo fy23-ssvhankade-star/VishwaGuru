@@ -58,6 +58,6 @@
 **Learning:** In hot paths (like `PriorityEngine._calculate_urgency`), executing pre-compiled regular expressions (`re.search`) for simple keyword extraction or grouping (e.g., `\b(word1|word2)\b`) is significantly slower than simple Python substring checks (`in text`). The regex engine execution overhead in Python adds up in high-iteration loops like priority scoring.
 **Action:** Always consider pre-extracting literal keywords from simple regex patterns and executing a quick `any(k in text for k in keywords)` pre-filter. Only invoke `regex.search` if the pre-filter passes, avoiding the expensive regex operation on texts that obviously do not match.
 
-## 2026-02-14 - Stable Cryptographic Cache Keys
-**Learning:** Python's built-in `hash()` is salted and non-deterministic across process restarts or different worker processes. Using `hash(image_bytes)` as a cache key in a multi-worker production environment (like Gunicorn/Uvicorn) results in a 0% hit rate across workers and process restarts.
-**Action:** Always use stable cryptographic hashes like `hashlib.md5(data).hexdigest()` for cache keys involving binary data to ensure consistency across the entire application cluster.
+## 2026-02-14 - Deterministic Cache Keys
+**Learning:** Python's built-in `hash()` is salted and non-deterministic across process restarts and worker processes. Using `hash(image_bytes)` as a cache key means the same logical key can map to different values between processes or deployments, preventing effective reuse of cached results beyond a single process lifetime.
+**Action:** Use a stable, deterministic hash function from `hashlib` (for example, `hashlib.md5(data).hexdigest()` or a stronger variant) when you need cache keys that remain consistent across restarts or processes. This is for key stability only and should not be relied on for cryptographic security.
