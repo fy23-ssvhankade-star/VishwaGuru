@@ -101,7 +101,7 @@ const Home = ({ setView, fetchResponsibilityMap, recentIssues, handleUpvote, loa
         { id: 'report', label: t('home.issues.crowd'), icon: <Users size={24} />, color: 'text-red-500', bg: 'bg-red-50' },
         { id: 'report', label: t('home.issues.waterLeak'), icon: <Waves size={24} />, color: 'text-blue-500', bg: 'bg-blue-50' },
         { id: 'report', label: t('home.issues.waste'), icon: <Recycle size={24} />, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-        { id: 'report', label: t('home.issues.accessibility') || 'Accessibility', icon: <Accessibility size={24} />, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+        { id: 'report', label: t('home.issues.accessibility', { defaultValue: 'Accessibility' }), icon: <Accessibility size={24} />, color: 'text-indigo-600', bg: 'bg-indigo-50' },
       ]
     },
     {
