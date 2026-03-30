@@ -21,5 +21,6 @@ def test_rawresponse():
         _ = resp.body
     return time.perf_counter() - start
 
-print(f"JSONResponse: {test_jsonresponse():.4f}s")
-print(f"Response with pre-serialized JSON: {test_rawresponse():.4f}s")
+if __name__ == "__main__":
+    print(f"JSONResponse: {test_jsonresponse():.4f}s")
+    print(f"Response with pre-serialized JSON: {test_rawresponse():.4f}s")
