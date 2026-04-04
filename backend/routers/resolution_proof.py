@@ -10,16 +10,19 @@ Provides endpoints for:
 """
 
 import logging
+import hashlib
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from fastapi.concurrency import run_in_threadpool
 
 from backend.database import get_db
+from backend.models import ResolutionEvidence
 from backend.resolution_proof_service import ResolutionProofService
 from backend.schemas import (
     GenerateRPTRequest, RPTResponse,
     SubmitEvidenceRequest, EvidenceResponse,
     VerificationResponse, AuditTrailResponse,
-    DuplicateCheckResponse,
+    DuplicateCheckResponse, BlockchainVerificationResponse
 )
 
 logger = logging.getLogger(__name__)
@@ -200,6 +203,58 @@ def get_audit_log(
 # ============================================================================
 # DUPLICATE / FRAUD DETECTION
 # ============================================================================
+
+@router.get("/{evidence_id}/blockchain-verify", response_model=BlockchainVerificationResponse)
+async def verify_resolution_blockchain_integrity(evidence_id: int, db: Session = Depends(get_db)):
+    """
+    Verify the cryptographic integrity of resolution evidence using blockchain-style chaining.
+    Optimized: Uses previous_integrity_hash column for O(1) verification.
+    """
+    # Fetch current evidence data including the link to previous hash
+    # Performance Boost: Use projected previous_integrity_hash to avoid N+1 or secondary lookups
+    evidence = await run_in_threadpool(
+        lambda: db.query(
+            ResolutionEvidence.id,
+            ResolutionEvidence.grievance_id,
+            ResolutionEvidence.token_id,
+            ResolutionEvidence.evidence_hash,
+            ResolutionEvidence.integrity_hash,
+            ResolutionEvidence.previous_integrity_hash
+        ).filter(ResolutionEvidence.id == evidence_id).first()
+    )
+
+    if not evidence:
+        raise HTTPException(status_code=404, detail="Resolution evidence not found")
+
+    # Fetch token to get token_id string (required for chaining logic)
+    # We need the string token_id from ResolutionProofToken
+    from backend.models import ResolutionProofToken
+    token = await run_in_threadpool(
+        lambda: db.query(ResolutionProofToken.token_id).filter(ResolutionProofToken.id == evidence.token_id).first()
+    )
+    token_id_str = token[0] if token else "unknown"
+
+    # Determine previous hash (O(1) from stored column)
+    prev_hash = evidence.previous_integrity_hash or ""
+
+    # Chaining logic: hash(token_id|grievance_id|evidence_hash|prev_hash)
+    chain_content = f"{token_id_str}|{evidence.grievance_id}|{evidence.evidence_hash}|{prev_hash}"
+    computed_hash = hashlib.sha256(chain_content.encode()).hexdigest()
+
+    is_valid = (computed_hash == evidence.integrity_hash)
+
+    if is_valid:
+        message = "Integrity verified. This resolution evidence is cryptographically sealed and part of a secure chain."
+    else:
+        message = "Integrity check failed! The evidence data does not match its cryptographic seal."
+
+    return BlockchainVerificationResponse(
+        is_valid=is_valid,
+        current_hash=evidence.integrity_hash,
+        computed_hash=computed_hash,
+        message=message
+    )
+
 
 @router.post("/flag-duplicate", response_model=DuplicateCheckResponse)
 def flag_duplicate_evidence(
