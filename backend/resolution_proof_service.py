@@ -25,6 +25,7 @@ from backend.models import (
     EvidenceAuditLog, VerificationStatus, GrievanceStatus
 )
 from backend.config import get_config
+from backend.cache import resolution_last_hash_cache
 
 logger = logging.getLogger(__name__)
 
@@ -197,6 +198,7 @@ class ResolutionProofService:
             geofence_radius_meters=geofence_radius,
             valid_from=now,
             valid_until=valid_until,
+            expires_at=valid_until,  # Required column with NOT NULL constraint
             nonce=nonce,
             token_signature=signature,
             is_used=False,
@@ -343,7 +345,23 @@ class ResolutionProofService:
                 "Evidence capture timestamp is outside the token validity window"
             )
 
-        # 4. Check for duplicate hashes
+        # 4. Blockchain Chaining
+        # Performance Boost: Use thread-safe cache to eliminate DB query for last hash
+        prev_hash = resolution_last_hash_cache.get("last_hash")
+        if prev_hash is None:
+            # Cache miss: Fetch only the last hash from DB
+            last_record = db.query(ResolutionEvidence.integrity_hash).order_by(ResolutionEvidence.id.desc()).first()
+            prev_hash = last_record[0] if last_record and last_record[0] else ""
+            resolution_last_hash_cache.set(data=prev_hash, key="last_hash")
+
+        # Chaining: hash(token_id|grievance_id|evidence_hash|prev_hash)
+        chain_content = f"{token.token_id}|{token.grievance_id}|{evidence_hash}|{prev_hash}"
+        integrity_hash = hashlib.sha256(chain_content.encode()).hexdigest()
+
+        # Update cache for next evidence submission
+        resolution_last_hash_cache.set(data=integrity_hash, key="last_hash")
+
+        # 5. Check for duplicate hashes
         duplicates = ResolutionProofService._check_duplicate_hash(evidence_hash, db)
         if duplicates:
             dup_ids = [d.grievance_id for d in duplicates]
@@ -380,6 +398,8 @@ class ResolutionProofService:
             metadata_bundle=metadata_bundle,
             server_signature=server_signature,
             verification_status=VerificationStatus.VERIFIED,
+            integrity_hash=integrity_hash,
+            previous_integrity_hash=prev_hash,
         )
 
         db.add(evidence)
