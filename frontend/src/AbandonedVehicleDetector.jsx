@@ -126,7 +126,7 @@ const AbandonedVehicleDetector = ({ onBack }) => {
                             <div key={idx} className="bg-gray-50 p-3 rounded-lg border border-gray-100">
                                 <div className="flex justify-between text-sm mb-1">
                                     <span className="font-bold text-gray-800 capitalize">{(detection.class || detection.label || 'Vehicle').replace('_', ' ')}</span>
-                                    <span className="text-gray-500 font-mono">{(detection.confidence || detection.score * 100).toFixed(1)}%</span>
+                                    <span className="text-gray-500 font-mono">{(((detection.confidence ?? detection.score) ?? 0) * 100).toFixed(1)}%</span>
                                 </div>
                             </div>
                         ))}
