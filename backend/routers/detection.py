@@ -39,6 +39,7 @@ from backend.hf_api_service import (
     detect_traffic_sign_clip,
     detect_abandoned_vehicle_clip,
     detect_facial_emotion,
+    detect_nsfw_content,
 
 )
 from backend.dependencies import get_http_client
@@ -465,6 +466,27 @@ async def detect_abandoned_vehicle_endpoint(image: UploadFile = File(...)):
     except Exception as e:
         logger.error(f"Abandoned vehicle detection error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
+
+@router.post("/detect-nsfw")
+async def detect_nsfw_endpoint(
+    request: Request,
+    image: UploadFile = File(...)
+):
+    """
+    Analyze image for NSFW content using Hugging Face inference.
+    """
+    img_data = await validate_uploaded_file(image)
+    if "error" in img_data:
+        raise HTTPException(status_code=400, detail=img_data["error"])
+
+    processed_bytes = await run_in_threadpool(process_uploaded_image, img_data["bytes"])
+    client = get_http_client(request)
+    result = await detect_nsfw_content(processed_bytes, client)
+
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+
+    return result
 
 @router.post("/detect-emotion")
 async def detect_emotion_endpoint(

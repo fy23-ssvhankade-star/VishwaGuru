@@ -83,8 +83,8 @@ const Home = ({ setView, fetchResponsibilityMap, recentIssues, handleUpvote, loa
         { id: 'blocked', label: t('home.issues.blockedRoad'), icon: <XCircle size={24} />, color: 'text-gray-600', bg: 'bg-gray-50' },
         { id: 'parking', label: t('home.issues.illegalParking'), icon: <Truck size={24} />, color: 'text-rose-600', bg: 'bg-rose-50' },
         { id: 'streetlight', label: t('home.issues.darkStreet'), icon: <Lightbulb size={24} />, color: 'text-slate-600', bg: 'bg-slate-50' },
-        { id: 'report', label: t('home.issues.trafficSign'), icon: <Signpost size={24} />, color: 'text-yellow-600', bg: 'bg-yellow-50' },
-        { id: 'report', label: t('home.issues.abandonedVehicle'), icon: <Car size={24} />, color: 'text-gray-600', bg: 'bg-gray-50' },
+        { id: 'traffic-sign', label: t('home.issues.trafficSign'), icon: <Signpost size={24} />, color: 'text-yellow-600', bg: 'bg-yellow-50' },
+        { id: 'abandoned-vehicle', label: t('home.issues.abandonedVehicle'), icon: <Car size={24} />, color: 'text-gray-600', bg: 'bg-gray-50' },
       ]
     },
     {
@@ -407,6 +407,21 @@ const Home = ({ setView, fetchResponsibilityMap, recentIssues, handleUpvote, loa
               <div className="text-left">
                 <span className="block text-xl font-black leading-tight">Emotion Detector</span>
                 <span className="text-[10px] font-black uppercase tracking-widest opacity-80 mt-1 block">HF AI Integration</span>
+              </div>
+            </motion.button>
+
+            <motion.button
+              whileHover={{ scale: 1.02, x: 5 }}
+              onClick={() => navigate('/content-moderator')}
+              className="w-full flex items-center gap-6 bg-rose-600 rounded-[2rem] p-8 text-white shadow-2xl shadow-rose-500/20 group overflow-hidden relative"
+            >
+              <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+              <div className="p-4 bg-white/20 rounded-2xl">
+                <Shield size={28} />
+              </div>
+              <div className="text-left">
+                <span className="block text-xl font-black leading-tight">Content Filter</span>
+                <span className="text-[10px] font-black uppercase tracking-widest opacity-80 mt-1 block">HF NSFW AI</span>
               </div>
             </motion.button>
 
