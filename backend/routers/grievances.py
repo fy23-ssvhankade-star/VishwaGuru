@@ -9,6 +9,8 @@ import hashlib
 from datetime import datetime, timezone
 
 from backend.database import get_db
+import hmac
+from backend.config import get_auth_config
 from backend.models import Grievance, EscalationAudit, GrievanceFollower, ClosureConfirmation
 from backend.schemas import (
     GrievanceSummaryResponse, EscalationAuditResponse, EscalationStatsResponse,
@@ -439,6 +441,68 @@ def get_closure_status(
     except Exception as e:
         logger.error(f"Error getting closure status for grievance {grievance_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to get closure status")
+
+
+@router.get("/audit/{audit_id}/blockchain-verify", response_model=BlockchainVerificationResponse)
+def verify_escalation_audit_blockchain(
+    audit_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Verify the cryptographic integrity of an escalation audit log using blockchain-style chaining.
+    Optimized: Uses previous_integrity_hash column for O(1) verification.
+    """
+    try:
+        audit = db.query(
+            EscalationAudit.grievance_id,
+            EscalationAudit.previous_authority,
+            EscalationAudit.new_authority,
+            EscalationAudit.reason,
+            EscalationAudit.integrity_hash,
+            EscalationAudit.previous_integrity_hash
+        ).filter(EscalationAudit.id == audit_id).first()
+
+        if not audit:
+            raise HTTPException(status_code=404, detail="Audit log not found")
+
+        # Determine previous hash (O(1) from stored column)
+        prev_hash = audit.previous_integrity_hash or ""
+
+        # Recompute hash based on current data and previous hash
+        # Chaining logic: hash(grievance_id|previous_authority|new_authority|reason|prev_hash)
+        reason_str = audit.reason.value if hasattr(audit.reason, 'value') else str(audit.reason)
+        hash_content = f"{audit.grievance_id}|{audit.previous_authority}|{audit.new_authority}|{reason_str}|{prev_hash}"
+
+        secret_key = get_auth_config().secret_key
+        computed_hash = hmac.new(
+            secret_key.encode('utf-8'),
+            hash_content.encode('utf-8'),
+            hashlib.sha256
+        ).hexdigest()
+
+        if audit.integrity_hash is None:
+            is_valid = False
+            message = "No integrity hash present for this audit log; cryptographic integrity cannot be verified."
+        else:
+            is_valid = (computed_hash == audit.integrity_hash)
+            message = (
+                "Integrity verified. This escalation audit log is cryptographically sealed."
+                if is_valid
+                else "Integrity check failed! The audit data does not match its cryptographic seal."
+            )
+
+        return BlockchainVerificationResponse(
+            is_valid=is_valid,
+            current_hash=audit.integrity_hash,
+            computed_hash=computed_hash,
+            message=message
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error verifying escalation audit blockchain for {audit_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to verify audit integrity")
 
 
 @router.get("/grievances/{grievance_id}/blockchain-verify", response_model=BlockchainVerificationResponse)
