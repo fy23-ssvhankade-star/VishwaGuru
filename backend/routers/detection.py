@@ -484,7 +484,8 @@ async def detect_nsfw_endpoint(
     result = await detect_nsfw_content(processed_bytes, client)
 
     if "error" in result:
-        raise HTTPException(status_code=500, detail=result["error"])
+        # Do not expose internal error details; return a generic message.
+        raise HTTPException(status_code=500, detail="Internal server error")
 
     return result
 
@@ -505,6 +506,7 @@ async def detect_emotion_endpoint(
     result = await detect_facial_emotion(processed_bytes, client)
 
     if "error" in result:
-        raise HTTPException(status_code=500, detail=result["error"])
+        # Do not expose internal error details; return a generic message.
+        raise HTTPException(status_code=500, detail="Internal server error")
 
     return result

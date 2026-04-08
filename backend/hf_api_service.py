@@ -483,12 +483,14 @@ async def detect_nsfw_content(image: Union[Image.Image, bytes], client: httpx.As
                 return {"detections": data}
             return {"detections": []}
         else:
+            # Log full response details server-side, but return a generic error to the client.
             logger.error(f"NSFW API Error: {response.status_code} - {response.text}")
-            return {"error": "Failed to analyze content", "details": response.text}
+            return {"error": "Failed to analyze content"}
 
     except Exception as e:
+        # Log stack trace for debugging, but avoid exposing exception details to the client.
         logger.error(f"NSFW HF API Exception: {e}", exc_info=True)
-        return {"error": str(e)}
+        return {"error": "Failed to analyze content"}
 
 
 async def detect_facial_emotion(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
@@ -514,9 +516,11 @@ async def detect_facial_emotion(image: Union[Image.Image, bytes], client: httpx.
                 return {"emotions": data[:3]} # Return top 3 emotions
             return {"emotions": []}
         else:
+            # Log full response details server-side, but return a generic error to the client.
             logger.error(f"Emotion API Error: {response.status_code} - {response.text}")
-            return {"error": "Failed to analyze emotions", "details": response.text}
+            return {"error": "Failed to analyze emotions"}
 
     except Exception as e:
-        logger.error(f"Emotion Estimation Error: {e}")
-        return {"error": str(e)}
+        # Log stack trace for debugging, but avoid exposing exception details to the client.
+        logger.error(f"Emotion Estimation Error: {e}", exc_info=True)
+        return {"error": "Failed to analyze emotions"}
