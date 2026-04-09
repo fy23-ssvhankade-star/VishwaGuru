@@ -32,6 +32,7 @@ AUDIO_CLASS_API_URL = "https://router.huggingface.co/models/MIT/ast-finetuned-au
 
 # Speech-to-Text Model (Whisper)
 FACIAL_EMOTION_API_URL = "https://router.huggingface.co/models/dima806/facial_emotions_image_detection"
+NSFW_API_URL = "https://router.huggingface.co/models/Falconsai/nsfw_image_detection"
 WHISPER_API_URL = "https://router.huggingface.co/models/openai/whisper-large-v3-turbo"
 
 async def _make_request(client, url, payload):
@@ -459,6 +460,39 @@ async def detect_abandoned_vehicle_clip(image: Union[Image.Image, bytes], client
     return await _detect_clip_generic(image, labels, targets, client)
 
 
+async def detect_nsfw_content(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
+    """
+    Detects NSFW content in an image using Falconsai/nsfw_image_detection.
+    """
+    img_bytes = _prepare_image_bytes(image)
+
+    try:
+        headers_bin = {"Authorization": f"Bearer {token}"} if token else {}
+        async def do_post(c):
+             return await c.post(NSFW_API_URL, headers=headers_bin, content=img_bytes, timeout=30.0)
+
+        if client:
+            response = await do_post(client)
+        else:
+            async with httpx.AsyncClient() as new_client:
+                response = await do_post(new_client)
+
+        if response.status_code == 200:
+            data = response.json()
+            if isinstance(data, list) and len(data) > 0:
+                return {"detections": data}
+            return {"detections": []}
+        else:
+            # Log full response details server-side, but return a generic error to the client.
+            logger.error(f"NSFW API Error: {response.status_code} - {response.text}")
+            return {"error": "Failed to analyze content"}
+
+    except Exception as e:
+        # Log stack trace for debugging, but avoid exposing exception details to the client.
+        logger.error(f"NSFW HF API Exception: {e}", exc_info=True)
+        return {"error": "Failed to analyze content"}
+
+
 async def detect_facial_emotion(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
     """
     Detects facial emotions in an image using Hugging Face's dima806/facial_emotions_image_detection model.
@@ -482,9 +516,11 @@ async def detect_facial_emotion(image: Union[Image.Image, bytes], client: httpx.
                 return {"emotions": data[:3]} # Return top 3 emotions
             return {"emotions": []}
         else:
+            # Log full response details server-side, but return a generic error to the client.
             logger.error(f"Emotion API Error: {response.status_code} - {response.text}")
-            return {"error": "Failed to analyze emotions", "details": response.text}
+            return {"error": "Failed to analyze emotions"}
 
     except Exception as e:
-        logger.error(f"Emotion Estimation Error: {e}")
-        return {"error": str(e)}
+        # Log stack trace for debugging, but avoid exposing exception details to the client.
+        logger.error(f"Emotion Estimation Error: {e}", exc_info=True)
+        return {"error": "Failed to analyze emotions"}

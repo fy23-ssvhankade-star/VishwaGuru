@@ -42,6 +42,9 @@ const NoiseDetector = React.lazy(() => import('./NoiseDetector'));
 const CivicEyeDetector = React.lazy(() => import('./CivicEyeDetector'));
 const CivicInsight = React.lazy(() => import('./views/CivicInsight'));
 const MyReportsView = React.lazy(() => import('./views/MyReportsView'));
+const ContentModerator = React.lazy(() => import('./ContentModerator'));
+const AbandonedVehicleDetector = React.lazy(() => import('./AbandonedVehicleDetector'));
+const TrafficSignDetector = React.lazy(() => import('./TrafficSignDetector'));
 
 
 // Auth Components
@@ -336,6 +339,9 @@ function AppContent() {
               <Route path="/smart-scan" element={<SmartScanner onBack={() => navigate('/')} />} />
               <Route path="/grievance-analysis" element={<GrievanceAnalysis onBack={() => navigate('/')} />} />
               <Route path="/noise" element={<NoiseDetector onBack={() => navigate('/')} />} />
+              <Route path="/content-moderator" element={<ContentModerator onBack={() => navigate('/')} />} />
+              <Route path="/abandoned-vehicle" element={<AbandonedVehicleDetector onBack={() => navigate('/')} />} />
+              <Route path="/traffic-sign" element={<TrafficSignDetector onBack={() => navigate('/')} />} />
               <Route path="/safety-check" element={
                 <div className="flex flex-col h-full p-4">
                   <button onClick={() => navigate('/')} className="self-start text-blue-600 mb-2 font-bold">
