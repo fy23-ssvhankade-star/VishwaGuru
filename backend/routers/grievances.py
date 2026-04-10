@@ -606,7 +606,7 @@ def verify_closure_confirmation_blockchain(
             is_valid = False
             message = "No integrity hash present for this confirmation; cryptographic integrity cannot be verified."
         else:
-            is_valid = (computed_hash == confirmation.integrity_hash)
+            is_valid = hmac.compare_digest(computed_hash, confirmation.integrity_hash)
             message = (
                 "Integrity verified. This closure confirmation is cryptographically sealed."
                 if is_valid
