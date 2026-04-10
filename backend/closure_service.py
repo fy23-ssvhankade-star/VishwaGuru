@@ -3,6 +3,10 @@ from sqlalchemy import func
 from datetime import datetime, timedelta, timezone
 from backend.models import Grievance, GrievanceFollower, ClosureConfirmation, GrievanceStatus
 import logging
+import hashlib
+import hmac
+from backend.cache import closure_last_hash_cache
+from backend.config import get_auth_config
 
 logger = logging.getLogger(__name__)
 
@@ -86,16 +90,39 @@ class ClosureService:
         if existing:
             raise ValueError("You have already submitted a response for this closure")
         
+        # Blockchain feature: calculate integrity hash for the closure confirmation
+        # Performance Boost: Use thread-safe cache to eliminate DB query for last hash
+        prev_hash = closure_last_hash_cache.get("last_hash")
+        if prev_hash is None:
+            # Cache miss: Fetch only the last hash from DB
+            last_record = db.query(ClosureConfirmation.integrity_hash).order_by(ClosureConfirmation.id.desc()).first()
+            prev_hash = last_record[0] if last_record and last_record[0] else ""
+            closure_last_hash_cache.set(data=prev_hash, key="last_hash")
+
+        # Chaining logic: hash(grievance_id|user_email|confirmation_type|prev_hash)
+        hash_content = f"{grievance_id}|{user_email}|{confirmation_type}|{prev_hash}"
+        secret_key = get_auth_config().secret_key
+        integrity_hash = hmac.new(
+            secret_key.encode('utf-8'),
+            hash_content.encode('utf-8'),
+            hashlib.sha256
+        ).hexdigest()
+
         # Create confirmation record
         confirmation = ClosureConfirmation(
             grievance_id=grievance_id,
             user_email=user_email,
             confirmation_type=confirmation_type,
-            reason=reason
+            reason=reason,
+            integrity_hash=integrity_hash,
+            previous_integrity_hash=prev_hash
         )
         db.add(confirmation)
         db.commit()
-        
+
+        # Update cache after successful commit
+        closure_last_hash_cache.set(data=integrity_hash, key="last_hash")
+
         # Check if threshold is met
         return ClosureService.check_and_finalize_closure(grievance_id, db)
     
