@@ -1,7 +1,7 @@
 import time
 from sqlalchemy.orm import Session
 from sqlalchemy import func, create_engine
-from backend.database import Base
+from backend.models import Base
 from backend.models import Grievance, GrievanceFollower, ClosureConfirmation, Issue, Jurisdiction, JurisdictionLevel, SeverityLevel
 from sqlalchemy import case, distinct
 import datetime
