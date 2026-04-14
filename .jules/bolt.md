@@ -65,3 +65,7 @@
 ## 2026-03-05 - Scratchpad File Cleanup
 **Learning:** Leaving scratchpad files like Python test scripts or benchmarking shell scripts pollutes the repository and will cause code reviews to fail. Even if the optimization works, the PR must be clean and only contain relevant application changes.
 **Action:** Always clean up generated development files, scripts, and temporary databases using `rm` before requesting a code review or submitting a PR.
+
+## 2026-03-05 - Transaction Consolidation with Blockchain Chaining
+**Learning:** Consolidating multiple database operations into a single transaction reduces disk I/O and latency. However, when using blockchain-style hash chaining with in-memory caches, global caches MUST NOT be updated until after a successful commit to prevent poisoning on rollbacks. Intermediate chaining during the transaction must be handled manually or via a separate local tracking mechanism.
+**Action:** Consolidate multiple `db.commit()` calls into one using `db.flush()` for intermediate IDs. Track generated hashes locally and update global `ThreadSafeCache` only after `db.commit()` succeeds.
