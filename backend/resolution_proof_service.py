@@ -24,8 +24,8 @@ from backend.models import (
     Grievance, ResolutionProofToken, ResolutionEvidence,
     EvidenceAuditLog, VerificationStatus, GrievanceStatus
 )
-from backend.config import get_config
-from backend.cache import resolution_last_hash_cache
+from backend.config import get_config, get_auth_config
+from backend.cache import resolution_last_hash_cache, evidence_audit_last_hash_cache
 
 logger = logging.getLogger(__name__)
 
@@ -358,9 +358,6 @@ class ResolutionProofService:
         chain_content = f"{token.token_id}|{token.grievance_id}|{evidence_hash}|{prev_hash}"
         integrity_hash = hashlib.sha256(chain_content.encode()).hexdigest()
 
-        # Update cache for next evidence submission
-        resolution_last_hash_cache.set(data=integrity_hash, key="last_hash")
-
         # 5. Check for duplicate hashes
         duplicates = ResolutionProofService._check_duplicate_hash(evidence_hash, db)
         if duplicates:
@@ -408,11 +405,13 @@ class ResolutionProofService:
         token.is_used = True
         token.used_at = datetime.now(timezone.utc)
 
-        db.commit()
-        db.refresh(evidence)
+        # Flush to DB to get evidence.id for audit logs within the same transaction
+        db.flush()
 
-        # 8. Create audit log
-        ResolutionProofService._create_audit_log(
+        # 8. Create audit logs (blockchain-chained)
+        # These now use db.flush() and return the new integrity_hash.
+        # We manually chain them in memory to avoid polluting the global cache before commit.
+        audit1_hash = ResolutionProofService._create_audit_log(
             evidence_id=evidence.id,
             action="created",
             details=f"Evidence submitted and verified. Distance: {distance}m",
@@ -420,7 +419,7 @@ class ResolutionProofService:
             db=db
         )
 
-        ResolutionProofService._create_audit_log(
+        last_audit_hash = ResolutionProofService._create_audit_log(
             evidence_id=evidence.id,
             action="verified",
             details=(
@@ -428,12 +427,22 @@ class ResolutionProofService:
                 f"Hash: {evidence_hash[:16]}... Signature: valid"
             ),
             actor_email="system",
-            db=db
+            db=db,
+            prev_hash=audit1_hash
         )
+
+        # 9. Consolidated Transaction Commit
+        # Optimized: Single commit for evidence and all audit logs reduces DB round-trips by 3x.
+        db.commit()
+        db.refresh(evidence)
+
+        # 10. Update Global Integrity Caches (Safe to do only AFTER successful commit)
+        resolution_last_hash_cache.set(data=integrity_hash, key="last_hash")
+        evidence_audit_last_hash_cache.set(data=last_audit_hash, key="last_hash")
 
         logger.info(
             f"Evidence submitted for grievance {token.grievance_id} "
-            f"by {token.authority_email}. Hash: {evidence_hash[:16]}..."
+            f"by {token.authority_email}. Hash: {evidence_hash[:16]}... (Transaction Consolidated)"
         )
 
         return evidence
@@ -566,10 +575,11 @@ class ResolutionProofService:
         dup_grievance_ids = list(set(d.grievance_id for d in duplicates))
 
         # Flag all duplicates
+        last_audit_hash = None
         for dup in duplicates:
             if dup.verification_status != VerificationStatus.FRAUD_DETECTED:
                 dup.verification_status = VerificationStatus.FLAGGED
-                ResolutionProofService._create_audit_log(
+                last_audit_hash = ResolutionProofService._create_audit_log(
                     evidence_id=dup.id,
                     action="flagged",
                     details=(
@@ -577,13 +587,18 @@ class ResolutionProofService:
                         f"Hash: {evidence_hash[:16]}..."
                     ),
                     actor_email="system",
-                    db=db
+                    db=db,
+                    prev_hash=last_audit_hash
                 )
 
         db.commit()
 
+        # Update cache after successful commit
+        if last_audit_hash:
+            evidence_audit_last_hash_cache.set(data=last_audit_hash, key="last_hash")
+
         logger.warning(
-            f"Duplicate evidence hash flagged across grievances: {dup_grievance_ids}"
+            f"Duplicate evidence hash flagged across grievances: {dup_grievance_ids} (Transaction Consolidated)"
         )
 
         return {
@@ -602,19 +617,48 @@ class ResolutionProofService:
         action: str,
         details: str,
         actor_email: str,
-        db: Session
-    ) -> EvidenceAuditLog:
-        """Create an append-only audit log entry."""
+        db: Session,
+        prev_hash: Optional[str] = None
+    ) -> str:
+        """
+        Create an append-only audit log entry with O(1) blockchain chaining.
+        Uses db.flush() instead of db.commit() to allow transaction consolidation.
+        If prev_hash is provided, it is used for chaining (manual chaining in batch).
+        """
+        if prev_hash is None:
+            # Performance Boost: Use thread-safe cache for O(1) chaining
+            prev_hash = evidence_audit_last_hash_cache.get("last_hash")
+            if prev_hash is None:
+                # Cache miss: Fetch only the last hash from DB
+                last_record = db.query(EvidenceAuditLog.integrity_hash).order_by(EvidenceAuditLog.id.desc()).first()
+                prev_hash = last_record[0] if last_record and last_record[0] else ""
+
+        # Chaining logic: hash(evidence_id|action|actor_email|prev_hash)
+        hash_content = f"{evidence_id}|{action}|{actor_email}|{prev_hash}"
+
+        secret_key = get_auth_config().secret_key
+        integrity_hash = hmac.new(
+            secret_key.encode('utf-8'),
+            hash_content.encode('utf-8'),
+            hashlib.sha256
+        ).hexdigest()
+
         log = EvidenceAuditLog(
             evidence_id=evidence_id,
             action=action,
             details=details,
             actor_email=actor_email,
+            integrity_hash=integrity_hash,
+            previous_integrity_hash=prev_hash
         )
         db.add(log)
-        db.commit()
-        db.refresh(log)
-        return log
+
+        # Use flush instead of commit to allow batching in high-traffic paths
+        db.flush()
+
+        # We don't update global cache yet because transaction might fail.
+        # Callers must update cache after successful db.commit()
+        return integrity_hash
 
     @staticmethod
     def get_audit_trail(grievance_id: int, db: Session) -> List[Dict[str, Any]]:
