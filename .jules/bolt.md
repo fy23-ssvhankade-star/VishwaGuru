@@ -73,3 +73,7 @@
 ## 2026-04-17 - ORM Counting vs func.count().scalar()
 **Learning:** Using `db.query(Model).filter(...).count()` can be slower and have more ORM overhead than `db.query(func.count(Model.id)).filter(...).scalar() or 0` or doing an early `.first()` exit.
 **Action:** When counting records or verifying existence, prefer early `.first()` exits combined with `func.count().scalar()` for performance in high-traffic APIs.
+
+## 2026-05-15 - Voice Path Blockchain Integration
+**Learning:** Performance-critical security features like blockchain integrity chaining must be applied uniformly across all entry points (voice, web, bot). Bypassing these in specialized endpoints creates data silos that cannot be verified in the same chain.
+**Action:** Always check `models.py` for `integrity_hash` fields when implementing new creation endpoints to ensure global consistency and O(1) performance via shared caches.
