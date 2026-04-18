@@ -19,6 +19,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional, List, Tuple
 
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from backend.models import (
     Grievance, ResolutionProofToken, ResolutionEvidence,
@@ -464,13 +465,15 @@ class ResolutionProofService:
         Returns:
             Verification result dictionary
         """
-        # Optimized: Use .count() and .first() to avoid loading all historical evidence
-        # records into memory, reducing O(N) database transfer and memory overhead.
-        evidence_count = db.query(ResolutionEvidence).filter(
-            ResolutionEvidence.grievance_id == grievance_id
-        ).count()
+        # Optimized: first fetch the most recent evidence row so we can return early when none exists,
+        # then run a separate func.count(...).scalar() query only when evidence is present.
 
-        if evidence_count == 0:
+        # Use the most recent evidence
+        evidence = db.query(ResolutionEvidence).filter(
+            ResolutionEvidence.grievance_id == grievance_id
+        ).order_by(ResolutionEvidence.id.desc()).first()
+
+        if not evidence:
             return {
                 "grievance_id": grievance_id,
                 "is_verified": False,
@@ -483,10 +486,9 @@ class ResolutionProofService:
                 "message": "No resolution evidence found for this grievance"
             }
 
-        # Use the most recent evidence
-        evidence = db.query(ResolutionEvidence).filter(
+        evidence_count = db.query(func.count(ResolutionEvidence.id)).filter(
             ResolutionEvidence.grievance_id == grievance_id
-        ).order_by(ResolutionEvidence.id.desc()).first()
+        ).scalar() or 0
 
         # Re-verify the server signature
         bundle_str = json.dumps(evidence.metadata_bundle, sort_keys=True)
