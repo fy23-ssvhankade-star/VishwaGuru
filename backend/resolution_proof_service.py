@@ -465,8 +465,8 @@ class ResolutionProofService:
         Returns:
             Verification result dictionary
         """
-        # Optimized: Use .first() before .count() to early exit and avoid the count query when no evidence exists,
-        # then use func.count().scalar() for faster counting.
+        # Optimized: first fetch the most recent evidence row so we can return early when none exists,
+        # then run a separate func.count(...).scalar() query only when evidence is present.
 
         # Use the most recent evidence
         evidence = db.query(ResolutionEvidence).filter(
