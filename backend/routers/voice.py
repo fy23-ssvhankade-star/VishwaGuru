@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 
 from backend.database import get_db
 from backend.models import Issue
+from backend.cache import blockchain_last_hash_cache
 from backend.schemas import (
     VoiceTranscriptionResponse,
     TextTranslationRequest,
@@ -27,7 +28,6 @@ from backend.schemas import (
 )
 from backend.voice_service import get_voice_service
 from backend.utils import generate_reference_id, save_issue_db
-from backend.cache import blockchain_last_hash_cache
 
 logger = logging.getLogger(__name__)
 
@@ -250,29 +250,46 @@ async def submit_voice_issue(
         audio_filename = f"{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex}{file_extension}"
         audio_file_path = os.path.join(AUDIO_STORAGE_DIR, audio_filename)
         
-        with open(audio_file_path, 'wb') as f:
-            f.write(audio_content)
+        # Performance optimization: Wrap blocking synchronous File I/O in threadpool
+        def _save_audio_file():
+            with open(audio_file_path, 'wb') as f:
+                f.write(audio_content)
+
+        def _delete_audio_file_best_effort():
+            try:
+                if os.path.exists(audio_file_path):
+                    os.remove(audio_file_path)
+            except Exception as cleanup_error:
+                logger.warning("Failed to delete orphaned audio file %s: %s", audio_file_path, cleanup_error)
+
+        await run_in_threadpool(_save_audio_file)
         
-        # Store relative path for portability
-        relative_audio_path = os.path.join("data", "audio_recordings", audio_filename)
-        
+        try:
+            # Store relative path for portability
+            relative_audio_path = os.path.join("data", "audio_recordings", audio_filename)
+            
+            # Blockchain feature: calculate integrity hash for the report
+            # Performance Boost: Use thread-safe cache to eliminate DB query for last hash
+            prev_hash = blockchain_last_hash_cache.get("last_hash")
+            if prev_hash is None:
+                # Cache miss: Fetch only the last hash from DB
+                prev_issue = await run_in_threadpool(
+                    lambda: db.query(Issue.integrity_hash).order_by(Issue.id.desc()).first()
+                )
+                prev_hash = prev_issue[0] if prev_issue and prev_issue[0] else ""
+                blockchain_last_hash_cache.set(data=prev_hash, key="last_hash")
+
+            # Simple but effective SHA-256 chaining
+            # Format must match backend/routers/issues.py for a consistent chain
+            hash_content = f"{final_description}|{issue_category.value}|{prev_hash}"
+        except Exception:
+            db.rollback()
+            await run_in_threadpool(_delete_audio_file_best_effort)
+            raise
+        integrity_hash = hashlib.sha256(hash_content.encode()).hexdigest()
+
         # Create issue in database
         reference_id = generate_reference_id()
-
-        # Blockchain feature: calculate integrity hash for the report
-        # Performance Boost: Use thread-safe cache to eliminate DB query for last hash
-        prev_hash = blockchain_last_hash_cache.get("last_hash")
-        if prev_hash is None:
-            # Cache miss: Fetch only the last hash from DB
-            prev_issue = await run_in_threadpool(
-                lambda: db.query(Issue.integrity_hash).order_by(Issue.id.desc()).first()
-            )
-            prev_hash = prev_issue[0] if prev_issue and prev_issue[0] else ""
-            blockchain_last_hash_cache.set(data=prev_hash, key="last_hash")
-
-        # Simple but effective SHA-256 chaining
-        hash_content = f"{final_description}|{issue_category.value}|{prev_hash}"
-        integrity_hash = hashlib.sha256(hash_content.encode()).hexdigest()
         
         new_issue = Issue(
             reference_id=reference_id,
@@ -284,7 +301,6 @@ async def submit_voice_issue(
             location=location,
             source='voice',
             status='open',
-            # Blockchain integrity fields
             integrity_hash=integrity_hash,
             previous_integrity_hash=prev_hash,
             # Voice-specific fields
@@ -296,7 +312,7 @@ async def submit_voice_issue(
             audio_file_path=relative_audio_path  # Store relative path
         )
         
-        # Offload blocking DB operations to threadpool
+        # Offload blocking DB operations to threadpool; clean up audio on failure
         try:
             await run_in_threadpool(save_issue_db, db, new_issue)
         except Exception:
@@ -310,7 +326,7 @@ async def submit_voice_issue(
 
         # Update cache for next report AFTER successful DB commit
         blockchain_last_hash_cache.set(data=integrity_hash, key="last_hash")
-        
+
         logger.info(f"Voice issue created: ID={new_issue.id}, Language={voice_result.get('source_language')}, Confidence={voice_result.get('confidence')}")
         
         return IssueCreateResponse(
