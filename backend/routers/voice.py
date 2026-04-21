@@ -297,7 +297,16 @@ async def submit_voice_issue(
         )
         
         # Offload blocking DB operations to threadpool
-        await run_in_threadpool(save_issue_db, db, new_issue)
+        try:
+            await run_in_threadpool(save_issue_db, db, new_issue)
+        except Exception:
+            db.rollback()
+            try:
+                if audio_file_path and os.path.exists(audio_file_path):
+                    os.remove(audio_file_path)
+            except Exception as cleanup_error:
+                logger.warning(f"Failed to delete orphaned audio file '{audio_file_path}': {cleanup_error}", exc_info=True)
+            raise
 
         # Update cache for next report AFTER successful DB commit
         blockchain_last_hash_cache.set(data=integrity_hash, key="last_hash")
