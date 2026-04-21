@@ -255,25 +255,37 @@ async def submit_voice_issue(
             with open(audio_file_path, 'wb') as f:
                 f.write(audio_content)
 
+        def _delete_audio_file_best_effort():
+            try:
+                if os.path.exists(audio_file_path):
+                    os.remove(audio_file_path)
+            except Exception as cleanup_error:
+                logger.warning("Failed to delete orphaned audio file %s: %s", audio_file_path, cleanup_error)
+
         await run_in_threadpool(_save_audio_file)
         
-        # Store relative path for portability
-        relative_audio_path = os.path.join("data", "audio_recordings", audio_filename)
-        
-        # Blockchain feature: calculate integrity hash for the report
-        # Performance Boost: Use thread-safe cache to eliminate DB query for last hash
-        prev_hash = blockchain_last_hash_cache.get("last_hash")
-        if prev_hash is None:
-            # Cache miss: Fetch only the last hash from DB
-            prev_issue = await run_in_threadpool(
-                lambda: db.query(Issue.integrity_hash).order_by(Issue.id.desc()).first()
-            )
-            prev_hash = prev_issue[0] if prev_issue and prev_issue[0] else ""
-            blockchain_last_hash_cache.set(data=prev_hash, key="last_hash")
+        try:
+            # Store relative path for portability
+            relative_audio_path = os.path.join("data", "audio_recordings", audio_filename)
+            
+            # Blockchain feature: calculate integrity hash for the report
+            # Performance Boost: Use thread-safe cache to eliminate DB query for last hash
+            prev_hash = blockchain_last_hash_cache.get("last_hash")
+            if prev_hash is None:
+                # Cache miss: Fetch only the last hash from DB
+                prev_issue = await run_in_threadpool(
+                    lambda: db.query(Issue.integrity_hash).order_by(Issue.id.desc()).first()
+                )
+                prev_hash = prev_issue[0] if prev_issue and prev_issue[0] else ""
+                blockchain_last_hash_cache.set(data=prev_hash, key="last_hash")
 
-        # Simple but effective SHA-256 chaining
-        # Format must match backend/routers/issues.py for a consistent chain
-        hash_content = f"{final_description}|{issue_category.value}|{prev_hash}"
+            # Simple but effective SHA-256 chaining
+            # Format must match backend/routers/issues.py for a consistent chain
+            hash_content = f"{final_description}|{issue_category.value}|{prev_hash}"
+        except Exception:
+            db.rollback()
+            await run_in_threadpool(_delete_audio_file_best_effort)
+            raise
         integrity_hash = hashlib.sha256(hash_content.encode()).hexdigest()
 
         # Create issue in database
