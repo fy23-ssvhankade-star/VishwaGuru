@@ -60,8 +60,3 @@ frontend/.genkit/
 .genkit/
 .netlify
 .last-run.json
-
-# =====================
-# Runtime Artifacts
-# =====================
-backend/data/audio_recordings/

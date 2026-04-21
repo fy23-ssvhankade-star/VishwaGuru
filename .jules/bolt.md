@@ -77,7 +77,3 @@
 ## 2026-04-20 - Async File I/O in Voice Submission
 **Learning:** Saving audio recordings (up to 10MB) synchronously in a FastAPI async endpoint blocks the main event loop, significantly increasing tail latency for all concurrent users during high-traffic periods.
 **Action:** Wrap blocking synchronous File I/O operations like `f.write()` in `run_in_threadpool` to offload them to a separate thread, keeping the event loop responsive for other requests.
-
-## 2026-05-15 - Voice Path Blockchain Integration
-**Learning:** Performance-critical security features like blockchain integrity chaining must be applied uniformly across all entry points (voice, web, bot). Bypassing these in specialized endpoints creates data silos that cannot be verified in the same chain.
-**Action:** Always check `models.py` for `integrity_hash` fields when implementing new creation endpoints to ensure global consistency and O(1) performance via shared caches.
