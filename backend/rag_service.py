@@ -46,10 +46,12 @@ class CivicRAG:
             source = policy.get('source', 'Unknown')
 
             content = f"{title} {text}"
+            content_tokens = self._tokenize(content)
 
             self._prepared_policies.append({
                 'title_tokens': self._tokenize(title),
-                'content_tokens': self._tokenize(content),
+                'content_tokens': content_tokens,
+                'content_tokens_len': len(content_tokens),  # Pre-calculated
                 'formatted': f"**{title}**: {text} (Source: {source})",
                 'original': policy
             })
@@ -65,6 +67,8 @@ class CivicRAG:
         """
         Retrieve the most relevant policy based on Jaccard similarity of tokens.
         Returns the formatted policy string or None if below threshold.
+        Optimized: Uses pre-calculated lengths, isdisjoint() early exit, and
+        mathematical union formula to avoid O(N) memory allocation of set.union().
         """
         if not query or not self._prepared_policies:
             return None
@@ -73,31 +77,34 @@ class CivicRAG:
         if not query_tokens:
             return None
 
+        query_len = len(query_tokens)
         best_score = 0.0
         best_formatted = None
 
         for prepared in self._prepared_policies:
             policy_tokens = prepared['content_tokens']
+            policy_len = prepared['content_tokens_len']
 
             if not policy_tokens:
                 continue
 
-            # Jaccard Similarity
-            intersection = query_tokens.intersection(policy_tokens)
-            # Use pre-calculated set for union if possible?
-            # Union depends on query_tokens, so must be calculated.
-            union = query_tokens.union(policy_tokens)
+            # Performance Boost: Use isdisjoint() for O(min(len(A), len(B))) early exit
+            if query_tokens.isdisjoint(policy_tokens):
+                score = 0.0
+            else:
+                # Jaccard Similarity: |A ∩ B| / |A ∪ B|
+                # Optimization: |A ∪ B| = |A| + |B| - |A ∩ B| (Inclusion-Exclusion)
+                # This avoids O(N+M) memory allocation and population of a union set.
+                intersection = query_tokens.intersection(policy_tokens)
+                intersection_len = len(intersection)
+                union_len = query_len + policy_len - intersection_len
+                score = intersection_len / union_len if union_len > 0 else 0.0
 
-            if not union:
-                continue
-
-            score = len(intersection) / len(union)
-
-            # Boost score if title words match (weighted)
-            title_tokens = prepared['title_tokens']
-            title_match = len(query_tokens.intersection(title_tokens))
-            if title_match > 0:
-                score += 0.2  # Bonus for title match
+                # Boost score if title words match (weighted)
+                title_tokens = prepared['title_tokens']
+                title_match_len = len(query_tokens.intersection(title_tokens))
+                if title_match_len > 0:
+                    score += 0.2  # Bonus for title match
 
             if score > best_score:
                 best_score = score
