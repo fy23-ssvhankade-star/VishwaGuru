@@ -47,9 +47,12 @@ class CivicRAG:
 
             content = f"{title} {text}"
 
+            content_tokens = self._tokenize(content)
+
             self._prepared_policies.append({
                 'title_tokens': self._tokenize(title),
-                'content_tokens': self._tokenize(content),
+                'content_tokens': content_tokens,
+                'content_len': len(content_tokens), # Optimized: pre-calculate length
                 'formatted': f"**{title}**: {text} (Source: {source})",
                 'original': policy
             })
@@ -73,6 +76,8 @@ class CivicRAG:
         if not query_tokens:
             return None
 
+        q_len = len(query_tokens)
+
         best_score = 0.0
         best_formatted = None
 
@@ -82,21 +87,22 @@ class CivicRAG:
             if not policy_tokens:
                 continue
 
-            # Jaccard Similarity
-            intersection = query_tokens.intersection(policy_tokens)
-            # Use pre-calculated set for union if possible?
-            # Union depends on query_tokens, so must be calculated.
-            union = query_tokens.union(policy_tokens)
-
-            if not union:
+            # Optimized: Early exit using isdisjoint which is faster than computing intersection
+            if query_tokens.isdisjoint(policy_tokens):
                 continue
 
-            score = len(intersection) / len(union)
+            # Jaccard Similarity
+            intersection_len = len(query_tokens.intersection(policy_tokens))
+
+            # Optimized: Mathematical union |A U B| = |A| + |B| - |A n B|
+            # Avoids O(N) memory allocation and set.union() overhead
+            union_len = q_len + prepared['content_len'] - intersection_len
+
+            score = intersection_len / union_len
 
             # Boost score if title words match (weighted)
             title_tokens = prepared['title_tokens']
-            title_match = len(query_tokens.intersection(title_tokens))
-            if title_match > 0:
+            if not query_tokens.isdisjoint(title_tokens):
                 score += 0.2  # Bonus for title match
 
             if score > best_score:
