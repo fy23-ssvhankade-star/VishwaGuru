@@ -46,10 +46,12 @@ class CivicRAG:
             source = policy.get('source', 'Unknown')
 
             content = f"{title} {text}"
+            content_tokens = self._tokenize(content)
 
             self._prepared_policies.append({
                 'title_tokens': self._tokenize(title),
-                'content_tokens': self._tokenize(content),
+                'content_tokens': content_tokens,
+                'token_count': len(content_tokens),  # Pre-calculate for Jaccard union
                 'formatted': f"**{title}**: {text} (Source: {source})",
                 'original': policy
             })
@@ -73,31 +75,33 @@ class CivicRAG:
         if not query_tokens:
             return None
 
+        query_len = len(query_tokens)
         best_score = 0.0
         best_formatted = None
 
         for prepared in self._prepared_policies:
             policy_tokens = prepared['content_tokens']
 
-            if not policy_tokens:
+            # Performance Boost: Early exit if no overlap at all
+            if query_tokens.isdisjoint(policy_tokens):
                 continue
 
-            # Jaccard Similarity
+            # Jaccard Similarity Optimization:
+            # Avoid expensive set.union() allocation by using mathematical formula:
+            # |A union B| = |A| + |B| - |A intersection B|
             intersection = query_tokens.intersection(policy_tokens)
-            # Use pre-calculated set for union if possible?
-            # Union depends on query_tokens, so must be calculated.
-            union = query_tokens.union(policy_tokens)
+            intersection_len = len(intersection)
 
-            if not union:
-                continue
-
-            score = len(intersection) / len(union)
+            # union_len cannot be 0 because we already checked isdisjoint
+            union_len = query_len + prepared['token_count'] - intersection_len
+            score = intersection_len / union_len
 
             # Boost score if title words match (weighted)
             title_tokens = prepared['title_tokens']
-            title_match = len(query_tokens.intersection(title_tokens))
-            if title_match > 0:
-                score += 0.2  # Bonus for title match
+            if not query_tokens.isdisjoint(title_tokens):
+                title_match = len(query_tokens.intersection(title_tokens))
+                if title_match > 0:
+                    score += 0.2  # Bonus for title match
 
             if score > best_score:
                 best_score = score
