@@ -51,7 +51,7 @@
 **Action:** Store the `previous_integrity_hash` directly in the record during creation. This enables O(1) single-record integrity checks without additional database lookups. Use a thread-safe cache to keep the most recent hash in memory to further optimize the creation path.
 
 ## 2026-02-11 - Multi-Metric Aggregate Queries
-**Learning:** Executing multiple separate `count()` queries to gather system statistics results in multiple database round-triPS and redundant table scans.
+**Learning:** Executing multiple separate `count()` queries to gather system statistics results in multiple database round-trips and redundant table scans.
 **Action:** Use a single SQLAlchemy query with `func.count()` and `func.sum(case(...))` to calculate all metrics in one go. This reduces network overhead and allows the database to perform calculations in a single pass.
 
 ## 2025-02-13 - Substring pre-filtering for regex optimization
