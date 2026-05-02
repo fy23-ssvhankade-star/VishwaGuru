@@ -109,9 +109,7 @@ class CivicRAG:
             # Boost score if title words match (weighted)
             title_tokens = prepared['title_tokens']
             if not query_tokens.isdisjoint(title_tokens):
-                title_match_len = len(query_tokens.intersection(title_tokens))
-                if title_match_len > 0:
-                    score += 0.2  # Bonus for title match
+                score += 0.2  # Bonus for title match
 
             if score > best_score:
                 best_score = score
