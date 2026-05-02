@@ -52,8 +52,7 @@ class CivicRAG:
             self._prepared_policies.append({
                 'title_tokens': self._tokenize(title),
                 'content_tokens': content_tokens,
-                # Optimization: Pre-calculate token count to avoid repeated len() calls in the hot path
-                'token_count': len(content_tokens),
+                'content_len': len(content_tokens), # Optimized: pre-calculate length
                 'formatted': f"**{title}**: {text} (Source: {source})",
                 'original': policy
             })
@@ -97,7 +96,7 @@ class CivicRAG:
 
             # Optimized: Mathematical union |A U B| = |A| + |B| - |A n B|
             # Avoids O(N) memory allocation and set.union() overhead
-            union_len = q_len + prepared['token_count'] - intersection_len
+            union_len = q_len + prepared['content_len'] - intersection_len
 
             score = intersection_len / union_len
 
