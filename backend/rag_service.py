@@ -51,7 +51,7 @@ class CivicRAG:
             self._prepared_policies.append({
                 'title_tokens': self._tokenize(title),
                 'content_tokens': content_tokens,
-                # Optimization: Pre-calculate token count to avoid O(N) len() calls in hot path
+                # Optimization: Pre-calculate token count to avoid repeated len() calls in the hot path
                 'token_count': len(content_tokens),
                 'formatted': f"**{title}**: {text} (Source: {source})",
                 'original': policy
