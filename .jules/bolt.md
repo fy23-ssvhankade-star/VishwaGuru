@@ -43,7 +43,7 @@
 **Action:** Serialize data to a JSON string BEFORE caching. On cache hits, return a raw `fastapi.Response` with `media_type="application/json"`. This bypasses the validation layer and is measurably faster (2-3x).
 
 ## 2026-02-10 - Group-By for Multi-Count Statistics
-**Learning:** Executing multiple `count()` queries with different filters (e.g., for different statuses) causes redundant database scans and network round-trips.
+**Learning:** Executing multiple `count()` queries with different filters (e.g., for different statuses) causes redundant database scans and network round-triPS.
 **Action:** Use a single SQL `GROUP BY` query to fetch counts for all categories/statuses at once, then process the results in Python.
 
 ## 2026-02-11 - O(1) Blockchain Verification
@@ -86,6 +86,6 @@
 **Learning:** In RAG (Retrieval-Augmented Generation) systems with static or semi-static policy datasets, performing tokenization, regex substitution, and string formatting inside the retrieval loop is a significant bottleneck that scales with the number of policies.
 **Action:** Move all deterministic operations (tokenization, formatting, regex matching prep) to a one-time initialization step to ensure the retrieval hot-path only performs necessary set intersections and similarity calculations.
 
-## 2026-05-17 - Jaccard Similarity Set Optimization
-**Learning:** In hot loops performing Jaccard similarity calculations (`|A ∩ B| / |A ∪ B|`), the `set.union()` operation is significantly more expensive than `set.intersection()` because it must allocate and populate a new set.
-**Action:** Use the inclusion-exclusion formula `|A| + |B| - |A ∩ B|` to calculate union size in O(1) arithmetic time. Additionally, use `.isdisjoint()` for a fast early exit when there is zero overlap, avoiding intersection calculation entirely.
+## 2026-05-18 - Jaccard Similarity Optimization via Set Arithmetic
+**Learning:** In retrieval loops calculating Jaccard similarity (e.g. RAG), explicitly building a union set `A.union(B)` is expensive due to memory allocation and population.
+**Action:** Use the inclusion-exclusion principle $|A \cup B| = |A| + |B| - |A \cap B|$ to calculate union size in O(1) arithmetic time after calculating the intersection. Pre-calculate $|B|$ (token count) to further reduce overhead. Use `isdisjoint()` for fast early-exit.

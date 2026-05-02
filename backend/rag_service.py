@@ -51,7 +51,8 @@ class CivicRAG:
             self._prepared_policies.append({
                 'title_tokens': self._tokenize(title),
                 'content_tokens': content_tokens,
-                'content_tokens_len': len(content_tokens),  # Pre-calculated
+                # Optimization: Pre-calculate token count to avoid repeated len() calls in the hot path
+                'token_count': len(content_tokens),
                 'formatted': f"**{title}**: {text} (Source: {source})",
                 'original': policy
             })
@@ -67,44 +68,47 @@ class CivicRAG:
         """
         Retrieve the most relevant policy based on Jaccard similarity of tokens.
         Returns the formatted policy string or None if below threshold.
-        Optimized: Uses pre-calculated lengths, isdisjoint() early exit, and
-        mathematical union formula to avoid O(N) memory allocation of set.union().
+
+        Optimized:
+        1. Uses isdisjoint() for fast O(K) early exit where K is min(len(query), len(policy)).
+        2. Calculates union length using mathematical formula |A| + |B| - |A ∩ B| in O(1).
+        3. Avoids heavy O(N) memory allocation and population of a new union set.
         """
         if not query or not self._prepared_policies:
             return None
 
         query_tokens = self._tokenize(query)
-        if not query_tokens:
+        len_query = len(query_tokens)
+        if not len_query:
             return None
 
-        query_len = len(query_tokens)
         best_score = 0.0
         best_formatted = None
 
         for prepared in self._prepared_policies:
             policy_tokens = prepared['content_tokens']
-            policy_len = prepared['content_tokens_len']
 
-            if not policy_tokens:
+            # Optimization 1: Fast early-exit for zero overlap
+            if query_tokens.isdisjoint(policy_tokens):
                 continue
 
-            # Performance Boost: Use isdisjoint() for O(min(len(A), len(B))) early exit
-            if query_tokens.isdisjoint(policy_tokens):
-                score = 0.0
-            else:
-                # Jaccard Similarity: |A ∩ B| / |A ∪ B|
-                # Optimization: |A ∪ B| = |A| + |B| - |A ∩ B| (Inclusion-Exclusion)
-                # This avoids O(N+M) memory allocation and population of a union set.
-                intersection = query_tokens.intersection(policy_tokens)
-                intersection_len = len(intersection)
-                union_len = query_len + policy_len - intersection_len
-                score = intersection_len / union_len if union_len > 0 else 0.0
+            # Jaccard Similarity
+            # Optimization 2: Calculate intersection
+            intersection_len = len(query_tokens.intersection(policy_tokens))
 
-            # Boost score if title words match (weighted), regardless of
-            # whether content-token overlap produced a non-zero base score.
+            # Optimization 3: Calculate union length mathematically (O(1))
+            # |A union B| = |A| + |B| - |A intersect B|
+            # This avoids the expensive O(N) set creation of query_tokens.union(policy_tokens)
+            union_len = len_query + prepared['token_count'] - intersection_len
+
+            if union_len == 0:
+                continue
+
+            score = intersection_len / union_len
+
+            # Boost score if title words match (weighted)
             title_tokens = prepared['title_tokens']
-            title_match_len = len(query_tokens.intersection(title_tokens))
-            if title_match_len > 0:
+            if not query_tokens.isdisjoint(title_tokens):
                 score += 0.2  # Bonus for title match
 
             if score > best_score:
