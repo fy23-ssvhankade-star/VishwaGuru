@@ -31,7 +31,7 @@
 **Action:** Use `db.query(Model.col1, Model.col2)` for read-heavy list endpoints and spatial candidate searches. Note that projected results are immutable `Row` objects, so use `db.query(Model).filter(...).update()` for atomic modifications.
 
 ## 2026-02-07 - Transaction Consolidation for Performance
-**Learning:** Performing multiple `db.commit()` calls in a single endpoint handler increases latency due to multiple round-trips and disk I/O. Using `db.flush()` allows intermediate results (like atomic increments) to be available for queries in the same transaction without the cost of a full commit.
+**Learning:** Performing multiple `db.commit()` calls in a single endpoint handler increases latency due to multiple round-triPS and disk I/O. Using `db.flush()` allows intermediate results (like atomic increments) to be available for queries in the same transaction without the cost of a full commit.
 **Action:** Consolidate multiple database updates into a single transaction. Use `db.flush()` when you need to query the database for values updated via `update()` before the final commit.
 
 ## 2026-02-08 - Return Type Consistency in Utilities
@@ -43,7 +43,7 @@
 **Action:** Serialize data to a JSON string BEFORE caching. On cache hits, return a raw `fastapi.Response` with `media_type="application/json"`. This bypasses the validation layer and is measurably faster (2-3x).
 
 ## 2026-02-10 - Group-By for Multi-Count Statistics
-**Learning:** Executing multiple `count()` queries with different filters (e.g., for different statuses) causes redundant database scans and network round-trips.
+**Learning:** Executing multiple `count()` queries with different filters (e.g., for different statuses) causes redundant database scans and network round-triPS.
 **Action:** Use a single SQL `GROUP BY` query to fetch counts for all categories/statuses at once, then process the results in Python.
 
 ## 2026-02-11 - O(1) Blockchain Verification
@@ -51,7 +51,7 @@
 **Action:** Store the `previous_integrity_hash` directly in the record during creation. This enables O(1) single-record integrity checks without additional database lookups. Use a thread-safe cache to keep the most recent hash in memory to further optimize the creation path.
 
 ## 2026-02-11 - Multi-Metric Aggregate Queries
-**Learning:** Executing multiple separate `count()` queries to gather system statistics results in multiple database round-trips and redundant table scans.
+**Learning:** Executing multiple separate `count()` queries to gather system statistics results in multiple database round-triPS and redundant table scans.
 **Action:** Use a single SQLAlchemy query with `func.count()` and `func.sum(case(...))` to calculate all metrics in one go. This reduces network overhead and allows the database to perform calculations in a single pass.
 
 ## 2025-02-13 - Substring pre-filtering for regex optimization
@@ -79,9 +79,13 @@
 **Action:** Wrap blocking synchronous File I/O operations like `f.write()` in `run_in_threadpool` to offload them to a separate thread, keeping the event loop responsive for other requests.
 
 ## 2026-05-15 - Serialization Caching Bypass
-**Learning:** Caching raw Python objects (like SQLAlchemy models or Pydantic instances) in a high-traffic API still incurs significant overhead because FastAPI/Pydantic must re-serialize the data on every request.
+**Learning:** Caching raw Python objects (like SQLAlchemy models or Pydantic instances) in a high-traffic API still incurs significant overhead because FastAPI/Pydantic must re-validate and re-serialize the data on every request.
 **Action:** Serialize data to a JSON string using `json.dumps()` BEFORE caching. On cache hits, return a raw `fastapi.Response(content=..., media_type="application/json")`. This bypasses the validation and serialization layer, resulting in significant performance gains (up to 50x in benchmarks).
 
 ## 2026-05-16 - Pre-processing for RAG Retrieval
 **Learning:** In RAG (Retrieval-Augmented Generation) systems with static or semi-static policy datasets, performing tokenization, regex substitution, and string formatting inside the retrieval loop is a significant bottleneck that scales with the number of policies.
 **Action:** Move all deterministic operations (tokenization, formatting, regex matching prep) to a one-time initialization step to ensure the retrieval hot-path only performs necessary set intersections and similarity calculations.
+
+## 2026-05-18 - Jaccard Similarity Optimization via Set Arithmetic
+**Learning:** In retrieval loops calculating Jaccard similarity (e.g. RAG), explicitly building a union set `A.union(B)` is expensive due to memory allocation and population.
+**Action:** Use the inclusion-exclusion principle $|A \cup B| = |A| + |B| - |A \cap B|$ to calculate union size in O(1) arithmetic time after calculating the intersection. Pre-calculate $|B|$ (token count) to further reduce overhead. Use `isdisjoint()` for fast early-exit.
