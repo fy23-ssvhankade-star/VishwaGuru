@@ -100,11 +100,12 @@ class CivicRAG:
                 union_len = query_len + policy_len - intersection_len
                 score = intersection_len / union_len if union_len > 0 else 0.0
 
-                # Boost score if title words match (weighted)
-                title_tokens = prepared['title_tokens']
-                title_match_len = len(query_tokens.intersection(title_tokens))
-                if title_match_len > 0:
-                    score += 0.2  # Bonus for title match
+            # Boost score if title words match (weighted), regardless of
+            # whether content-token overlap produced a non-zero base score.
+            title_tokens = prepared['title_tokens']
+            title_match_len = len(query_tokens.intersection(title_tokens))
+            if title_match_len > 0:
+                score += 0.2  # Bonus for title match
 
             if score > best_score:
                 best_score = score
