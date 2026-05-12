@@ -112,6 +112,9 @@ def find_nearby_issues(
     """
     nearby_issues = []
 
+    # Optimization: pre-filter using a bounding box to avoid math on distant points
+    min_lat, max_lat, min_lon, max_lon = get_bounding_box(target_lat, target_lon, radius_meters)
+
     # Optimization: Use inline Equirectangular approximation for short distances (< 10km)
     # This avoids function call overhead and repeated radian conversions.
     # For larger distances, fallback to precise Haversine calculation.
@@ -119,6 +122,12 @@ def find_nearby_issues(
         for issue in issues:
             if issue.latitude is None or issue.longitude is None:
                 continue
+
+            # Apply bounding box pre-filter
+            if issue.latitude < min_lat or issue.latitude > max_lat or \
+               issue.longitude < min_lon or issue.longitude > max_lon:
+                continue
+
             distance = haversine_distance(target_lat, target_lon, issue.latitude, issue.longitude)
             if distance <= radius_meters:
                 nearby_issues.append((issue, distance))
@@ -134,6 +143,11 @@ def find_nearby_issues(
 
         for issue in issues:
             if issue.latitude is None or issue.longitude is None:
+                continue
+
+            # Apply bounding box pre-filter
+            if issue.latitude < min_lat or issue.latitude > max_lat or \
+               issue.longitude < min_lon or issue.longitude > max_lon:
                 continue
 
             # Inline conversion to radians
