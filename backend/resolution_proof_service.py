@@ -191,12 +191,8 @@ class ResolutionProofService:
 
         # 4. Blockchain Chaining
         # Performance Boost: Use thread-safe cache to eliminate DB query for last hash
-        prev_hash = token_last_hash_cache.get("last_hash")
-        if prev_hash is None:
-            # Cache miss: Fetch only the last hash from DB
-            last_record = db.query(ResolutionProofToken.integrity_hash).order_by(ResolutionProofToken.id.desc()).first()
-            prev_hash = last_record[0] if last_record and last_record[0] else ""
-            token_last_hash_cache.set(data=prev_hash, key="last_hash")
+        last_record = db.query(ResolutionProofToken.integrity_hash).order_by(ResolutionProofToken.id.desc()).first()
+        prev_hash = last_record[0] if last_record and last_record[0] else ""
 
         # Chaining: hash(token_id|grievance_id|authority_email|prev_hash)
         chain_content = f"{token_uuid}|{grievance_id}|{authority_email}|{prev_hash}"
