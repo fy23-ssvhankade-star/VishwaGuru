@@ -93,11 +93,3 @@
 ## 2026-05-20 - Joined Queries for Integrity Verification
 **Learning:** Performing multiple sequential database queries to verify cryptographically chained records (e.g., fetching a record and then its associated token/metadata from another table) introduces unnecessary latency and increases database load.
 **Action:** Consolidate associated data retrieval into a single SQL `JOIN` query within the verification hot-path. This reduces database round-trips and improves end-to-end latency for blockchain-style integrity checks.
-
-## 2026-06-12 - Tokenization Regular Expression Optimization
-**Learning:** In `backend/trend_analyzer.py`, using a pre-compiled `re.compile(r'\w+')` with `.findall()` is significantly faster than the default `re.findall(r'\b\w+\b', ...)` while maintaining Unicode support and correct word boundary handling. Batching string segments into one `.join()` before calling `.lower()` further improves performance in bulk text processing.
-**Action:** When extracting words from bulk text, pre-compile the regex pattern into a class variable (`self.word_pattern = re.compile(r'\w+')`) and apply `.lower()` on a single joined string rather than lowering strings individually in a list comprehension.
-
-## 2026-06-12 - Handling ESLint warnings in Netlify CI deployments
-**Learning:** Netlify sets `CI=true` in its build environment by default. In this mode, modern web build tools (like Vite or Create React App) treat ESLint warnings as hard errors, causing the entire CI build step to fail even if the warnings are harmless (e.g., unused variables).
-**Action:** When configuring Netlify deployments via `netlify.toml`, explicitly set `CI = "false"` under `[build.environment]` if you want to bypass the strict ESLint warning-as-error behavior and allow the build to proceed despite minor linting issues.

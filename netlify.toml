@@ -17,5 +17,4 @@
     Referrer-Policy = "strict-origin-when-cross-origin"
 
 [build.environment]
-  CI = "false"
-  ESLINT_NO_DEV_ERRORS = "true"
+  CI = ""
