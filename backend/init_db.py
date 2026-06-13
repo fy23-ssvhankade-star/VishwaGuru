@@ -221,6 +221,14 @@ def migrate_db():
 
             # Resolution Proof Tokens Table Migrations
             if inspector.has_table("resolution_proof_tokens"):
+                if not column_exists("resolution_proof_tokens", "expires_at"):
+                    conn.execute(text("ALTER TABLE resolution_proof_tokens ADD COLUMN expires_at DATETIME"))
+                    logger.info("Added expires_at column to resolution_proof_tokens")
+
+                if not column_exists("resolution_proof_tokens", "nonce"):
+                    conn.execute(text("ALTER TABLE resolution_proof_tokens ADD COLUMN nonce VARCHAR"))
+                    logger.info("Added nonce column to resolution_proof_tokens")
+
                 if not column_exists("resolution_proof_tokens", "valid_from"):
                     conn.execute(text("ALTER TABLE resolution_proof_tokens ADD COLUMN valid_from DATETIME"))
                     logger.info("Added valid_from column to resolution_proof_tokens")
@@ -228,10 +236,6 @@ def migrate_db():
                 if not column_exists("resolution_proof_tokens", "valid_until"):
                     conn.execute(text("ALTER TABLE resolution_proof_tokens ADD COLUMN valid_until DATETIME"))
                     logger.info("Added valid_until column to resolution_proof_tokens")
-
-                if not column_exists("resolution_proof_tokens", "nonce"):
-                    conn.execute(text("ALTER TABLE resolution_proof_tokens ADD COLUMN nonce VARCHAR"))
-                    logger.info("Added nonce column to resolution_proof_tokens")
 
             logger.info("Database migration check completed successfully.")
 

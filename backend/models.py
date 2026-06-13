@@ -314,6 +314,9 @@ class ResolutionProofToken(Base):
     geofence_longitude = Column(Float, nullable=True)
     geofence_radius_meters = Column(Float, default=200.0)
     token_signature = Column(String, nullable=True)
+    nonce = Column(String, nullable=True)
+    valid_from = Column(DateTime, nullable=True)
+    valid_until = Column(DateTime, nullable=True)
 
     # Relationship
     grievance = relationship("Grievance", back_populates="resolution_tokens")
