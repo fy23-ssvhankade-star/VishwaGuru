@@ -94,6 +94,6 @@
 **Learning:** Performing multiple sequential database queries to verify cryptographically chained records (e.g., fetching a record and then its associated token/metadata from another table) introduces unnecessary latency and increases database load.
 **Action:** Consolidate associated data retrieval into a single SQL `JOIN` query within the verification hot-path. This reduces database round-trips and improves end-to-end latency for blockchain-style integrity checks.
 
-## 2026-05-21 - Spatial Calculation Hoisting and BBox Skipping
-**Learning:** In high-frequency spatial deduplication paths, repeated `math.radians` calls and redundant bounding box checks on already-filtered database results are significant bottlenecks. Hoisting degree-to-radian conversion factors and allowing callers to skip the Python-side bbox check yields a ~80% reduction in local processing time.
-**Action:** Always provide a `skip_bbox` parameter in spatial utility functions when the input list is known to be pre-filtered by SQL. Hoist all deterministic trigonometric constants outside of loops.
+## 2026-05-19 - Single Aggregate Query for Multi-Metric Counts
+**Learning:** Consolidating multiple database aggregate queries into a single query using SQLAlchemy `func.sum(case(...))` for categorical counts alongside other aggregates (like `avg` and `count(distinct)`) measurably improves performance by reducing database round-trips and redundant table scans.
+**Action:** Use a single `db.query()` with `func.sum(case(...))` when aggregating across multiple distinct categorical columns and regular metrics simultaneously. Remember to explicitly cast to int/float with `or 0` fallback, as `func.sum` can return `None`.
