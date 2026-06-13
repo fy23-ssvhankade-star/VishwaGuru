@@ -1,7 +1,7 @@
 import re
 import math
 from typing import List, Dict, Any, Optional
-from backend.adaptive_weights import adaptive_weights
+from backend.adaptive_weights import AdaptiveWeights
 
 class PriorityEngine:
     """
@@ -11,9 +11,19 @@ class PriorityEngine:
     """
 
     def __init__(self):
-        # We no longer hardcode values here.
-        # They are fetched dynamically from AdaptiveWeights on each analysis.
-        pass
+        self.weights = AdaptiveWeights()
+
+    @property
+    def severity_keywords(self):
+        return self.weights.severity_keywords
+
+    @property
+    def urgency_patterns(self):
+        return self.weights.urgency_patterns
+
+    @property
+    def categories(self):
+        return self.weights.categories
 
     def analyze(self, text: str, image_labels: Optional[List[str]] = None) -> Dict[str, Any]:
         """

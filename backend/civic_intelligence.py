@@ -1,254 +1,246 @@
-import json
-import os
 import logging
+import os
+import json
+import statistics
 from datetime import datetime, timedelta, timezone
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from backend.models import Issue, EscalationAudit, EscalationReason, Grievance
-from backend.trend_analyzer import trend_analyzer
-from backend.adaptive_weights import adaptive_weights
+from backend.models import Issue, Grievance, SeverityLevel
+from backend.adaptive_weights import AdaptiveWeights
+from backend.trend_analyzer import TrendAnalyzer
 from backend.database import SessionLocal
+from backend.priority_engine import PriorityEngine
+from backend.spatial_utils import haversine_distance
 
 logger = logging.getLogger(__name__)
 
-SNAPSHOT_DIR = os.path.join(os.path.dirname(__file__), 'data', 'dailySnapshots')
-
 class CivicIntelligenceEngine:
-    def __init__(self):
-        os.makedirs(SNAPSHOT_DIR, exist_ok=True)
+    def __init__(self, db_session: Session = None):
+        self.db = db_session if db_session else SessionLocal()
+        self.weights = AdaptiveWeights()
+        self.analyzer = TrendAnalyzer()
+        self.priority_engine = PriorityEngine() # Uses the same AdaptiveWeights singleton
 
-    def _get_previous_snapshot(self) -> Dict[str, Any]:
-        """
-        Retrieves the most recent daily snapshot file, if available.
-        """
-        try:
-            files = sorted([f for f in os.listdir(SNAPSHOT_DIR) if f.endswith('.json')])
-            if not files:
-                return {}
+        self.snapshot_dir = os.path.join(self.weights.data_dir, "dailySnapshots")
+        if not os.path.exists(self.snapshot_dir):
+            os.makedirs(self.snapshot_dir)
 
-            # Use the most recent file
-            latest_file = files[-1]
-            with open(os.path.join(SNAPSHOT_DIR, latest_file), 'r') as f:
-                return json.load(f)
-        except Exception as e:
-            logger.warning(f"Failed to load previous snapshot: {e}")
-            return {}
-
-    def run_daily_cycle(self):
+    def refine_daily(self) -> Dict[str, Any]:
         """
-        Main entry point for the daily refinement job.
-        Analyzes issues, updates weights, and generates intelligence index.
+        Main entry point for the daily refinement process.
         """
         logger.info("Starting Daily Civic Intelligence Refinement...")
-        db = SessionLocal()
-        weight_changes = [] # For auditability
 
-        try:
-            now = datetime.now(timezone.utc)
-            last_24h = now - timedelta(hours=24)
+        # 1. Fetch Data
+        start_time = datetime.now(timezone.utc) - timedelta(hours=24)
+        recent_issues = self.db.query(Issue).filter(Issue.created_at >= start_time).all()
 
-            # 1. Fetch Data
-            # Get issues created in the last 24 hours
-            issues_24h = db.query(Issue).filter(Issue.created_at >= last_24h).all()
+        # Also fetch grievances to check for manual severity overrides
+        recent_grievances = self.db.query(Grievance).filter(Grievance.created_at >= start_time).all()
 
-            # 2. Trend Analysis
-            trends = trend_analyzer.analyze(issues_24h)
-            logger.info(f"Analyzed {len(issues_24h)} issues.")
+        logger.info(f"Analyzed {len(recent_issues)} issues and {len(recent_grievances)} grievances from last 24h.")
 
-            # 2a. Spike Detection
-            previous_snapshot = self._get_previous_snapshot()
-            previous_dist = previous_snapshot.get('trends', {}).get('category_distribution', {})
-            current_dist = trends.get('category_distribution', {})
+        # 2. Trend Analysis
+        trends = self.analyzer.analyze(recent_issues)
 
-            spikes = []
-            category_growth = {}
-            for category, count in current_dist.items():
-                prev_count = previous_dist.get(category, 0)
-                # Spike definition: > 50% increase AND significant volume (> 5)
-                if prev_count > 0 and count > 5:
-                    increase = (count - prev_count) / prev_count
-                    if increase > 0.5:
-                        spikes.append(category)
-                        category_growth[category] = increase
-                elif prev_count == 0 and count > 5:
-                     spikes.append(category) # New surge
-                     # Represent "infinite" growth for new surges by assigning a high placeholder
-                     # or based on pure volume, for ranking emerging concerns
-                     category_growth[category] = float(count)
+        # 3. Adaptive Weight Optimization
+        weight_adjustments = self._optimize_weights(recent_issues, recent_grievances)
 
-            trends['spikes'] = spikes
-            # Find the top emerging concern based on highest percentage growth
-            top_emerging = "None"
-            if category_growth:
-                top_emerging = max(category_growth, key=category_growth.get)
-            trends['top_emerging_concern'] = top_emerging
+        # 4. Duplicate Pattern Learning
+        duplicate_stats = self._optimize_duplicate_detection(recent_issues)
 
-            # 3. Adaptive Weight Optimization (Severity)
-            # Find manual severity upgrades in the last 24h
-            upgrades = db.query(EscalationAudit).filter(
-                EscalationAudit.timestamp >= last_24h,
-                EscalationAudit.reason == EscalationReason.SEVERITY_UPGRADE
-            ).all()
+        # 5. Civic Intelligence Index
+        index_score = self._calculate_index(trends, recent_issues, recent_grievances)
 
-            # Map upgrades to categories
-            upgrade_counts = {}
-
-            # Optimization: Fetch all related grievances in one query to avoid N+1
-            grievance_ids = [audit.grievance_id for audit in upgrades]
-            if grievance_ids:
-                grievances = db.query(Grievance).filter(Grievance.id.in_(grievance_ids)).all()
-                grievance_map = {g.id: g for g in grievances}
-            else:
-                grievance_map = {}
-
-            for audit in upgrades:
-                grievance = grievance_map.get(audit.grievance_id)
-                if grievance and grievance.category:
-                    upgrade_counts[grievance.category] = upgrade_counts.get(grievance.category, 0) + 1
-
-            # Update weights if threshold met
-            for category, count in upgrade_counts.items():
-                if count >= 3: # Threshold for auto-adjustment
-                    old_multipliers = adaptive_weights.get_category_multipliers()
-                    old_weight = old_multipliers.get(category, 1.0)
-
-                    # Increase weight by 10%
-                    adaptive_weights.update_category_weight(category, 1.1)
-
-                    # Verify new weight (fetch fresh)
-                    new_multipliers = adaptive_weights.get_category_multipliers()
-                    new_weight = new_multipliers.get(category, 1.1)
-
-                    weight_changes.append({
-                        "category": category,
-                        "old_weight": old_weight,
-                        "new_weight": new_weight,
-                        "reason": f"Manual severity upgrades count: {count}"
-                    })
-                    logger.info(f"Increased severity weight for {category} due to {count} manual upgrades.")
-
-            # 4. Duplicate Pattern Learning (Radius Adjustment)
-            # Heuristic: High clustering density suggests we might need larger radius to group effectively
-            # or if many duplicate/nearby issues are found.
-            clusters = trends.get('clusters', [])
-            cluster_count = len(clusters)
-
-            current_radius = adaptive_weights.get_duplicate_search_radius()
-            radius_update_factor = 1.0
-
-            if cluster_count > 5:
-                # High clustering activity, increase radius slightly to ensure we catch neighbors
-                radius_update_factor = 1.05
-            elif cluster_count == 0 and len(issues_24h) > 50:
-                # Many issues but no clusters detected - radius might be too small
-                radius_update_factor = 1.05
-            elif len(issues_24h) < 10 and current_radius > 50:
-                # Low volume, maybe decay radius back to default if it grew too large
-                radius_update_factor = 0.95
-
-            if radius_update_factor != 1.0:
-                adaptive_weights.update_duplicate_radius(radius_update_factor)
-                new_radius = adaptive_weights.get_duplicate_search_radius()
-                weight_changes.append({
-                    "category": "GLOBAL_DUPLICATE_RADIUS",
-                    "old_weight": current_radius,
-                    "new_weight": new_radius,
-                    "reason": f"Cluster density analysis (clusters: {cluster_count}, issues: {len(issues_24h)})"
-                })
-
-            # 5. Civic Intelligence Index
-            index_data = self._calculate_index(db, issues_24h, trends, previous_snapshot)
-
-            # 6. Snapshot
-            snapshot = {
-                "date": now.isoformat(),
-                "trends": trends,
-                "civic_index": index_data,
-                "weight_updates": upgrade_counts,
-                "weight_changes": weight_changes,
-                "model_weights": adaptive_weights._weights if adaptive_weights._weights else {}
-            }
-
-            filename = f"{now.strftime('%Y-%m-%d')}.json"
-            filepath = os.path.join(SNAPSHOT_DIR, filename)
-
-            # Atomic write (write to temp then rename) not strictly necessary for this file but good practice
-            # using simple write for now
-            with open(filepath, 'w') as f:
-                json.dump(snapshot, f, indent=2)
-
-            logger.info(f"Daily snapshot saved to {filepath}")
-
-        except Exception as e:
-            logger.error(f"Error in daily civic intelligence cycle: {e}", exc_info=True)
-        finally:
-            db.close()
-
-    def _calculate_index(self, db: Session, issues_24h: List[Issue], trends: Dict[str, Any], previous_snapshot: Dict[str, Any] = None) -> Dict[str, Any]:
-        """
-        Generates a daily 'Civic Intelligence Index' score.
-        """
-        total_new = len(issues_24h)
-
-        now = datetime.now(timezone.utc)
-        last_24h = now - timedelta(hours=24)
-
-        # Count resolutions in last 24h
-        resolved_count = db.query(Issue).filter(
-            Issue.resolved_at >= last_24h
-        ).count()
-
-        # Score Calculation
-        # Base: 70
-        # +2 per resolution
-        # -0.5 per new issue (burden)
-        score = 70.0
-        score += (resolved_count * 2.0)
-        score -= (total_new * 0.5)
-
-        # Clamp 0-100
-        score = max(0.0, min(100.0, score))
-
-        # Calculate delta from previous day
-        delta = None
-        if previous_snapshot and 'civic_index' in previous_snapshot:
-            prev_score = previous_snapshot['civic_index'].get('score')
-            if prev_score is not None:
-                delta = round(score - prev_score, 1)
-
-        # Top emerging concern (prioritize highest % growth over raw volume)
-        top_cat = trends.get('top_emerging_concern', "None")
-        if top_cat == "None":
-            category_dist = trends.get('category_distribution', {})
-            if category_dist:
-                top_cat = max(category_dist, key=category_dist.get)
-
-        # Highest severity region (from clusters)
-        highest_severity_region = "None"
-        clusters = trends.get('clusters', [])
-        if clusters:
-            # Assume first cluster is largest/most significant
-            # In real app, we would reverse geocode the lat/lon to get Ward/Area name
-            # For now, just return lat/lon
-            top_cluster = clusters[0]
-            highest_severity_region = f"Lat {top_cluster['latitude']:.4f}, Lon {top_cluster['longitude']:.4f}"
-
-        result = {
-            "score": round(score, 1),
-            "new_issues_count": total_new,
-            "resolved_issues_count": resolved_count,
-            "top_emerging_concern": top_cat,
-            "highest_severity_region": highest_severity_region
+        # 6. Generate Report/Snapshot
+        snapshot = {
+            "date": datetime.now(timezone.utc).isoformat(),
+            "civic_intelligence_index": index_score,
+            "trends": trends,
+            "weight_adjustments": weight_adjustments,
+            "duplicate_stats": duplicate_stats,
+            "issue_count": len(recent_issues),
+            "grievance_count": len(recent_grievances)
         }
 
-        if delta is not None:
-            result["delta"] = delta
-            # Format string delta like "+3.1 from yesterday"
-            sign = "+" if delta >= 0 else ""
-            result["delta_str"] = f"{sign}{delta} from yesterday"
+        self._save_snapshot(snapshot)
 
-        return result
+        # 7. Persist updated weights
+        self.weights.save_weights()
 
-civic_intelligence_engine = CivicIntelligenceEngine()
+        logger.info(f"Daily refinement complete. Index: {index_score['score']}")
+        return snapshot
+
+    def _optimize_weights(self, issues: List[Issue], grievances: List[Grievance]) -> List[str]:
+        adjustments = []
+
+        # Map grievances to issues for severity comparison
+        # We need to see if manual severity (in Grievance) differs from predicted
+
+        # Group grievances by category
+        category_severity = {} # category -> list of severity levels (0=low, 3=critical)
+        severity_map = {
+            SeverityLevel.LOW: 0,
+            SeverityLevel.MEDIUM: 1,
+            SeverityLevel.HIGH: 2,
+            SeverityLevel.CRITICAL: 3
+        }
+
+        for g in grievances:
+            if g.category not in category_severity:
+                category_severity[g.category] = []
+            category_severity[g.category].append(severity_map.get(g.severity, 0))
+
+        # Check for categories that are consistently high severity
+        for category, severities in category_severity.items():
+            avg_severity = statistics.mean(severities) if severities else 0
+
+            # If average severity is High/Critical (>= 2.0), ensure category keyword is in High/Critical list
+            if avg_severity >= 2.0:
+                cat_keyword = category.lower()
+
+                # Check where it currently is
+                current_level = "low"
+                if any(cat_keyword in self.weights.severity_keywords[k] for k in ["critical"]):
+                    current_level = "critical"
+                elif any(cat_keyword in self.weights.severity_keywords[k] for k in ["high"]):
+                    current_level = "high"
+                elif any(cat_keyword in self.weights.severity_keywords[k] for k in ["medium"]):
+                    current_level = "medium"
+
+                # Upgrade if needed
+                if avg_severity >= 2.5 and current_level != "critical":
+                    # Move to critical
+                    self._move_keyword(cat_keyword, "critical")
+                    adjustments.append(f"Escalated '{cat_keyword}' to Critical severity keywords due to high manual severity.")
+                elif avg_severity >= 1.5 and current_level in ["low", "medium"]:
+                     # Move to high
+                    self._move_keyword(cat_keyword, "high")
+                    adjustments.append(f"Escalated '{cat_keyword}' to High severity keywords.")
+
+        return adjustments
+
+    def _move_keyword(self, keyword: str, target_level: str):
+        # Remove from all other levels
+        for level in self.weights.severity_keywords:
+            if keyword in self.weights.severity_keywords[level]:
+                self.weights.severity_keywords[level].remove(keyword)
+
+        # Add to target
+        if keyword not in self.weights.severity_keywords[target_level]:
+            self.weights.severity_keywords[target_level].append(keyword)
+
+    def _optimize_duplicate_detection(self, issues: List[Issue]) -> Dict[str, Any]:
+        # Analyze spatial density of NEW issues (that passed duplicate check)
+        # If we have many clusters of issues very close to each other (e.g. < 60m) created within 24h,
+        # it suggests duplicate radius (50m) might be too small.
+
+        close_pairs = 0
+        total_pairs = 0
+
+        valid_issues = [i for i in issues if i.latitude and i.longitude]
+        n = len(valid_issues)
+
+        # Check pairs (sample if too many)
+        # Just check neighbor distances
+        for i in range(n):
+            for j in range(i+1, n):
+                dist = haversine_distance(valid_issues[i].latitude, valid_issues[i].longitude,
+                                          valid_issues[j].latitude, valid_issues[j].longitude)
+
+                if dist < 100: # Only care about close ones
+                    total_pairs += 1
+                    if dist > 50 and dist < 70:
+                        # In the "danger zone" just outside current radius
+                        # Check if they are same category
+                        if valid_issues[i].category == valid_issues[j].category:
+                            close_pairs += 1
+
+        # If we see many pairs just outside the radius, increase radius
+        current_radius = self.weights.duplicate_search_radius
+        new_radius = current_radius
+        reason = "No change"
+
+        if total_pairs > 0 and (close_pairs / total_pairs) > 0.3:
+            # >30% of close issues are in 50-70m range and same category
+            new_radius = min(current_radius + 5.0, 100.0) # Cap at 100m
+            reason = f"Increased radius to {new_radius}m due to dense clustering of similar issues."
+        elif total_pairs == 0 and current_radius > 50.0:
+            # Decay back to baseline if no clusters found
+            new_radius = max(current_radius - 1.0, 50.0)
+            reason = "Decreasing radius slightly due to lack of clusters."
+
+        if new_radius != current_radius:
+            self.weights.update_duplicate_radius(new_radius)
+
+        return {
+            "old_radius": current_radius,
+            "new_radius": new_radius,
+            "reason": reason,
+            "close_pairs_detected": close_pairs
+        }
+
+    def _calculate_index(self, trends: Dict, issues: List[Issue], grievances: List[Grievance]) -> Dict[str, Any]:
+        # Synthetic score 0-100
+        # Factors:
+        # - Volume (normalized)
+        # - Severity (ratio of high/critical)
+        # - Resolution Rate (from grievances)
+
+        if not issues:
+            return {"score": 0, "level": "No Data"}
+
+        # 1. Severity Score
+        critical_count = sum(1 for g in grievances if g.severity == SeverityLevel.CRITICAL)
+        high_count = sum(1 for g in grievances if g.severity == SeverityLevel.HIGH)
+        severity_ratio = (critical_count * 2 + high_count) / len(grievances) if grievances else 0
+        # Normalize: max possible is 2 (all critical). 2 -> 100, 0 -> 0.
+        severity_component = min(severity_ratio * 50, 100)
+
+        # 2. Activity/Engagement Score (Volume)
+        # Assume 100 issues/day is "High" activity for this local system?
+        volume_component = min(len(issues), 100)
+
+        # 3. Resolution Efficiency (issues resolved / issues created)
+        # This is hard to calc on just 24h creation window.
+        # Check resolved_at in last 24h
+        end_time = datetime.now(timezone.utc)
+        start_time = end_time - timedelta(hours=24)
+        resolved_count = self.db.query(Issue).filter(Issue.resolved_at >= start_time).count()
+        resolution_rate = (resolved_count / len(issues)) if issues else 0
+        efficiency_component = min(resolution_rate * 100, 100)
+
+        # Composite Index
+        # We want "Civic Intelligence" to reflect "Health/Activity".
+        # High score = Good? Or High score = Many problems?
+        # "Civic Intelligence Index" usually implies the *system's* intelligence or the *city's* health?
+        # Prompt: "Civic Intelligence Index: 72.4 (+3.1 from yesterday)"
+        # Let's assume it's a "City Health" or "System Effectiveness" score.
+        # High resolution + Moderate volume (engagement) - Low Severity = Good.
+        # But "Refining" implies the AI is getting smarter.
+        # Let's make it a score of "System Activity & Insight".
+        # Score = (Volume * 0.3) + (Severity * 0.3) + (Efficiency * 0.4)
+
+        final_score = (volume_component * 0.3) + (severity_component * 0.3) + (efficiency_component * 0.4)
+
+        return {
+            "score": round(final_score, 1),
+            "components": {
+                "volume": volume_component,
+                "severity": severity_component,
+                "efficiency": efficiency_component
+            },
+            "top_concern": trends["top_keywords"][0][0] if trends["top_keywords"] else "None"
+        }
+
+    def _save_snapshot(self, data: Dict[str, Any]):
+        filename = f"{datetime.now().strftime('%Y-%m-%d')}.json"
+        filepath = os.path.join(self.snapshot_dir, filename)
+        try:
+            with open(filepath, 'w') as f:
+                json.dump(data, f, indent=4)
+            logger.info(f"Saved daily snapshot to {filepath}")
+        except Exception as e:
+            logger.error(f"Error saving snapshot: {e}")
