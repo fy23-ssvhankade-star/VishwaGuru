@@ -167,11 +167,22 @@ class ClosureService:
         ).scalar()
         
         # Get all confirmation counts in a single query instead of multiple round-trips
-        # Optimized: Use group_by instead of sum(case) for better aggregation performance
-        counts = db.query(
+        # Optimized: Standard GROUP BY is measurably faster than multiple func.sum(case(...)) aggregations
+        stats = db.query(
             ClosureConfirmation.confirmation_type,
             func.count(ClosureConfirmation.id)
         ).filter(ClosureConfirmation.grievance_id == grievance_id).group_by(ClosureConfirmation.confirmation_type).all()
+        
+        confirmations_count = 0
+        disputes_count = 0
+
+        for ctype, count in stats:
+            if ctype == 'confirmed':
+                confirmations_count = count
+            elif ctype == 'disputed':
+                disputes_count = count
+        
+        required_confirmations = max(1, int(total_followers * ClosureService.CONFIRMATION_THRESHOLD))
         
         counts_dict = dict(counts)
 

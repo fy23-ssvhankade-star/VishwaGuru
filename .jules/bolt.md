@@ -90,6 +90,6 @@
 **Learning:** In retrieval loops calculating Jaccard similarity (e.g. RAG), explicitly building a union set `A.union(B)` is expensive due to memory allocation and population.
 **Action:** Use the inclusion-exclusion principle $|A \cup B| = |A| + |B| - |A \cap B|$ to calculate union size in O(1) arithmetic time after calculating the intersection. Pre-calculate $|B|$ (token count) to further reduce overhead. Use `isdisjoint()` for fast early-exit.
 
-## 2026-05-19 - Replace func.sum(case(...)) with GROUP BY
-**Learning:** Using multiple `func.sum(case(...))` aggregates over a single categorical column performs significantly slower than a simple `GROUP BY` query, as the database evaluates each condition for every row instead of optimizing via index/hashing.
-**Action:** Replace `func.sum(case(...))` aggregation logic with a standard `GROUP BY` query and load the results into a Python dictionary for O(1) value lookups.
+## 2025-02-18 - SQLAlchemy Multiple Aggregations vs Standard GROUP BY
+**Learning:** When calculating aggregates over categorical columns (e.g., status counts, confirmation types) in SQLAlchemy, using standard `GROUP BY` queries (e.g., `db.query(Model.type, func.count(Model.id)).group_by(Model.type)`) is measurably faster and scales better than stringing together multiple `func.sum(case(...))` statements, reducing database parse time and scan overhead.
+**Action:** When auditing ORM queries for performance, replace multiple conditional aggregations (`func.sum(case)`) with standard `GROUP BY` patterns combined with Python-side extraction where categories are cleanly divisible.
