@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom';
 
-// Mock import.meta globalThis.y for Jest
+// Mock import.meta globally for Jest
 globalThis.import = globalThis.import || {};
 globalThis.import.meta = {
   env: {
