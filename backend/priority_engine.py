@@ -10,19 +10,21 @@ class PriorityEngine:
     """
 
     def __init__(self):
-        # Load weights from adaptive engine
-        weights = adaptive_weights.get_weights()
+        # We now access weights dynamically from the singleton adaptive_weights instance
+        pass
 
-        self.severity_keywords = weights.get("severity_keywords", {})
-        self.urgency_patterns = weights.get("urgency_patterns", [])
-        self.categories = weights.get("categories", {})
+    @property
+    def severity_keywords(self):
+        return adaptive_weights.severity_keywords
 
-    def reload_weights(self):
-        """Reloads weights from the adaptive engine."""
-        weights = adaptive_weights.get_weights()
-        self.severity_keywords = weights.get("severity_keywords", {})
-        self.urgency_patterns = weights.get("urgency_patterns", [])
-        self.categories = weights.get("categories", {})
+    @property
+    def urgency_patterns(self):
+        # adaptive_weights stores as List[List], but we need List[Tuple] for regex
+        return adaptive_weights.get_urgency_patterns_tuples()
+
+    @property
+    def categories(self):
+        return adaptive_weights.categories
 
     def analyze(self, text: str, image_labels: Optional[List[str]] = None) -> Dict[str, Any]:
         """

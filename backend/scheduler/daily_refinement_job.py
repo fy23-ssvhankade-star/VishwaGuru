@@ -1,19 +1,17 @@
 import sys
 import os
-from pathlib import Path
-
-# Setup path
-current_file = Path(__file__).resolve()
-scheduler_dir = current_file.parent
-backend_dir = scheduler_dir.parent
-repo_root = backend_dir.parent
-
-if str(repo_root) not in sys.path:
-    sys.path.insert(0, str(repo_root))
-
 import logging
-from backend.database import SessionLocal, engine, Base
-from backend.civic_intelligence import CivicIntelligenceEngine
+from pathlib import Path
+from sqlalchemy.orm import Session
+
+# Add project root to path
+current_file = Path(__file__).resolve()
+# backend/scheduler/daily_refinement_job.py -> backend/scheduler -> backend -> root
+repo_root = current_file.parent.parent.parent
+sys.path.insert(0, str(repo_root))
+
+from backend.database import SessionLocal
+from backend.civic_intelligence import civic_intelligence_engine
 
 # Configure logging
 logging.basicConfig(
@@ -22,24 +20,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def run_job():
-    logger.info("Starting Daily Refinement Job...")
-
-    # Ensure tables exist (idempotent)
+def run_daily_job():
+    logger.info("Initializing daily refinement job...")
+    db: Session = SessionLocal()
     try:
-        Base.metadata.create_all(bind=engine)
+        result = civic_intelligence_engine.refine_daily(db)
+        logger.info(f"Daily refinement job completed successfully. Index Score: {result.get('index_score')}")
     except Exception as e:
-        logger.warning(f"Could not create tables (might already exist or permission error): {e}")
-
-    db = SessionLocal()
-    try:
-        civic_engine = CivicIntelligenceEngine()
-        snapshot = civic_engine.refine_daily(db)
-        logger.info(f"Job completed successfully. Snapshot saved for {snapshot['date']}")
-    except Exception as e:
-        logger.error(f"Job failed: {e}", exc_info=True)
+        logger.error(f"Daily refinement job failed: {e}", exc_info=True)
     finally:
         db.close()
 
 if __name__ == "__main__":
-    run_job()
+    run_daily_job()

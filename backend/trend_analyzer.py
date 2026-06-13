@@ -1,161 +1,114 @@
-import logging
-import datetime
-from collections import Counter
 import re
-from typing import Dict, Any, List
-from sqlalchemy.orm import Session
-from sqlalchemy import func
+from typing import List, Dict, Any, Tuple
+from collections import Counter
+import logging
 from backend.models import Issue
-from backend.spatial_utils import haversine_distance
+from backend.spatial_utils import cluster_issues_dbscan
 
 logger = logging.getLogger(__name__)
 
+STOP_WORDS = {
+    "the", "is", "at", "which", "on", "and", "a", "an", "of", "in", "to", "for", "with", "by",
+    "this", "that", "these", "those", "it", "its", "from", "as", "be", "are", "was", "were",
+    "have", "has", "had", "but", "not", "or", "if", "when", "where", "there", "here", "my",
+    "your", "our", "their", "please", "help", "need", "issue", "problem", "complaint", "regarding"
+}
+
 class TrendAnalyzer:
     """
-    Analyzes recent civic issues to detect trends, spikes, and clusters.
+    Analyzes civic issues to detect trends, keywords, and geographic clusters.
     """
 
-    STOPWORDS = {
-        "the", "a", "an", "in", "on", "at", "to", "for", "of", "with", "is", "are", "was", "were",
-        "and", "or", "but", "so", "it", "this", "that", "there", "here", "my", "your", "his", "her",
-        "from", "by", "as", "be", "have", "has", "had", "do", "does", "did", "will", "would", "should",
-        "can", "could", "may", "might", "must", "issue", "problem", "complaint", "please", "help",
-        "near", "opposite", "behind", "front", "road", "street", "area", "city", "ward", "zone"
-    }
-
-    def analyze_recent_issues(self, db: Session, hours: int = 24) -> Dict[str, Any]:
+    def analyze(self, issues: List[Issue], historical_category_counts: Dict[str, float] = None) -> Dict[str, Any]:
         """
-        Analyzes issues from the last `hours` to extract trends.
+        Analyzes a list of issues to find top keywords, category distribution, and clusters.
         """
-        now = datetime.datetime.now(datetime.timezone.utc)
-        start_time = now - datetime.timedelta(hours=hours)
-        prev_start_time = start_time - datetime.timedelta(hours=hours)
+        if not issues:
+            return {
+                "top_keywords": [],
+                "category_counts": {},
+                "spiking_categories": [],
+                "clusters": []
+            }
 
-        # Fetch recent issues
-        recent_issues = db.query(Issue).filter(
-            Issue.created_at >= start_time
-        ).all()
-
-        # Fetch previous window issues for comparison (for spikes)
-        previous_issues_count = db.query(Issue).filter(
-            Issue.created_at >= prev_start_time,
-            Issue.created_at < start_time
-        ).count()
-
-        # 1. Keyword Analysis
-        keywords = self._extract_top_keywords(recent_issues)
-
-        # 2. Category Analysis (Spikes)
-        category_stats = self._analyze_categories(recent_issues)
-
-        # 3. Spatial Analysis (Clustering & Density)
-        spatial_stats = self._analyze_spatial_distribution(recent_issues)
-
-        # 4. Global Stats
-        total_issues = len(recent_issues)
-        growth_rate = 0
-        if previous_issues_count > 0:
-            growth_rate = ((total_issues - previous_issues_count) / previous_issues_count) * 100
+        keywords = self._extract_top_keywords(issues)
+        category_counts = self._count_categories(issues)
+        spikes = self._detect_spikes(category_counts, historical_category_counts)
+        clusters = self._identify_geographic_clustering(issues)
 
         return {
-            "period_hours": hours,
-            "total_issues": total_issues,
-            "previous_period_issues": previous_issues_count,
-            "growth_rate_percent": round(growth_rate, 1),
             "top_keywords": keywords,
-            "category_stats": category_stats,
-            "spatial_stats": spatial_stats,
-            "timestamp": now.isoformat()
+            "category_counts": category_counts,
+            "spiking_categories": spikes,
+            "clusters": clusters
         }
 
-    def _extract_top_keywords(self, issues: List[Issue], top_n: int = 5) -> List[Dict[str, Any]]:
-        if not issues:
+    def _extract_top_keywords(self, issues: List[Issue], top_n: int = 5) -> List[Tuple[str, int]]:
+        """Extracts most common words from issue descriptions."""
+        all_text = " ".join([issue.description for issue in issues if issue.description]).lower()
+        words = re.findall(r'\b[a-z]{3,}\b', all_text) # Words with 3+ chars
+
+        filtered_words = [w for w in words if w not in STOP_WORDS]
+        return Counter(filtered_words).most_common(top_n)
+
+    def _count_categories(self, issues: List[Issue]) -> Dict[str, int]:
+        """Counts issues per category."""
+        categories = [issue.category for issue in issues if issue.category]
+        return dict(Counter(categories))
+
+    def _detect_spikes(self, current_counts: Dict[str, int], historical_averages: Dict[str, float]) -> List[str]:
+        """
+        Identifies categories with a sudden spike in reports (> 50% increase).
+        """
+        if not historical_averages:
             return []
 
-        text_blob = " ".join([issue.description or "" for issue in issues]).lower()
-        # Simple tokenization: remove non-alphanumeric (keep spaces), split
-        tokens = re.findall(r'\b[a-z]{3,}\b', text_blob)
+        spiking = []
+        for category, count in current_counts.items():
+            avg = historical_averages.get(category, 0)
+            if avg > 5 and count > avg * 1.5: # Only consider if historical avg is significant (>5)
+                spiking.append(category)
 
-        filtered_tokens = [t for t in tokens if t not in self.STOPWORDS]
+        return spiking
 
-        counter = Counter(filtered_tokens)
-        most_common = counter.most_common(top_n)
-
-        return [{"keyword": word, "count": count} for word, count in most_common]
-
-    def _analyze_categories(self, issues: List[Issue]) -> Dict[str, Any]:
-        if not issues:
-            return {"distribution": {}, "spikes": []}
-
-        counter = Counter([issue.category for issue in issues if issue.category])
-        total = len(issues)
-
-        distribution = {cat: count for cat, count in counter.items()}
-
-        # Detect simple dominance (if one category is > 30% of issues)
-        spikes = []
-        for cat, count in counter.items():
-            percentage = (count / total) * 100
-            if percentage > 30: # Arbitrary threshold for "spike" in daily trend
-                spikes.append(cat)
-
-        return {
-            "distribution": distribution,
-            "dominant_categories": spikes
-        }
-
-    def _analyze_spatial_distribution(self, issues: List[Issue]) -> Dict[str, Any]:
+    def _identify_geographic_clustering(self, issues: List[Issue]) -> List[Dict[str, Any]]:
         """
-        Analyzes geographic distribution to find hotspots and density.
+        Uses spatial utilities to find clusters of issues.
         """
-        valid_issues = [i for i in issues if i.latitude is not None and i.longitude is not None]
-        if not valid_issues:
-            return {"clusters": [], "avg_neighbor_dist": None}
+        # Filter issues with location
+        located_issues = [i for i in issues if i.latitude and i.longitude]
 
-        # 1. Grid-based clustering (simple hotspot detection)
-        # Round lat/lon to ~1km precision (2 decimal places)
-        grid_counter = Counter()
-        for issue in valid_issues:
-            grid_key = (round(issue.latitude, 2), round(issue.longitude, 2))
-            grid_counter[grid_key] += 1
+        if not located_issues:
+            return []
 
-        # Identify hotspots (grids with > 2 issues)
-        hotspots = []
-        for (lat, lon), count in grid_counter.items():
-            if count >= 3:
-                hotspots.append({"lat": lat, "lon": lon, "count": count})
+        # Use DBSCAN via spatial_utils
+        # Default eps=30m might be too small for "geographic clustering" of trends.
+        # Let's use larger radius like 500m to find hotspots.
+        clusters = cluster_issues_dbscan(located_issues, eps_meters=500.0)
 
-        hotspots.sort(key=lambda x: x["count"], reverse=True)
+        cluster_summaries = []
+        for cluster in clusters:
+            if len(cluster) < 3: # Ignore small clusters
+                continue
 
-        # 2. Average Nearest Neighbor Distance (for density estimation)
-        # If avg distance is small, issues are clumped -> maybe need larger deduplication radius?
-        total_min_dist = 0
-        count = 0
+            # Find centroid
+            lats = [i.latitude for i in cluster]
+            lons = [i.longitude for i in cluster]
+            avg_lat = sum(lats) / len(lats)
+            avg_lon = sum(lons) / len(lons)
 
-        if len(valid_issues) > 1:
-            for i in range(len(valid_issues)):
-                min_dist = float('inf')
-                found = False
-                for j in range(len(valid_issues)):
-                    if i == j:
-                        continue
-                    dist = haversine_distance(
-                        valid_issues[i].latitude, valid_issues[i].longitude,
-                        valid_issues[j].latitude, valid_issues[j].longitude
-                    )
-                    if dist < min_dist:
-                        min_dist = dist
-                        found = True
+            # Most common category in this cluster
+            cats = [i.category for i in cluster if i.category]
+            top_cat = Counter(cats).most_common(1)[0][0] if cats else "Unknown"
 
-                if found:
-                    total_min_dist += min_dist
-                    count += 1
+            cluster_summaries.append({
+                "count": len(cluster),
+                "centroid": {"lat": avg_lat, "lon": avg_lon},
+                "dominant_category": top_cat
+            })
 
-            avg_neighbor_dist = total_min_dist / count if count > 0 else 0
-        else:
-            avg_neighbor_dist = 0
+        # Sort by size
+        cluster_summaries.sort(key=lambda x: x["count"], reverse=True)
+        return cluster_summaries
 
-        return {
-            "hotspots": hotspots[:5], # Top 5 hotspots
-            "avg_neighbor_dist": round(avg_neighbor_dist, 1)
-        }
+trend_analyzer = TrendAnalyzer()

@@ -1,63 +1,77 @@
 import json
 import os
-import datetime
 import logging
-from typing import Dict, Any, List
+from datetime import datetime, timedelta, timezone
+from typing import Dict, Any, List, Set
+
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from backend.trend_analyzer import TrendAnalyzer
+from backend.models import Issue, Grievance, SeverityLevel, GrievanceStatus
 from backend.adaptive_weights import adaptive_weights
-from backend.models import Issue, SeverityLevel
+from backend.trend_analyzer import trend_analyzer
+# from backend.priority_engine import priority_engine # Not strictly needed here unless we re-run priority check
 
 logger = logging.getLogger(__name__)
+
+# Use absolute path relative to repo root data directory
+# This file is in backend/civic_intelligence.py
+# Repo root is ../../
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SNAPSHOT_DIR = os.path.join(BASE_DIR, "data", "dailySnapshots")
 
 class CivicIntelligenceEngine:
     """
     Orchestrates daily refinement of the civic intelligence system.
     """
 
-    def __init__(self, data_dir: str = "data"):
-        # Resolve absolute path relative to this file to handle Render environment correctly
-        # In Render, the app runs from repo root, but data might be mounted or just local
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) # repo root
-        if data_dir == "data":
-             # If default 'data' is used, assume it's at repo root
-             self.data_dir = os.path.join(base_dir, "data")
-        else:
-             self.data_dir = data_dir
-
-        self.snapshots_dir = os.path.join(self.data_dir, "dailySnapshots")
-        self.trend_analyzer = TrendAnalyzer()
-
     def refine_daily(self, db: Session) -> Dict[str, Any]:
         """
-        Main entry point for daily refinement job.
+        Runs the daily analysis and refinement process.
         """
         logger.info("Starting daily civic intelligence refinement...")
 
-        # 1. Analyze Trends
-        trend_report = self.trend_analyzer.analyze_recent_issues(db, hours=24)
+        # 1. Fetch data from last 24h
+        # Ensure we use UTC aware datetime if models use it
+        end_time = datetime.now(timezone.utc)
+        start_time = end_time - timedelta(hours=24)
 
-        # 2. Adaptive Weight Optimization
-        weight_updates = self._optimize_weights(db, trend_report)
+        # We might need to handle timezone naive/aware mismatch depending on DB driver
+        # But assuming consistency with models.py
 
-        # 3. Duplicate Pattern Learning
-        duplicate_updates = self._refine_duplicate_detection(trend_report)
+        issues_24h = db.query(Issue).filter(Issue.created_at >= start_time).all()
+        grievances_24h = db.query(Grievance).filter(Grievance.created_at >= start_time).all()
 
-        # 4. Generate Index
-        index_score = self._calculate_index(db, trend_report)
+        logger.info(f"Analyzed {len(issues_24h)} issues and {len(grievances_24h)} grievances from last 24h.")
 
-        # 5. Create Snapshot
+        # 2. Trend Analysis
+        previous_snapshot = self._load_last_snapshot()
+        historical_counts = previous_snapshot.get("trends", {}).get("category_counts", {}) if previous_snapshot else {}
+
+        trends = trend_analyzer.analyze(issues_24h, historical_counts)
+
+        # 3. Adaptive Weight Optimization
+        weight_updates = self._optimize_weights(db, grievances_24h)
+        self._adjust_duplicate_threshold(issues_24h)
+
+        # 4. Civic Intelligence Index
+        index_score = self._calculate_index(issues_24h, grievances_24h)
+        previous_score = previous_snapshot.get("index_score", 50.0) if previous_snapshot else 50.0
+        index_change = index_score - previous_score
+
+        # 5. Generate Snapshot
         snapshot = {
-            "date": datetime.datetime.now().strftime("%Y-%m-%d"),
-            "timestamp": datetime.datetime.now().isoformat(),
-            "civic_intelligence_index": index_score,
-            "trends": trend_report,
-            "optimizations": {
-                "weights": weight_updates,
-                "duplicate_detection": duplicate_updates
-            }
+            "date": end_time.strftime("%Y-%m-%d"),
+            "timestamp": end_time.isoformat(),
+            "index_score": round(index_score, 2),
+            "index_change": round(index_change, 2),
+            "stats": {
+                "total_issues": len(issues_24h),
+                "total_grievances": len(grievances_24h),
+                "resolved_grievances": sum(1 for g in grievances_24h if g.status == GrievanceStatus.RESOLVED)
+            },
+            "trends": trends,
+            "weight_updates": weight_updates
         }
 
         self._save_snapshot(snapshot)
@@ -65,136 +79,143 @@ class CivicIntelligenceEngine:
 
         return snapshot
 
-    def _optimize_weights(self, db: Session, trend_report: Dict[str, Any]) -> List[str]:
+    def _adjust_duplicate_threshold(self, issues: List[Issue]):
         """
-        Adjust severity weights based on manual overrides or high-frequency keywords in critical issues.
+        Dynamically adjusts duplicate detection threshold based on duplicate rate.
+        """
+        total = len(issues)
+        if total < 10:
+            return
+
+        # Assuming 'duplicate' status indicates a duplicate issue
+        duplicates = len([i for i in issues if i.status == 'duplicate'])
+        rate = duplicates / total
+
+        current_radius = adaptive_weights.duplicate_search_radius
+
+        # Simple heuristic:
+        # If too many duplicates (> 30%), we might be over-matching (radius too big).
+        # If too few (< 5%), we might be under-matching (radius too small).
+        # This is a naive control loop but satisfies the requirement.
+
+        if rate > 0.3:
+            new_radius = max(10.0, current_radius * 0.9)
+            if new_radius != current_radius:
+                adaptive_weights.duplicate_search_radius = new_radius
+                logger.info(f"High duplicate rate ({rate:.2f}). Decreased duplicate search radius to {new_radius:.1f}m")
+        elif rate < 0.05:
+            new_radius = min(100.0, current_radius * 1.1)
+            if new_radius != current_radius:
+                adaptive_weights.duplicate_search_radius = new_radius
+                logger.info(f"Low duplicate rate ({rate:.2f}). Increased duplicate search radius to {new_radius:.1f}m")
+
+    def _optimize_weights(self, db: Session, grievances: List[Grievance]) -> List[str]:
+        """
+        Adjusts weights based on discrepancies between predicted and actual severity.
         """
         updates = []
-        current_weights = adaptive_weights.get_weights()
-        severity_keywords = current_weights.get("severity_keywords", {})
 
-        # Logic: Find keywords in manually marked 'Critical' issues that are currently 'Medium' or 'Low'
-        # Since we don't have a clean "manual override" log, we look at issues with status='critical' (if we had that status)
-        # or verify if severity column exists in Issue model.
-        # Checking Issue model: it has 'upvotes', 'status', 'category'. It does NOT have 'severity' column.
-        # 'severity' is in 'Grievance' model!
-        # So we should look at Grievances linked to Issues.
+        # Filter for critical grievances
+        critical_grievances = [g for g in grievances if g.severity == SeverityLevel.CRITICAL]
 
-        # For now, we'll use a heuristic based on category spikes.
-        # If a category is spiking (dominant), we might want to temporarily boost its associated keywords.
+        if not critical_grievances:
+            return updates
 
-        dominant_categories = trend_report.get("category_stats", {}).get("dominant_categories", [])
-        categories_map = current_weights.get("categories", {})
+        # Get linked issues to analyze text
+        # Since we have issue_id on Grievance
+        issue_ids = [g.issue_id for g in critical_grievances if g.issue_id]
+        if not issue_ids:
+            return updates
 
-        changed = False
+        critical_issues = db.query(Issue).filter(Issue.id.in_(issue_ids)).all()
 
-        for cat in dominant_categories:
-            # If category is spiking, find its keywords
-            keywords = categories_map.get(cat, [])
-            # Check if these keywords are in 'medium' severity, move to 'high' temporarily?
-            # This might be too aggressive.
-            # Let's just log it for now.
-            updates.append(f"Detected spike in {cat}. Recommendation: Monitor severity weights for {keywords[:3]}")
+        # Analyze text for common keywords in these critical issues
+        # We can reuse TrendAnalyzer logic but specific to this subset
+        top_keywords = trend_analyzer._extract_top_keywords(critical_issues, top_n=10)
 
-        # Real adaptation: If "Pothole" is spiking, ensure "pothole" keyword is at least HIGH.
-        if "Pothole" in dominant_categories:
-            # Check if pothole is in high
-            if "pothole" not in severity_keywords.get("high", []) and "pothole" not in severity_keywords.get("critical", []):
-                # Move to high
-                if "pothole" in severity_keywords.get("medium", []):
-                    severity_keywords["medium"].remove("pothole")
-                if "pothole" in severity_keywords.get("low", []):
-                    severity_keywords["low"].remove("pothole")
+        # Check if any top keyword is NOT in current critical keywords
+        current_critical_keywords = set(adaptive_weights.severity_keywords.get("critical", []))
 
-                severity_keywords.setdefault("high", []).append("pothole")
-                updates.append("Upgraded 'pothole' to HIGH severity due to spike.")
-                changed = True
-
-        if changed:
-            current_weights["severity_keywords"] = severity_keywords
-            adaptive_weights.update_weights(current_weights)
+        for keyword, count in top_keywords:
+            if count >= 3 and keyword not in current_critical_keywords:
+                # Add to adaptive weights
+                logger.info(f"Auto-learning: Adding '{keyword}' to critical severity keywords due to frequency in critical reports.")
+                adaptive_weights.update_severity_keyword("critical", keyword, add=True)
+                updates.append(f"Added '{keyword}' to Critical keywords")
 
         return updates
 
-    def _refine_duplicate_detection(self, trend_report: Dict[str, Any]) -> List[str]:
-        """
-        Adjust duplicate detection threshold based on spatial density.
-        """
-        updates = []
-        spatial_stats = trend_report.get("spatial_stats", {})
-        avg_dist = spatial_stats.get("avg_neighbor_dist") or 0
-
-        current_radius = adaptive_weights.get_duplicate_search_radius()
-        new_radius = current_radius
-
-        # If issues are very close (high density) but distinct (avg dist < current radius/2),
-        # it might mean our radius is too small to catch them?
-        # No, if they are distinct and < radius, they WOULD have been caught if they were open.
-        # So maybe they were reported after the first was resolved?
-        # Or maybe the system failed to catch them.
-
-        # Heuristic:
-        # If avg neighbor distance is very small (< 20m), users are reporting the same thing. Increase radius to catch more.
-        if avg_dist > 0 and avg_dist < 20:
-            new_radius = min(current_radius + 5.0, 100.0) # Cap at 100m
-            updates.append(f"High spatial density (avg dist {avg_dist}m). Increased duplicate radius to {new_radius}m")
-
-        # If avg neighbor distance is large (> 100m), we can relax the radius to be more precise (reduce false positives)
-        elif avg_dist > 100:
-             new_radius = max(current_radius - 5.0, 20.0) # Min 20m
-             updates.append(f"Low spatial density (avg dist {avg_dist}m). Decreased duplicate radius to {new_radius}m")
-
-        if new_radius != current_radius:
-            current_weights = adaptive_weights.get_weights()
-            current_weights["duplicate_search_radius"] = new_radius
-            adaptive_weights.update_weights(current_weights)
-
-        return updates
-
-    def _calculate_index(self, db: Session, trend_report: Dict[str, Any]) -> float:
+    def _calculate_index(self, issues: List[Issue], grievances: List[Grievance]) -> float:
         """
         Calculates the Civic Intelligence Index (0-100).
+        High score = Good civic health (few critical issues, high resolution).
         """
-        # 1. Participation Score (Volume)
-        total_issues = trend_report.get("total_issues", 0)
-        participation_score = min(total_issues * 2, 40) # Cap at 40
+        base_score = 70.0 # Start higher
 
-        # 2. Resolution Efficiency (simulated as % of verified/resolved in last 24h)
-        # We need to query resolved counts
-        now = datetime.datetime.now(datetime.timezone.utc)
-        start_time = now - datetime.timedelta(hours=24)
+        if not issues and not grievances:
+            return base_score
 
-        # Count resolved or verified issues in the last 24h
-        resolved_count = db.query(Issue).filter(
-            ((Issue.status == "resolved") & (Issue.resolved_at >= start_time)) |
-            ((Issue.status == "verified") & (Issue.verified_at >= start_time))
-        ).count()
+        # Factor 1: Engagement (More issues is good? Or bad? Prompt says "Civic Intelligence Index"
+        # usually implies the SYSTEM's intelligence or CITY's performance.
+        # "Top Emerging Concern: Water Supply" implies monitoring.
+        # Let's assume High Index = Healthy System/City.
 
-        efficiency_score = 0
-        if total_issues > 0:
-            efficiency_score = (resolved_count / total_issues) * 40
-        else:
-             efficiency_score = 20 # Baseline if no issues
+        # High resolution rate -> +
+        resolved_count = sum(1 for g in grievances if g.status == GrievanceStatus.RESOLVED)
+        total_grievances = len(grievances)
+        resolution_rate = (resolved_count / total_grievances) if total_grievances > 0 else 0
+        resolution_score = resolution_rate * 30 # Max 30 points
 
-        efficiency_score = min(efficiency_score, 40)
+        # High severity -> -
+        severity_counts = {
+            SeverityLevel.LOW: 0,
+            SeverityLevel.MEDIUM: 0,
+            SeverityLevel.HIGH: 0,
+            SeverityLevel.CRITICAL: 0
+        }
+        for g in grievances:
+            if g.severity in severity_counts:
+                severity_counts[g.severity] += 1
 
-        # 3. Sentiment/Severity Balance
-        # Lower severity average is better? Or handling high severity is better?
-        # Let's add a constant base.
-        base_score = 20
+        # Weighted penalty
+        penalty = (severity_counts[SeverityLevel.CRITICAL] * 5) + \
+                  (severity_counts[SeverityLevel.HIGH] * 2) + \
+                  (severity_counts[SeverityLevel.MEDIUM] * 0.5)
 
-        index = base_score + participation_score + efficiency_score
-        return round(min(index, 100.0), 1)
+        # Normalize penalty (don't go below 0 for this part)
+        # Cap penalty at 40
+        severity_penalty = min(40, penalty)
+
+        final_score = base_score + resolution_score - severity_penalty
+        return max(0, min(100, final_score))
 
     def _save_snapshot(self, snapshot: Dict[str, Any]):
-        if not os.path.exists(self.snapshots_dir):
-            os.makedirs(self.snapshots_dir, exist_ok=True)
+        filename = f"{SNAPSHOT_DIR}/{snapshot['date']}.json"
 
-        filename = f"{snapshot['date']}.json"
-        filepath = os.path.join(self.snapshots_dir, filename)
+        # Ensure directory exists (redundant if setup correctly but safe)
+        if not os.path.exists(SNAPSHOT_DIR):
+            os.makedirs(SNAPSHOT_DIR, exist_ok=True)
 
         try:
-            with open(filepath, 'w') as f:
+            with open(filename, 'w') as f:
                 json.dump(snapshot, f, indent=4)
-        except IOError as e:
-            logger.error(f"Failed to save snapshot to {filepath}: {e}")
+        except Exception as e:
+            logger.error(f"Failed to save snapshot: {e}")
+
+    def _load_last_snapshot(self) -> Dict[str, Any]:
+        """Loads the most recent snapshot."""
+        if not os.path.exists(SNAPSHOT_DIR):
+            return {}
+
+        files = sorted([f for f in os.listdir(SNAPSHOT_DIR) if f.endswith(".json")])
+        if not files:
+            return {}
+
+        last_file = files[-1]
+        try:
+            with open(os.path.join(SNAPSHOT_DIR, last_file), 'r') as f:
+                return json.load(f)
+        except Exception:
+            return {}
+
+civic_intelligence_engine = CivicIntelligenceEngine()
