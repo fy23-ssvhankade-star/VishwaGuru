@@ -85,6 +85,8 @@ class Grievance(Base):
     updated_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), onupdate=lambda: datetime.datetime.now(datetime.timezone.utc))
     resolved_at = Column(DateTime, nullable=True)
     issue_id = Column(Integer, ForeignKey("issues.id"), nullable=True, index=True)
+    integrity_hash = Column(String, nullable=True)  # Blockchain integrity seal
+    previous_integrity_hash = Column(String, nullable=True, index=True) # Linked hash for O(1) verification
 
     # Relationships
     jurisdiction = relationship("Jurisdiction", back_populates="grievances")
