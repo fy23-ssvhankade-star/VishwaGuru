@@ -69,6 +69,6 @@
 ## 2026-03-05 - Transaction Consolidation with Blockchain Chaining
 **Learning:** Consolidating multiple database operations into a single transaction reduces disk I/O and latency. However, when using blockchain-style hash chaining with in-memory caches, global caches MUST NOT be updated until after a successful commit to prevent poisoning on rollbacks. Intermediate chaining during the transaction must be handled manually or via a separate local tracking mechanism.
 **Action:** Consolidate multiple `db.commit()` calls into one using `db.flush()` for intermediate IDs. Track generated hashes locally and update global `ThreadSafeCache` only after `db.commit()` succeeds.
-## 2024-05-18 - Replacing .count() with func.count()
-**Learning:** Using `db.query(Model).filter(...).count()` in SQLAlchemy involves unnecessary ORM overhead or subqueries compared to `db.query(func.count(Model.id)).filter(...).scalar() or 0`.
-**Action:** Replace `.count()` with `func.count(Model.id)` combined with `.scalar() or 0` to optimize database count queries. Ensure `func` is imported from `sqlalchemy`.
+## 2026-04-16 - Optimize count queries in civic intelligence
+**Learning:** Optimizing count queries in SQLAlchemy by replacing `.count()` with `func.count()` requires careful attention to imports, mocking strategies in unit tests, and the underlying data structure in tests. Utilizing `.scalar()` returns the value efficiently.
+**Action:** When replacing ORM queries, explicitly check that the required functions (like `func`) are imported. In unit tests, verify mock setups by testing `hasattr(model, 'name') and model.name == 'count'`.
