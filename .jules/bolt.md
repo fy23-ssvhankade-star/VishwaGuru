@@ -98,6 +98,6 @@
 **Learning:** Performing multiple sequential database queries to verify cryptographically chained records (e.g., fetching a record and then its associated token/metadata from another table) introduces unnecessary latency and increases database load.
 **Action:** Consolidate associated data retrieval into a single SQL `JOIN` query within the verification hot-path. This reduces database round-trips and improves end-to-end latency for blockchain-style integrity checks.
 
-## 2026-06-05 - Tokenization Optimization in TrendAnalyzer
-**Learning:** Using `re.findall(r'\b\w+\b', text)` for extracting words in high-volume text analysis like `TrendAnalyzer._extract_keywords` is significantly slower than stripping non-alphanumeric characters with a pre-compiled regex substitution (`re.sub`) and splitting by whitespace.
-**Action:** Replace `re.findall` with a pre-compiled `_tokenizer_re = re.compile(r'[^a-z0-9\s]')` and `self._tokenizer_re.sub('', text).split()`. Compile regex in class initialization to avoid repeated compilation overhead.
+## 2026-05-21 - RAG Retrieval Loop Optimization
+**Learning:** In retrieval-augmented generation (RAG) loops, performing redundant tokenization or duplicate `isdisjoint` checks adds significant overhead that scales linearly with the policy database size. Even small redundant operations can become bottlenecks in high-traffic civic portals.
+**Action:** Always audit retrieval hot-paths for redundant calculations and use idiomatic Python set operators (like `&` for intersection) to minimize attribute lookup overhead and improve execution speed in tight loops.

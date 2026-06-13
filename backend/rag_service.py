@@ -94,6 +94,7 @@ class CivicRAG:
 
             # Jaccard Similarity
             # Optimization 2: Calculate intersection
+            # Use & operator for faster set intersection
             intersection_len = len(query_tokens & policy_tokens)
 
             # Optimization 3: Calculate union length mathematically (O(1))
