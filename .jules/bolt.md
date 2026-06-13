@@ -97,10 +97,7 @@
 ## 2026-05-20 - Joined Queries for Integrity Verification
 **Learning:** Performing multiple sequential database queries to verify cryptographically chained records (e.g., fetching a record and then its associated token/metadata from another table) introduces unnecessary latency and increases database load.
 **Action:** Consolidate associated data retrieval into a single SQL `JOIN` query within the verification hot-path. This reduces database round-trips and improves end-to-end latency for blockchain-style integrity checks.
-## 2025-06-25 - Keyword Extraction Pre-compiled Regex
-**Learning:** In `backend/trend_analyzer.py`, executing the default inline `re.findall(r'\b\w+\b', ...)` regex pattern to tokenize and extract keywords during array iteration causes significant regex recompilation and string creation overhead for large issue lists.
-**Action:** Always pre-compile standard regex patterns (`self._keyword_pattern = re.compile(r'\w+')`) in the `__init__` constructor. Batch string segments using a single `.join()` operation before tokenizing, which drastically speeds up the tokenization of large civic descriptions while maintaining valid boundaries and Unicode support.
 
-## 2026-06-25 - Netlify Deployment Node Version Mismatch
-**Learning:** Netlify defaults to older Node.js versions which fail to parse `lockfileVersion: 3` (npm v9+) during deployments, causing `Deploy failed` errors across check suites like Pages changed, Header rules, and Redirect rules.
-**Action:** Always ensure `NODE_VERSION = "20"` (or appropriate modern version) is explicitly set in the `[build.environment]` section of `netlify.toml` for repositories using modern frontend tooling like Vite.
+## 2026-05-21 - Optimized Tokenization in Trend Analysis
+**Learning:** In text analysis hot paths like `TrendAnalyzer`, pre-compiling a Unicode-aware regex like `re.compile(r'\w+')` and using it with `findall` is significantly faster than using `re.findall(r'\b\w+\b')` with its redundant boundary checks. Furthermore, batching string segments with `"".join()` before calling `.lower()` is more efficient than lowering segments individually. Replacing `findall` with `re.sub().split()` should be avoided as it strips Unicode characters and merges words separated by punctuation (e.g., "high-priority" becomes "highpriority").
+**Action:** Use pre-compiled Unicode-aware regexes and batch string transformations (like `.lower()`) in text analysis loops to maximize throughput without sacrificing accuracy or internationalization support.
