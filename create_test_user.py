@@ -14,7 +14,7 @@ def create_test_user():
             print('❌ User already exists!')
             print('Email: test@example.com')
             return
-        
+
         # Create new user
         user = User(
             email='test@example.com',
@@ -25,12 +25,12 @@ def create_test_user():
         )
         db.add(user)
         db.commit()
-        
+
         print('✅ Test user created successfully!')
         print('Email: test@example.com')
         print('Password: password123')
         print('Role: USER')
-        
+
     except Exception as e:
         print(f'❌ Error: {e}')
         db.rollback()

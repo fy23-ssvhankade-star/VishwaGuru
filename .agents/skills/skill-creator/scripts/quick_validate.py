@@ -62,7 +62,7 @@ def validate_skill(skill_path):
     name = name.strip()
     if not name:
         return False, "Name cannot be empty or whitespace"
-    
+
     # Check naming convention (kebab-case: lowercase with hyphens)
     if not re.match(r'^[a-z0-9-]+$', name):
         return False, f"Name '{name}' should be kebab-case (lowercase letters, digits, and hyphens only)"
@@ -79,7 +79,7 @@ def validate_skill(skill_path):
     description = description.strip()
     if not description:
         return False, "Description cannot be empty or whitespace"
-    
+
     # Check for angle brackets
     if '<' in description or '>' in description:
         return False, "Description cannot contain angle brackets (< or >)"
@@ -101,7 +101,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Usage: python quick_validate.py <skill_directory>")
         sys.exit(1)
-    
+
     valid, message = validate_skill(sys.argv[1])
     print(message)
     sys.exit(0 if valid else 1)

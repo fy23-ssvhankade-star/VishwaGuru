@@ -203,30 +203,30 @@ def init_skill(skill_name, path):
         Path to created skill directory, or None if error
     """
     import re
-    
+
     # Validate skill_name before using it in path operations
     if not skill_name or not isinstance(skill_name, str):
         print("❌ Error: Skill name must be a non-empty string")
         return None
-    
+
     skill_name = skill_name.strip()
-    
+
     if not skill_name:
         print("❌ Error: Skill name cannot be empty or whitespace")
         return None
-    
+
     if len(skill_name) > 64:
         print(f"❌ Error: Skill name too long ({len(skill_name)} chars). Maximum is 64.")
         return None
-    
+
     if not re.match(r'^[a-z0-9]+(-[a-z0-9]+)*$', skill_name):
         print(f"❌ Error: Skill name '{skill_name}' must be kebab-case")
         print("   (lowercase letters, digits, hyphens; no leading/trailing/consecutive hyphens)")
         return None
-    
+
     # Determine skill directory path
     skill_dir = Path(path).resolve() / skill_name
-    
+
     # Ensure skill_dir is a subpath of the intended base path (prevent path traversal)
     base_path = Path(path).resolve()
     try:

@@ -18,7 +18,7 @@ from backend.schemas import (
     IssueCreateWithDeduplicationResponse, IssueCategory, NearbyIssueResponse,
     DeduplicationCheckResponse, IssueSummaryResponse, VoteResponse,
     IssueStatusUpdateRequest, IssueStatusUpdateResponse, PushSubscriptionRequest,
-    PushSubscriptionResponse, BlockchainVerificationResponse
+    PushSubscriptionResponse, BlockchainVerificationResponse, IssueResponse
 )
 from backend.utils import (
     check_upload_limits, validate_uploaded_file, save_file_blocking, save_issue_db,
@@ -178,12 +178,8 @@ async def create_issue(
             # Optimization: Use memory cache for last hash to eliminate DB lookup
             prev_hash = blockchain_last_hash_cache.get("last_integrity_hash")
 
-            # Performance Boost: Store previous hash directly to enable O(1) verification later
-            # Chaining logic: hash(description|category|lat|lon|prev_hash)
-            # Use fixed float formatting (:.7f) for coordinates to ensure hashing consistency
-            lat_str = f"{latitude:.7f}" if latitude is not None else "None"
-            lon_str = f"{longitude:.7f}" if longitude is not None else "None"
-            hash_content = f"{description}|{category}|{lat_str}|{lon_str}|{prev_hash}"
+            # Simple but effective SHA-256 chaining
+            hash_content = f"{description}|{category}|{prev_hash}"
             integrity_hash = hashlib.sha256(hash_content.encode()).hexdigest()
 
             # RAG Retrieval (New)
@@ -631,16 +627,14 @@ def get_user_issues(
 async def verify_blockchain_integrity(issue_id: int, db: Session = Depends(get_db)):
     """
     Verify the cryptographic integrity of a report using the blockchain-style chaining.
-    Optimized: Uses O(1) retrieval of previous hash from the current record itself.
+    Optimized: Uses column projection to fetch only needed data and uses explicit previous hash link.
     """
-    # Performance Boost: Fetch all data needed for verification in a single query (O(1))
+    # Fetch current issue data including previous_integrity_hash
     current_issue = await run_in_threadpool(
         lambda: db.query(
             Issue.id,
             Issue.description,
             Issue.category,
-            Issue.latitude,
-            Issue.longitude,
             Issue.integrity_hash,
             Issue.previous_integrity_hash
         ).filter(Issue.id == issue_id).first()
@@ -649,14 +643,13 @@ async def verify_blockchain_integrity(issue_id: int, db: Session = Depends(get_d
     if not current_issue:
         raise HTTPException(status_code=404, detail="Issue not found")
 
-    # Use the stored previous hash instead of performing another database lookup
-    prev_hash = current_issue.previous_integrity_hash or ""
+    # Use the explicitly stored previous hash
+    # This guarantees the chain integrity based on what was linked at creation time
+    prev_hash = current_issue.previous_integrity_hash if current_issue.previous_integrity_hash else ""
 
-    # Recompute hash using the same format as creation
-    # Chaining logic: hash(description|category|lat|lon|prev_hash)
-    lat_str = f"{current_issue.latitude:.7f}" if current_issue.latitude is not None else "None"
-    lon_str = f"{current_issue.longitude:.7f}" if current_issue.longitude is not None else "None"
-    hash_content = f"{current_issue.description}|{current_issue.category}|{lat_str}|{lon_str}|{prev_hash}"
+    # Recompute hash based on current data and previous hash
+    # Chaining logic: hash(description|category|prev_hash)
+    hash_content = f"{current_issue.description}|{current_issue.category}|{prev_hash}"
     computed_hash = hashlib.sha256(hash_content.encode()).hexdigest()
 
     is_valid = (computed_hash == current_issue.integrity_hash)
@@ -727,8 +720,17 @@ def get_recent_issues(
             "longitude": row.longitude
         })
 
-    # Performance Boost: Cache serialized JSON to bypass redundant Pydantic validation
-    # and serialization on cache hits. Returning Response directly is ~2-3x faster.
-    json_data = json.dumps(data)
-    recent_issues_cache.set(json_data, cache_key)
-    return Response(content=json_data, media_type="application/json")
+    # Thread-safe cache update
+    recent_issues_cache.set(data, cache_key)
+    return data
+
+
+@router.get("/api/issues/{issue_id}", response_model=IssueResponse)
+def get_issue(issue_id: int, db: Session = Depends(get_db)):
+    """
+    Get detailed information about a specific issue.
+    """
+    issue = db.query(Issue).filter(Issue.id == issue_id).first()
+    if not issue:
+        raise HTTPException(status_code=404, detail="Issue not found")
+    return issue

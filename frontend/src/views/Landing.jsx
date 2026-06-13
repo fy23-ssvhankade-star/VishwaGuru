@@ -47,13 +47,143 @@ const Landing = () => {
                 <div className="absolute top-0 right-0 -mr-20 -mt-20 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl animate-pulse"></div>
                 <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-96 h-96 bg-purple-400/10 rounded-full blur-3xl animate-pulse"></div>
 
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 items-center">
-                        <motion.div
-                            initial={{ opacity: 0, x: -50 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ duration: 0.6 }}
-                            className="lg:col-span-12 xl:col-span-6 space-y-10"
+            {/* Top Right - Purple/Pink Gradient with Animation */}
+            <motion.div
+                animate={{
+                    scale: [1, 1.15, 1],
+                    opacity: [0.5, 0.55, 0.5]
+                }}
+                transition={{ duration: 10, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+                className="absolute top-[-15%] right-[-20%] w-[65%] h-[85%] rounded-full bg-gradient-to-bl from-purple-500/50 via-pink-500/40 to-rose-400/30 blur-[100px] -z-10 will-change-transform"
+            />
+
+            {/* Bottom Left - Orange Gradient with Animation */}
+            <motion.div
+                animate={{
+                    scale: [1, 1.12, 1],
+                    opacity: [0.45, 0.5, 0.45]
+                }}
+                transition={{ duration: 9, repeat: Infinity, ease: "easeInOut", delay: 2 }}
+                className="absolute bottom-[-15%] left-[-15%] w-[60%] h-[70%] rounded-full bg-gradient-to-tr from-orange-500/45 via-amber-400/35 to-yellow-300/25 blur-[90px] -z-10 will-change-transform"
+            />
+
+            {/* Bottom Right - Indigo/Violet Gradient with Animation */}
+            <motion.div
+                animate={{
+                    scale: [1, 1.08, 1],
+                    opacity: [0.45, 0.52, 0.45]
+                }}
+                transition={{ duration: 11, repeat: Infinity, ease: "easeInOut", delay: 3 }}
+                className="absolute bottom-[-20%] right-[-15%] w-[55%] h-[75%] rounded-full bg-gradient-to-tl from-indigo-500/45 via-violet-500/35 to-purple-400/25 blur-[95px] -z-10 will-change-transform"
+            />
+
+
+
+
+            {/* Header - Fixed and Stable */}
+            <header
+                className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-md sticky top-0 z-50 border-b border-gray-100 dark:border-gray-800 shadow-sm transition-colors duration-300"
+            >
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="flex items-center justify-between h-20">
+                        {/* Logo */}
+                        <div className="flex items-center gap-3 cursor-pointer group" onClick={() => navigate('/')}>
+                            {/* Programmatic Logo - Magnifying Glass with Growth Chart */}
+                            <div className="w-10 h-10 relative flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                                <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-sm" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    {/* Glass Circle - Perfectly Centered */}
+                                    <circle cx="50" cy="50" r="38" stroke="#2D60FF" strokeWidth="8" fill="white" className="dark:fill-gray-800" />
+
+                                    {/* Handle */}
+                                    <path d="M77 77L92 92" stroke="#2D60FF" strokeWidth="10" strokeLinecap="round" />
+
+                                    {/* Centered Bar Chart - Scaled to fit safely inside */}
+                                    <path d="M32 62V52" stroke="#60A5FA" strokeWidth="6" strokeLinecap="round" />
+                                    <path d="M44 62V42" stroke="#2D60FF" strokeWidth="6" strokeLinecap="round" />
+                                    <path d="M56 62V33" stroke="#4ADE80" strokeWidth="6" strokeLinecap="round" />
+                                    <path d="M68 62V48" stroke="#60A5FA" strokeWidth="6" strokeLinecap="round" />
+
+                                    {/* Growth Arrow - Fully contained */}
+                                    <path d="M28 58L42 45L52 50L70 28" stroke="#16A34A" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+                                    <path d="M70 28H58M70 28V40" stroke="#16A34A" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                            </div>
+                            <h1 className="text-xl font-bold text-gray-800 dark:text-gray-100 tracking-tight transition-colors duration-200">
+                                FixMyIndia / <span className="text-blue-600 dark:text-blue-400">VishwaGuru</span>
+                            </h1>
+                        </div>
+
+                        <div className="flex items-center gap-4">
+                            <LanguageSelector />
+                            {/* Dark Mode Toggle */}
+                            <button
+                                onClick={toggleDarkMode}
+                                className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-200"
+                                title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+                            >
+                                {isDarkMode ? (
+                                    <Sun size={20} className="text-yellow-400" />
+                                ) : (
+                                    <Moon size={20} className="text-gray-700" />
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            {/* Main Content */}
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-16">
+                {/* Hero Section */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 mb-24 items-center">
+                    {/* Left Content (5 cols) */}
+                    <motion.div
+                        variants={slideInLeft}
+                        initial="hidden"
+                        animate="visible"
+                        className="lg:col-span-10 xl:col-span-5 space-y-8"
+                    >
+                        <div className="space-y-6">
+                            <motion.h1
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.3, delay: 0.1 }}
+                                className="text-4xl md:text-5xl lg:text-6xl font-black text-gray-900 dark:text-white leading-[1.1] tracking-tight transition-colors duration-300"
+                            >
+                                <motion.span
+                                    initial={{ opacity: 0, x: -20 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ duration: 0.3, delay: 0.2 }}
+                                    className="inline-block"
+                                >
+                                    {t('home.landing.empowering')}
+                                </motion.span>
+                                <br />
+                                <motion.span
+                                    initial={{ opacity: 0, x: -20 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ duration: 0.3, delay: 0.3 }}
+                                    className="text-gray-400 dark:text-gray-500 font-bold inline-block transition-colors duration-300"
+                                >
+                                    {t('home.landing.governance')}
+                                </motion.span>
+                            </motion.h1>
+                            <motion.p
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.3, delay: 0.4 }}
+                                className="text-lg text-gray-600 dark:text-gray-300 leading-relaxed max-w-lg transition-colors duration-300"
+                            >
+                                {t('home.landing.subtitle')}
+                            </motion.p>
+                        </div>
+
+                        <motion.button
+                            whileHover={{ scale: 1.05, translateY: -3 }}
+                            whileTap={{ scale: 0.95 }}
+                            transition={{ duration: 0.15 }}
+                            onClick={() => navigate('/login')}
+                            className="bg-[#2D60FF] hover:bg-blue-700 text-white px-8 py-4 rounded-xl font-bold text-lg shadow-[0_10px_20px_-5px_rgba(37,99,235,0.3)] hover:shadow-[0_15px_30px_-5px_rgba(37,99,235,0.5)] transition-all duration-150 flex items-center gap-2 group"
                         >
                             <div className="space-y-6">
                                 <motion.div

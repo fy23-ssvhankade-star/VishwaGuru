@@ -54,7 +54,23 @@ const CameraCheckModal = ({ onClose }) => {
 const Home = ({ setView, fetchResponsibilityMap, recentIssues, handleUpvote, loadMoreIssues, hasMore, loadingMore, stats }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [showCameraCheck, setShowCameraCheck] = React.useState(false);
+  const [showScrollTop, setShowScrollTop] = React.useState(false);
   const totalImpact = stats?.resolved_issues || 0;
+
+  // Scroll to top function
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Show/hide scroll to top button based on scroll position
+  React.useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 100);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const categories = [
     {
@@ -101,7 +117,7 @@ const Home = ({ setView, fetchResponsibilityMap, recentIssues, handleUpvote, loa
 
   return (
     <>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12 pb-24 relative z-10">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 pb-12 relative z-10">
 
         {/* Privacy Shield - High End Style */}
         <div className="flex justify-end pt-4">
@@ -424,6 +440,25 @@ const Home = ({ setView, fetchResponsibilityMap, recentIssues, handleUpvote, loa
           </div>
         </div>
       </div>
+
+      {/* Scroll to Top Button - Appears on scroll */}
+      <AnimatePresence>
+        {showScrollTop && (
+          <motion.button
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            transition={{ duration: 0.2 }}
+            onClick={scrollToTop}
+            className="fixed right-8 bottom-8 bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-lg hover:shadow-2xl z-[9999] cursor-pointer"
+            aria-label="Scroll to top"
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+          >
+            <ChevronUp size={24} strokeWidth={2.5} />
+          </motion.button>
+        )}
+      </AnimatePresence>
     </>
   );
 };
