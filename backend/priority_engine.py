@@ -12,10 +12,11 @@ class PriorityEngine:
     """
 
     def __init__(self):
-        # Cache for pre-compiled regex patterns to improve performance
-        self._regex_cache = []
-        self._severity_keywords_cache = {}
-        self._category_keywords_cache = {}
+        # Cache for pre-compiled regex patterns and weights to improve performance
+        self._urgency_regex_cache = []
+        self._severity_keywords = {}
+        self._category_keywords = {}
+        self._category_multipliers = {}
         self._last_reload_count = -1
         # Local cache for weights to avoid redundant calls to adaptive_weights.get_*
         # which each trigger a throttled mtime check.
@@ -24,55 +25,27 @@ class PriorityEngine:
         self._cached_category_multipliers = {}
 
     def _ensure_weights_cache(self):
-        """
-        Consolidates weight reloads into a single operation.
-        Reduces system call overhead by ensuring all weights are synced at once.
-        """
+        """Ensures all weights and regex caches are up-to-date with current adaptive weights."""
         current_reload_count = adaptive_weights.reload_count
         if self._last_reload_count != current_reload_count:
-            self._cached_severity_keywords = adaptive_weights.get_severity_keywords()
-            self._cached_category_keywords = adaptive_weights.get_category_keywords()
-            self._cached_category_multipliers = adaptive_weights.get_category_multipliers()
+            # Optimization: Fetch all weights once to reduce redundant system calls and property processing
+            self._severity_keywords = adaptive_weights.get_severity_keywords()
+            self._category_keywords = adaptive_weights.get_category_keywords()
+            self._category_multipliers = adaptive_weights.get_category_multipliers()
 
-            # Re-compile regex cache
+            # Urgency patterns cache
             urgency_patterns = adaptive_weights.get_urgency_patterns()
-            self._regex_cache = []
+            self._urgency_regex_cache = []
             for pattern, weight in urgency_patterns:
                 keywords = []
                 if re.fullmatch(r'\\b\([a-zA-Z0-9\s|]+\)\\b', pattern):
                     clean_pattern = pattern.replace('\\b', '').replace('(', '').replace(')', '')
                     keywords = [k.strip() for k in clean_pattern.split('|') if k.strip()]
-                self._regex_cache.append((re.compile(pattern), weight, pattern, keywords))
+                self._urgency_regex_cache.append((re.compile(pattern), weight, pattern, keywords))
 
             self._last_reload_count = current_reload_count
 
-    def _ensure_weights_cache(self):
-        current_reload_count = adaptive_weights.reload_count
-        if self._last_reload_count != current_reload_count:
-            self._severity_keywords_cache = adaptive_weights.get_severity_keywords()
-            self._category_keywords_cache = adaptive_weights.get_category_keywords()
-
-            urgency_patterns = adaptive_weights.get_urgency_patterns()
-            self._regex_cache = []
-            for pattern, weight in urgency_patterns:
-                # Pre-extract literal keywords for fast substring pre-filtering
-                keywords = []
-                if re.fullmatch(r"\\b\([a-zA-Z0-9\s|]+\)\\b", pattern):
-                    clean_pattern = (
-                        pattern.replace("\\b", "").replace("(", "").replace(")", "")
-                    )
-                    keywords = [
-                        k.strip() for k in clean_pattern.split("|") if k.strip()
-                    ]
-                self._regex_cache.append(
-                    (re.compile(pattern), weight, pattern, keywords)
-                )
-
-            self._last_reload_count = current_reload_count
-
-    def analyze(
-        self, text: str, image_labels: Optional[List[str]] = None
-    ) -> Dict[str, Any]:
+    def analyze(self, text: str, image_labels: Optional[List[str]] = None) -> Dict[str, Any]:
         """
         Analyzes the issue text and optional image labels to determine priority.
         Optimized: Centralized weight sync and early-exit loops for ~35% speedup.
@@ -85,7 +58,10 @@ class PriorityEngine:
         # Merge image labels into text for analysis if provided
         combined_text = text
         if image_labels:
-            combined_text += " " + " ".join([l.lower() for l in image_labels])
+            combined_text = f"{text} {' '.join(l.lower() for l in image_labels)}"
+
+        # Synchronize weights from adaptive config
+        self._ensure_weights_cache()
 
         severity_score, severity_label, severity_reasons = self._calculate_severity(
             combined_text
@@ -98,7 +74,7 @@ class PriorityEngine:
         # Apply Adaptive Category Weights
         max_multiplier = 1.0
         for cat in categories:
-            mult = self._cached_category_multipliers.get(cat, 1.0)
+            mult = self._category_multipliers.get(cat, 1.0)
             if mult > max_multiplier:
                 max_multiplier = mult
 
@@ -122,7 +98,6 @@ class PriorityEngine:
             elif severity_score >= 40:
                 severity_label = "Medium"
             else:
-                # If score boosted from Low to something else, update label
                 if severity_score < 40:
                     severity_label = "Low"
 
@@ -140,64 +115,27 @@ class PriorityEngine:
         }
 
     def _calculate_severity(self, text: str):
-        self._ensure_weights_cache()
-        score = 0
-        reasons = []
-        label = "Low"
+        # Proceed with priority-ordered checks using cached keywords
+        # Check Critical
+        keywords = self._severity_keywords.get("critical", [])
+        found = [k for k in keywords if k in text]
+        if found:
+            return 90, "Critical", [f"Flagged as Critical due to keywords: {', '.join(found[:3])}"]
 
-        severity_keywords = self._severity_keywords_cache
+        # Check High
+        keywords = self._severity_keywords.get("high", [])
+        found = [k for k in keywords if k in text]
+        if found:
+            return 70, "High", [f"Flagged as High Severity due to keywords: {', '.join(found[:3])}"]
 
-        # Check for critical keywords (highest priority)
-        found_critical = []
-        for word in severity_keywords.get("critical", []):
-            if word in text:
-                found_critical.append(word)
-                if len(found_critical) >= 3:
-                    break
-        if found_critical:
-            score = 90
-            label = "Critical"
-            reasons.append(
-                f"Flagged as Critical due to keywords: {', '.join(found_critical)}"
-            )
+        # Check Medium
+        keywords = self._severity_keywords.get("medium", [])
+        found = [k for k in keywords if k in text]
+        if found:
+            return 40, "Medium", [f"Flagged as Medium Severity due to keywords: {', '.join(found[:3])}"]
 
-        # Check for high keywords
-        if score < 70:
-            found_high = []
-            for word in severity_keywords.get("high", []):
-                if word in text:
-                    found_high.append(word)
-                    if len(found_high) >= 3:
-                        break
-            if found_high:
-                score = max(score, 70)
-                label = "High" if score == 70 else label
-                reasons.append(
-                    f"Flagged as High Severity due to keywords: {', '.join(found_high)}"
-                )
-
-        # Check for medium keywords
-        if score < 40:
-            found_medium = []
-            for word in severity_keywords.get("medium", []):
-                if word in text:
-                    found_medium.append(word)
-                    if len(found_medium) >= 3:
-                        break
-            if found_medium:
-                score = max(score, 40)
-                label = "Medium" if score == 40 else label
-                reasons.append(
-                    f"Flagged as Medium Severity due to keywords: {', '.join(found_medium)}"
-                )
-
-        # Default to low
-        if score == 0:
-            score = 10
-            label = "Low"
-            reasons.append("Classified as Low Severity (maintenance/cosmetic issue)")
-
-        return score, label, reasons
+        # Default fallback
+        return 10, "Low", ["Classified as Low Severity (maintenance/cosmetic issue)"]
 
     def _calculate_urgency(self, text: str, severity_score: int):
         self._ensure_weights_cache()
@@ -206,9 +144,7 @@ class PriorityEngine:
         reasons = []
 
         # Apply regex modifiers using compiled patterns
-        for regex, weight, original_pattern, keywords in self._regex_cache:
-            # Substring pre-filter: skip expensive regex search if no keywords match.
-            # If keywords is empty (meaning the pattern was complex), fallback to regex.search directly.
+        for regex, weight, original_pattern, keywords in self._urgency_regex_cache:
             if not keywords:
                 if regex.search(text):
                     urgency += weight
@@ -216,8 +152,7 @@ class PriorityEngine:
                         f"Urgency increased by context matching pattern: '{original_pattern}'"
                     )
             else:
-                # Optimized: Using a simple for loop instead of a generator expression `any(k in text for k in keywords)`
-                # which significantly reduces function call overhead in hot paths.
+                # Optimized: Substring pre-filter avoids expensive regex search for most inputs
                 for k in keywords:
                     if k in text:
                         if regex.search(text):
@@ -229,15 +164,11 @@ class PriorityEngine:
 
         # Cap at 100
         urgency = min(100, urgency)
-
         return urgency, reasons
 
     def _detect_categories(self, text: str) -> List[str]:
-        self._ensure_weights_cache()
-        categories_map = self._category_keywords_cache
-
         scored_categories = []
-        for category, keywords in self._cached_category_keywords.items():
+        for category, keywords in self._category_keywords.items():
             count = 0
             for k in keywords:
                 if k in text:
