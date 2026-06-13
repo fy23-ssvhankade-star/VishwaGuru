@@ -97,7 +97,6 @@
 ## 2026-05-20 - Joined Queries for Integrity Verification
 **Learning:** Performing multiple sequential database queries to verify cryptographically chained records (e.g., fetching a record and then its associated token/metadata from another table) introduces unnecessary latency and increases database load.
 **Action:** Consolidate associated data retrieval into a single SQL `JOIN` query within the verification hot-path. This reduces database round-trips and improves end-to-end latency for blockchain-style integrity checks.
-
-## 2026-05-21 - RAG Retrieval Loop Optimization
-**Learning:** In retrieval-augmented generation (RAG) loops, performing redundant tokenization or duplicate `isdisjoint` checks adds significant overhead that scales linearly with the policy database size. Even small redundant operations can become bottlenecks in high-traffic civic portals.
-**Action:** Always audit retrieval hot-paths for redundant calculations and use idiomatic Python set operators (like `&` for intersection) to minimize attribute lookup overhead and improve execution speed in tight loops.
+## 2026-06-21 - Consolidating DB queries
+**Learning:** Consolidating multiple database aggregate queries into a single query using SQLAlchemy `func.sum(case(...))` for categorical counts alongside other aggregates (like `avg` and `count(distinct)`) measurably improves performance by reducing database round-trips and redundant table scans.
+**Action:** Use a single `func.sum(case(...))` query instead of `group_by` and multiple python loops when aggregating multiple categorical constraints simultaneously.
