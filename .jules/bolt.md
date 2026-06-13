@@ -98,6 +98,6 @@
 **Learning:** Performing multiple sequential database queries to verify cryptographically chained records (e.g., fetching a record and then its associated token/metadata from another table) introduces unnecessary latency and increases database load.
 **Action:** Consolidate associated data retrieval into a single SQL `JOIN` query within the verification hot-path. This reduces database round-trips and improves end-to-end latency for blockchain-style integrity checks.
 
-## 2026-05-26 - Async File I/O in Field Officer Uploads
-**Learning:** Saving visit images synchronously in the fastapi async endpoint blocks the main event loop, significantly increasing tail latency.
-**Action:** Wrap blocking synchronous File I/O operations like `f.write()` in `run_in_threadpool` to offload them to a separate thread, keeping the event loop responsive for other requests.
+## 2025-05-22 - Consolidated Aggregate Queries
+**Learning:** Executing multiple separate aggregate queries (e.g., `count(distinct)`, `avg`, and `group_by` counts) for the same entity causes multiple database round-trips and redundant table scans.
+**Action:** Consolidate multiple aggregates into a single SQLAlchemy query using `func.sum(case(...))` for categorical counts alongside other aggregates. This reduces network overhead and database load significantly in high-traffic statistics endpoints.

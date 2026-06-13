@@ -89,6 +89,7 @@ class CivicRAG:
             policy_tokens = prepared['content_tokens']
 
             # Optimization 1: Fast early-exit for zero overlap
+            # isdisjoint() is O(K) where K is min(len(query), len(policy))
             if query_tokens.isdisjoint(policy_tokens):
                 continue
 
