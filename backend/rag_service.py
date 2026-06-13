@@ -82,7 +82,6 @@ class CivicRAG:
         if not len_query:
             return None
 
-        query_len = len(query_tokens)
         best_score = 0.0
         best_formatted = None
 
@@ -95,6 +94,7 @@ class CivicRAG:
 
             # Jaccard Similarity
             # Optimization 2: Calculate intersection
+            # Use bitwise & for set intersection (idiomatic and slightly faster)
             intersection_len = len(query_tokens & policy_tokens)
 
             # Optimization 3: Calculate union length mathematically (O(1))
