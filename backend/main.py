@@ -25,10 +25,9 @@ from backend.ai_factory import create_all_ai_services
 from backend.ai_interfaces import initialize_ai_services
 from backend.bot import start_bot_thread, stop_bot_thread
 from backend.init_db import migrate_db
-from backend.scheduler import start_scheduler
 from backend.maharashtra_locator import load_maharashtra_pincode_data, load_maharashtra_mla_data
 from backend.exceptions import EXCEPTION_HANDLERS
-from backend.routers import issues, detection, grievances, utility, auth, admin, analysis, voice, field_officer
+from backend.routers import issues, detection, grievances, utility, auth, admin, analysis
 from backend.grievance_service import GrievanceService
 import backend.dependencies
 
@@ -59,9 +58,8 @@ async def background_initialization(app: FastAPI):
         logger.info("Maharashtra data pre-loaded successfully.")
 
         # 3. Start Telegram Bot in separate thread
-        # Temporarily disabled for local testing
-        # await run_in_threadpool(start_bot_thread)
-        logger.info("Telegram bot initialization skipped for local testing.")
+        await run_in_threadpool(start_bot_thread)
+        logger.info("Telegram bot started in separate thread.")
     except Exception as e:
         logger.error(f"Error during background initialization: {e}", exc_info=True)
 
@@ -75,18 +73,15 @@ async def lifespan(app: FastAPI):
 
     # Startup: Database setup (Blocking but necessary for app consistency)
     try:
-        logger.info("Starting database initialization...")
         await run_in_threadpool(Base.metadata.create_all, bind=engine)
-        logger.info("Base.metadata.create_all completed.")
         await run_in_threadpool(migrate_db)
-        logger.info("migrate_db completed. Database initialized successfully.")
+        logger.info("Database initialized successfully.")
     except Exception as e:
         logger.error(f"Database initialization failed: {e}", exc_info=True)
         # We continue to allow health checks even if DB has issues (for debugging)
 
     # Startup: Initialize Grievance Service (needed for escalation engine)
     try:
-        logger.info("Initializing grievance service...")
         grievance_service = GrievanceService()
         app.state.grievance_service = grievance_service
         logger.info("Grievance service initialized successfully.")
@@ -96,9 +91,6 @@ async def lifespan(app: FastAPI):
     # Launch background tasks that are non-blocking for startup/health-check
     asyncio.create_task(background_initialization(app))
     
-    # Start the daily civic intelligence refinement scheduler
-    start_scheduler()
-
     yield
     
     # Shutdown: Close Shared HTTP Client
@@ -149,16 +141,11 @@ if not is_production:
     dev_origins = [
         "http://localhost:3000",
         "http://localhost:5173",
-        "http://localhost:5174",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:5173",
-        "http://127.0.0.1:5174",
         "http://localhost:8080",
     ]
     allowed_origins.extend(dev_origins)
-    # Also add the one from .env if it's different
-    if frontend_url not in allowed_origins:
-        allowed_origins.append(frontend_url)
 
 app.add_middleware(
     CORSMiddleware,
@@ -178,8 +165,6 @@ app.include_router(utility.router, tags=["Utility"])
 app.include_router(auth.router, tags=["Authentication"])
 app.include_router(admin.router)
 app.include_router(analysis.router, tags=["Analysis"])
-app.include_router(voice.router, tags=["Voice & Language"])
-app.include_router(field_officer.router, tags=["Field Officer Check-In"])
 
 @app.get("/health")
 def health():

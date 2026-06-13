@@ -8,14 +8,13 @@ import os
 import shutil
 import logging
 import io
-import secrets
-import string
 from typing import Optional
 
 from backend.cache import user_upload_cache
 from backend.models import Issue
 from backend.schemas import DetectionResponse
 from backend.pothole_detection import validate_image_for_processing
+from passlib.context import CryptContext
 
 # Handle python-magic gracefully
 HAS_MAGIC = False
@@ -297,31 +296,10 @@ def save_issue_db(db: Session, issue: Issue):
 
 # --- Password Hashing Utils ---
 
-import bcrypt as _bcrypt
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return _bcrypt.checkpw(
-        plain_password.encode("utf-8"),
-        hashed_password.encode("utf-8")
-    )
+    return pwd_context.verify(plain_password, hashed_password)
 
 def get_password_hash(password: str) -> str:
-    return _bcrypt.hashpw(
-        password.encode("utf-8"),
-        _bcrypt.gensalt()
-    ).decode("utf-8")
-
-
-
-def generate_reference_id() -> str:
-    """
-    Generate a unique reference ID for voice submissions.
-    Format: VOICE-YYYYMMDD-HHMMSS-XXXX (random suffix)
-    """
-    import random
-    import string
-    from datetime import datetime
-    
-    timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
-    random_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
-    return f"VOICE-{timestamp}-{random_suffix}"
+    return pwd_context.hash(password)

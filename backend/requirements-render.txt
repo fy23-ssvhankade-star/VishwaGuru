@@ -5,6 +5,7 @@ python-telegram-bot
 google-generativeai
 python-multipart
 psycopg2-binary
+async-lru
 huggingface-hub
 httpx
 pywebpush
@@ -12,7 +13,5 @@ Pillow
 firebase-functions
 firebase-admin
 a2wsgi
-python-jose
-cryptography
-passlib
-bcrypt
+python-jose[cryptography]
+passlib[bcrypt]

@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import Webcam from 'react-webcam';
 
-const AbandonedVehicleDetector = ({ onBack }) => {
+const ConstructionSafetyDetector = ({ onBack }) => {
   const webcamRef = useRef(null);
   const [imgSrc, setImgSrc] = useState(null);
   const [detections, setDetections] = useState([]);
@@ -18,7 +18,7 @@ const AbandonedVehicleDetector = ({ onBack }) => {
     setDetections([]);
   };
 
-  const detectAbandonedVehicle = async () => {
+  const detectSafety = async () => {
     if (!imgSrc) return;
     setLoading(true);
     setDetections([]);
@@ -32,10 +32,8 @@ const AbandonedVehicleDetector = ({ onBack }) => {
         const formData = new FormData();
         formData.append('image', file);
 
-        const API_URL = import.meta.env.VITE_API_URL || '';
-
         // Call Backend API
-        const response = await fetch(`${API_URL}/api/detect-abandoned-vehicle`, {
+        const response = await fetch('/api/detect-construction-safety', {
             method: 'POST',
             body: formData,
         });
@@ -44,7 +42,7 @@ const AbandonedVehicleDetector = ({ onBack }) => {
             const data = await response.json();
             setDetections(data.detections);
             if (data.detections.length === 0) {
-                alert("No abandoned vehicle detected.");
+                alert("No safety issues detected.");
             }
         } else {
             console.error("Detection failed");
@@ -60,11 +58,13 @@ const AbandonedVehicleDetector = ({ onBack }) => {
 
   return (
     <div className="flex flex-col h-full">
-      <button onClick={onBack} className="self-start text-blue-600 mb-2">
+      <button onClick={onBack} className="self-start text-blue-600 mb-2 font-semibold">
         &larr; Back
       </button>
       <div className="p-4 max-w-md mx-auto w-full">
-        <h2 className="text-2xl font-bold mb-4">Abandoned Vehicle Detector</h2>
+        <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+            Construction Safety Detector
+        </h2>
 
         {cameraError ? (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative">
@@ -80,12 +80,13 @@ const AbandonedVehicleDetector = ({ onBack }) => {
                   screenshotFormat="image/jpeg"
                   className="w-full h-full object-cover"
                   onUserMediaError={() => setCameraError("Could not access camera. Please check permissions.")}
+                  videoConstraints={{ facingMode: "environment" }}
                 />
               ) : (
                 <div className="relative">
                     <img src={imgSrc} alt="Captured" className="w-full" />
                     {detections.length > 0 && (
-                        <div className="absolute top-0 left-0 right-0 bg-red-600 text-white p-2 text-center font-bold opacity-90">
+                        <div className="absolute top-0 left-0 right-0 bg-yellow-500 text-black p-2 text-center font-bold opacity-90">
                             DETECTED: {detections.map(d => d.label).join(', ')}
                         </div>
                     )}
@@ -112,9 +113,9 @@ const AbandonedVehicleDetector = ({ onBack }) => {
                 Retake
               </button>
               <button
-                onClick={detectAbandonedVehicle}
+                onClick={detectSafety}
                 disabled={loading}
-                className={`bg-red-600 text-white px-6 py-2 rounded-full font-semibold shadow-md hover:bg-red-700 transition flex items-center ${loading ? 'opacity-70 cursor-wait' : ''}`}
+                className={`bg-yellow-600 text-white px-6 py-2 rounded-full font-semibold shadow-md hover:bg-yellow-700 transition flex items-center ${loading ? 'opacity-70 cursor-wait' : ''}`}
               >
                 {loading ? (
                     <>
@@ -124,18 +125,18 @@ const AbandonedVehicleDetector = ({ onBack }) => {
                       </svg>
                       Analyzing...
                     </>
-                ) : 'Detect'}
+                ) : 'Detect Safety'}
               </button>
             </>
           )}
         </div>
 
         <p className="mt-4 text-sm text-gray-600 text-center">
-          Point camera at a vehicle to check if it's abandoned or wrecked.
+          Check construction sites for safety compliance (helmets, debris, hazards).
         </p>
       </div>
     </div>
   );
 };
 
-export default AbandonedVehicleDetector;
+export default ConstructionSafetyDetector;
