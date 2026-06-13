@@ -120,7 +120,7 @@ def officer_check_in(request: OfficerCheckInRequest, db: Session = Depends(get_d
         
         # Generate immutable hash
         visit_hash = generate_visit_hash(visit_data)
-        
+
         new_visit = FieldOfficerVisit(
             issue_id=request.issue_id,
             grievance_id=request.grievance_id,
@@ -149,6 +149,9 @@ def officer_check_in(request: OfficerCheckInRequest, db: Session = Depends(get_d
 
         db.refresh(new_visit)
         
+        # Update cache for next visit AFTER successful commit to avoid cache poisoning
+        visit_last_hash_cache.set(data=visit_hash, key="last_hash")
+
         logger.info(
             f"Officer {request.officer_name} checked in at issue {request.issue_id}. "
             f"Distance: {distance:.2f}m, Within fence: {within_fence}"
