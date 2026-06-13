@@ -15,7 +15,11 @@ from backend.database import SessionLocal
 from backend.routing_service import RoutingService
 from backend.sla_config_service import SLAConfigService
 from backend.escalation_engine import EscalationEngine
-from backend.cache import grievance_last_hash_cache, grievance_list_cache, escalation_stats_cache
+from backend.cache import (
+    grievance_last_hash_cache,
+    grievance_list_cache,
+    escalation_stats_cache
+)
 
 class GrievanceService:
     """

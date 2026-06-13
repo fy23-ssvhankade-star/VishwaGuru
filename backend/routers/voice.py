@@ -287,14 +287,11 @@ async def submit_voice_issue(
         prev_hash = blockchain_last_hash_cache.get("last_hash")
         if prev_hash is None:
             # Cache miss: Fetch only the last hash from DB
-            # Wrapped in run_in_threadpool because it's an async endpoint
-            prev_issue_hash = await run_in_threadpool(
-                lambda: db.query(Issue.integrity_hash).order_by(Issue.id.desc()).first()
-            )
-            prev_hash = prev_issue_hash[0] if prev_issue_hash and prev_issue_hash[0] else ""
+            prev_issue = db.query(Issue.integrity_hash).order_by(Issue.id.desc()).first()
+            prev_hash = prev_issue[0] if prev_issue and prev_issue[0] else ""
             blockchain_last_hash_cache.set(data=prev_hash, key="last_hash")
 
-        # Simple but effective SHA-256 chaining (parity with standard issue reports)
+        # Simple but effective SHA-256 chaining
         hash_content = f"{final_description}|{issue_category.value}|{prev_hash}"
         integrity_hash = hashlib.sha256(hash_content.encode()).hexdigest()
 

@@ -7,6 +7,7 @@ Issue #288: Field Officer Check-In System With Location Verification
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case
+import json
 from typing import List, Optional
 import logging
 import json
@@ -163,6 +164,9 @@ def officer_check_in(request: OfficerCheckInRequest, db: Session = Depends(get_d
         db.add(new_visit)
         db.commit()
         db.refresh(new_visit)
+
+        # Invalidate stats cache
+        visit_stats_cache.clear()
         
         # Invalidate stats cache
         visit_stats_cache.clear()
@@ -266,6 +270,9 @@ def officer_check_out(request: OfficerCheckOutRequest, db: Session = Depends(get
 
         db.commit()
         db.refresh(visit)
+
+        # Invalidate stats cache
+        visit_stats_cache.clear()
         
         # Invalidate stats cache
         visit_stats_cache.clear()
@@ -480,13 +487,11 @@ def get_issue_visit_history(
 def get_visit_statistics(db: Session = Depends(get_db)):
     """
     Get aggregate statistics for all field officer visits using optimized SQL queries
-    
-    Returns metrics like total visits, verification status, geo-fence compliance, etc.
-    Performance Boost: Uses serialization caching to bypass Pydantic overhead on cache hits.
+    and serialization caching.
     """
     try:
-        # Check cache
-        cached_json = visit_stats_cache.get("default")
+        # Check cache first
+        cached_json = visit_stats_cache.get("global_visit_stats")
         if cached_json:
             return Response(content=cached_json, media_type="application/json")
 
@@ -530,9 +535,9 @@ def get_visit_statistics(db: Session = Depends(get_db)):
             "average_distance_from_site": average_distance
         }
 
-        # Cache serialized JSON
+        # Cache pre-serialized JSON to bypass Pydantic overhead
         json_data = json.dumps(data)
-        visit_stats_cache.set(data=json_data, key="default")
+        visit_stats_cache.set(json_data, "global_visit_stats")
 
         return Response(content=json_data, media_type="application/json")
         
@@ -572,6 +577,9 @@ def verify_visit(
         visit.updated_at = datetime.now(timezone.utc)
 
         db.commit()
+
+        # Invalidate stats cache
+        visit_stats_cache.clear()
         
         # Invalidate stats cache
         visit_stats_cache.clear()
