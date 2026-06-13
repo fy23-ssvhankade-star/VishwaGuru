@@ -94,6 +94,6 @@
 **Learning:** Performing multiple sequential database queries to verify cryptographically chained records (e.g., fetching a record and then its associated token/metadata from another table) introduces unnecessary latency and increases database load.
 **Action:** Consolidate associated data retrieval into a single SQL `JOIN` query within the verification hot-path. This reduces database round-trips and improves end-to-end latency for blockchain-style integrity checks.
 
-## 2026-05-19 - Single Aggregate Query for Multi-Metric Counts
-**Learning:** Consolidating multiple database aggregate queries into a single query using SQLAlchemy `func.sum(case(...))` for categorical counts alongside other aggregates (like `avg` and `count(distinct)`) measurably improves performance by reducing database round-trips and redundant table scans.
-**Action:** Use a single `db.query()` with `func.sum(case(...))` when aggregating across multiple distinct categorical columns and regular metrics simultaneously. Remember to explicitly cast to int/float with `or 0` fallback, as `func.sum` can return `None`.
+## 2026-06-15 - Consolidated Aggregate Queries for Dashboard Stats
+**Learning:** Performing multiple separate aggregate queries in a single dashboard endpoint causes redundant table scans and increases latency. Using `func.sum(case(...))` allows calculating all category counts and summary metrics in a single SQL pass, significantly reducing database load.
+**Action:** Consolidate multiple aggregate queries into a single `db.query()` using conditional sums for categorical counts in dashboard-style endpoints.

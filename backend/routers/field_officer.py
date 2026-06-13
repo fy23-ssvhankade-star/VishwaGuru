@@ -428,8 +428,8 @@ def get_issue_visit_history(
 @router.get("/field-officer/visit-stats", response_model=VisitStatsResponse)
 def get_visit_statistics(db: Session = Depends(get_db)):
     """
-    Get aggregate statistics for all field officer visits using optimized SQL queries.
-    Optimized: Uses serialization caching to bypass Pydantic overhead.
+    Get aggregate statistics for all field officer visits using a single optimized SQL query.
+    Consolidates multiple aggregate calls into a single pass using conditional sums.
     """
     try:
         cache_key = "global_visit_stats"
@@ -437,9 +437,13 @@ def get_visit_statistics(db: Session = Depends(get_db)):
         if cached_json:
             return Response(content=cached_json, media_type="application/json")
 
-        # Optimized: Consolidating multiple database aggregate queries into a single query using func.sum(case(...))
-        res = db.query(
+        # Optimized: Use a single aggregate query to fetch ALL statistics in one database roundtrip
+        # Using func.sum(case(...)) for categorical counts reduces table scans and network roundtrips.
+        agg_stats = db.query(
             func.count(FieldOfficerVisit.id).label('total_visits'),
+            func.sum(case((FieldOfficerVisit.verified_at.isnot(None), 1), else_=0)).label('verified_visits'),
+            func.sum(case((FieldOfficerVisit.within_geofence == True, 1), else_=0)).label('within_geofence_count'),
+            func.sum(case((FieldOfficerVisit.within_geofence == False, 1), else_=0)).label('outside_geofence_count'),
             func.count(func.distinct(FieldOfficerVisit.officer_email)).label('unique_officers'),
             func.avg(FieldOfficerVisit.distance_from_site).label('avg_distance'),
             func.sum(case((FieldOfficerVisit.verified_at.isnot(None), 1), else_=0)).label('verified_visits'),
@@ -447,20 +451,19 @@ def get_visit_statistics(db: Session = Depends(get_db)):
             func.sum(case((FieldOfficerVisit.within_geofence == False, 1), else_=0)).label('outside_geofence')
         ).first()
 
-        total_visits = int(res.total_visits or 0) if res else 0
-        unique_officers = int(res.unique_officers or 0) if res else 0
-        average_distance = float(res.avg_distance or 0.0) if res else 0.0
-        verified_visits = int(res.verified_visits or 0) if res else 0
-        within_geofence_count = int(res.within_geofence or 0) if res else 0
-        outside_geofence_count = int(res.outside_geofence or 0) if res else 0
+        average_distance = agg_stats.avg_distance
+        if average_distance is not None:
+            average_distance = round(float(average_distance), 2)
+        else:
+            average_distance = 0.0
 
         result_data = {
-            "total_visits": total_visits,
-            "verified_visits": verified_visits,
-            "within_geofence_count": within_geofence_count,
-            "outside_geofence_count": outside_geofence_count,
-            "unique_officers": unique_officers,
-            "average_distance_from_site": round(average_distance, 2)
+            "total_visits": int(agg_stats.total_visits or 0),
+            "verified_visits": int(agg_stats.verified_visits or 0),
+            "within_geofence_count": int(agg_stats.within_geofence_count or 0),
+            "outside_geofence_count": int(agg_stats.outside_geofence_count or 0),
+            "unique_officers": int(agg_stats.unique_officers or 0),
+            "average_distance_from_site": average_distance
         }
 
         # Cache serialized JSON
