@@ -397,6 +397,10 @@ class ResolutionEvidence(Base):
     integrity_hash = Column(String, nullable=True)
     previous_integrity_hash = Column(String, nullable=True, index=True)
 
+    # Blockchain integrity chaining
+    integrity_hash = Column(String, nullable=True)
+    previous_integrity_hash = Column(String, nullable=True, index=True)
+
     # Relationships
     grievance = relationship("Grievance", back_populates="resolution_evidence")
     audit_logs = relationship("EvidenceAuditLog", back_populates="evidence")
@@ -409,9 +413,10 @@ class ResolutionProofToken(Base):
     token = Column(String, unique=True, index=True, nullable=True)
     token_id = Column(String, unique=True, index=True, nullable=True)  # UUID string
     authority_email = Column(String, nullable=True)
-    generated_at = Column(
-        DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc)
-    )
+    valid_from = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    valid_until = Column(DateTime, nullable=True)
+    nonce = Column(String, nullable=True)
+    generated_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
     expires_at = Column(DateTime, nullable=False)
     is_used = Column(Boolean, default=False)
     used_at = Column(DateTime, nullable=True)

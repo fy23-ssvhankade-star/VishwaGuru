@@ -188,7 +188,6 @@ user_upload_cache = ThreadSafeCache(
 blockchain_last_hash_cache = ThreadSafeCache(ttl=3600, max_size=1)
 grievance_last_hash_cache = ThreadSafeCache(ttl=3600, max_size=1)
 resolution_last_hash_cache = ThreadSafeCache(ttl=3600, max_size=1)
-audit_last_hash_cache = ThreadSafeCache(ttl=3600, max_size=2)
 visit_last_hash_cache = ThreadSafeCache(ttl=3600, max_size=2)
 audit_last_hash_cache = ThreadSafeCache(ttl=3600, max_size=2)
 evidence_audit_last_hash_cache = ThreadSafeCache(ttl=3600, max_size=1)
