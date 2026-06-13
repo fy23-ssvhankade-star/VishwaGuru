@@ -16,6 +16,7 @@ import uuid
 from datetime import datetime, timezone
 
 from backend.database import get_db
+from backend.utils import process_uploaded_image, save_processed_image
 from backend.models import FieldOfficerVisit, Issue, Grievance, User
 from backend.dependencies import get_current_active_user
 from backend.utils import process_uploaded_image, save_processed_image
@@ -370,8 +371,8 @@ async def upload_visit_images(
                     status_code=400,
                     detail=f"File extension '{extension}' not allowed. Allowed: {', '.join(ALLOWED_IMAGE_EXTENSIONS)}",
                 )
-
-            # Pre-check file size before processing to avoid unnecessary CPU usage
+            
+            # Check file size (before processing to avoid heavy work on large invalid files)
             image.file.seek(0, 2)
             actual_size = image.file.tell()
             image.file.seek(0)
@@ -380,19 +381,19 @@ async def upload_visit_images(
                     status_code=400,
                     detail=f"File {image.filename} exceeds maximum size of {MAX_UPLOAD_SIZE / 1024 / 1024:.1f} MB",
                 )
-
-            # Unified image processing: validation, resizing (1024px), and EXIF stripping in a single pass
-            # Returns (PIL.Image, image_bytes)
+            
+            # Process image (resize, strip EXIF, etc.) using optimized pipeline
+            # This offloads decoding/processing to the threadpool
             _, image_bytes = await process_uploaded_image(image)
 
             # Generate secure filename
             timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
             safe_filename = f"visit_{visit_id}_{timestamp}_{idx}.{extension}"
             file_path = os.path.join(VISIT_IMAGES_DIR, safe_filename)
-
-            # Offload blocking file I/O to threadpool for performance
+            
+            # Save processed image to disk (offload blocking I/O)
             await run_in_threadpool(save_processed_image, image_bytes, file_path)
-
+            
             # Store relative path
             relative_path = os.path.join("data", "visit_images", safe_filename)
             image_paths.append(relative_path)
