@@ -94,6 +94,6 @@
 **Learning:** Performing multiple sequential database queries to verify cryptographically chained records (e.g., fetching a record and then its associated token/metadata from another table) introduces unnecessary latency and increases database load.
 **Action:** Consolidate associated data retrieval into a single SQL `JOIN` query within the verification hot-path. This reduces database round-trips and improves end-to-end latency for blockchain-style integrity checks.
 
-## 2026-05-22 - Bypass Redundant Python Bounding Box Filtering
-**Learning:** Performing point-in-bounding-box checks locally in Python on results already filtered by a database spatial query is redundant and wastes CPU cycles, adding latency to spatial endpoints.
-**Action:** Add a `pre_filtered` flag to `find_nearby_issues` to allow callers (like `get_nearby_issues` in `issues.py`) to bypass the local bounding box check when passing a query result set that has already been spatially restricted.
+## 2025-05-22 - Regex vs Substring Search for Keywords
+**Learning:** For literal keyword matching in typical short texts (civic issue descriptions), Python's `in` operator (substring search) is significantly faster than pre-compiling multiple keywords into a single large regular expression using `re.finditer` or `re.search`. The overhead of the regex engine exceeds the cost of multiple substring scans in this scenario.
+**Action:** Prefer multiple `word in text` checks or a manual loop for literal keyword detection unless complex patterns (wildcards, lookaheads) are actually required.
