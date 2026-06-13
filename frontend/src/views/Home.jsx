@@ -7,7 +7,8 @@ import {
   AlertTriangle, MapPin, Search, Activity, Camera, Trash2, ThumbsUp, Brush,
   Droplets, Zap, Truck, Flame, Dog, XCircle, Lightbulb, TreeDeciduous, Bug,
   Scan, ChevronRight, LayoutGrid, Shield, Leaf, Building, CheckCircle, Trophy, Monitor,
-  Volume2, Users, Waves, Accessibility, Siren, Recycle, Eye, ChevronUp, Signpost, Car, Hammer
+  Volume2, Users, Waves, Accessibility, Siren, Recycle, Eye, ChevronUp, Signpost, Car,
+  Wind, Sparkles
 } from 'lucide-react';
 
 const CameraCheckModal = ({ onClose }) => {
@@ -100,6 +101,7 @@ const Home = ({ setView, fetchResponsibilityMap, recentIssues, handleUpvote, loa
         { id: 'crowd', label: t('home.issues.crowd'), icon: <Users size={24} />, color: 'text-red-500', bg: 'bg-red-50' },
         { id: 'water-leak', label: t('home.issues.waterLeak'), icon: <Waves size={24} />, color: 'text-blue-500', bg: 'bg-blue-50' },
         { id: 'waste', label: t('home.issues.waste'), icon: <Recycle size={24} />, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+        { id: 'air-quality', label: 'Air Quality', icon: <Wind size={24} />, color: 'text-sky-500', bg: 'bg-sky-50' },
       ]
     },
     {
@@ -107,6 +109,7 @@ const Home = ({ setView, fetchResponsibilityMap, recentIssues, handleUpvote, loa
       icon: <Monitor size={20} className="text-gray-600" />,
       items: [
         { id: 'safety-check', label: t('home.issues.civicEye'), icon: <Eye size={24} />, color: 'text-blue-600', bg: 'bg-blue-50' },
+        { id: 'graffiti-verify', label: 'Verify Clean', icon: <Sparkles size={24} />, color: 'text-purple-600', bg: 'bg-purple-50' },
         { id: 'my-reports', label: t('home.issues.myReports'), icon: <CheckCircle size={24} />, color: 'text-teal-600', bg: 'bg-teal-50' },
         { id: 'grievance', label: t('home.issues.grievanceManagement'), icon: <AlertTriangle size={24} />, color: 'text-orange-600', bg: 'bg-orange-50' },
         { id: 'stats', label: t('home.issues.viewStats'), icon: <Activity size={24} />, color: 'text-indigo-600', bg: 'bg-indigo-50' },

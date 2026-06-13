@@ -457,10 +457,48 @@ async def detect_abandoned_vehicle_clip(image: Union[Image.Image, bytes], client
     targets = ["abandoned car", "rusted vehicle", "car with flat tires", "wrecked car"]
     return await _detect_clip_generic(image, labels, targets, client)
 
-async def detect_construction_safety_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
+async def detect_air_quality_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
     """
-    Detects construction safety issues (workers without helmets, debris, etc).
+    Detects air quality/smog levels using CLIP.
     """
-    labels = ["construction worker", "safety helmet", "no helmet", "scaffolding", "construction debris", "safety hazard", "safe construction site"]
-    targets = ["construction worker", "safety helmet", "no helmet", "scaffolding", "construction debris", "safety hazard"]
+    labels = ["clean air", "mild smog", "dense smog", "hazardous air pollution", "fog", "clear sky", "blue sky", "polluted city"]
+    targets = ["mild smog", "dense smog", "hazardous air pollution", "fog", "polluted city"]
     return await _detect_clip_generic(image, labels, targets, client)
+
+async def detect_cleanliness_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
+    """
+    Verifies if a wall/area is clean (for graffiti removal verification).
+    """
+    labels = ["clean wall", "graffiti", "vandalism", "freshly painted wall", "dirty wall"]
+    # We want to know if it is CLEAN
+    targets = ["clean wall", "freshly painted wall"]
+    return await _detect_clip_generic(image, labels, targets, client)
+
+async def detect_noise_pollution_event(audio_bytes: bytes, client: httpx.AsyncClient = None):
+    """
+    Wraps detect_audio_event to flag noise pollution.
+    """
+    events = await detect_audio_event(audio_bytes, client)
+
+    noise_pollution_labels = [
+        "traffic", "horn", "siren", "jackhammer", "construction", "drill",
+        "engine", "explosion", "gunshot", "scream", "shout", "bark", "chainsaw",
+        "aircraft", "helicopter", "train"
+    ]
+
+    detected_noise = []
+    for event in events:
+        # MIT/AST labels might be specific, e.g. "Car alarm"
+        label = event.get('label', '').lower()
+        score = event.get('score', 0)
+
+        is_noise = any(nl in label for nl in noise_pollution_labels)
+
+        if is_noise and score > 0.3:
+            detected_noise.append({
+                "type": event.get('label'),
+                "confidence": score,
+                "is_pollution": True
+            })
+
+    return detected_noise
