@@ -1,7 +1,8 @@
 import React, { useRef, useState, useCallback } from 'react';
 import Webcam from 'react-webcam';
 import { Camera, RefreshCw, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
-import { detectorsApi } from './api/detectors';
+
+const API_URL = import.meta.env.VITE_API_URL || '';
 
 const InfrastructureDetector = ({ onBack }) => {
   const webcamRef = useRef(null);
@@ -27,8 +28,14 @@ const InfrastructureDetector = ({ onBack }) => {
       const formData = new FormData();
       formData.append('image', file);
 
-      const data = await detectorsApi.infrastructure(formData);
+      const response = await fetch(`${API_URL}/api/detect-infrastructure`, {
+        method: 'POST',
+        body: formData,
+      });
 
+      if (!response.ok) throw new Error('Detection failed');
+
+      const data = await response.json();
       if (data.error) {
           throw new Error(data.error);
       }

@@ -2,116 +2,187 @@
 AI Service Factory for configuring different service implementations.
 
 This module provides a factory pattern to easily switch between different
-AI service implementations (Gemini, Hugging Face, Mock) based on configuration.
-
-Fallback chain:  gemini → huggingface → mock
+AI service implementations (Gemini, Mock, etc.) based on configuration.
 """
 import os
-from typing import Literal
-
-from backend.ai_interfaces import ActionPlanService, ChatService, MLASummaryService
-from backend.gemini_services import (
+from typing import Literal, Tuple
+from ai_interfaces import (
+    ActionPlanService, 
+    ChatService, 
+    MLASummaryService,
+    DetectionService
+)
+from gemini_services import (
     create_gemini_action_plan_service,
     create_gemini_chat_service,
-    create_gemini_mla_summary_service,
+    create_gemini_mla_summary_service
 )
-from backend.hf_text_services import (
-    create_hf_action_plan_service,
-    create_hf_chat_service,
-    create_hf_mla_summary_service,
-)
-from backend.mock_services import (
+from mock_services import (
     create_mock_action_plan_service,
     create_mock_chat_service,
-    create_mock_mla_summary_service,
+    create_mock_mla_summary_service
+)
+from hf_detection_services import (
+    create_hf_vandalism_detection_service,
+    create_hf_infrastructure_detection_service,
+    create_hf_flooding_detection_service,
+    create_local_pothole_detection_service,
+    create_local_garbage_detection_service
+)
+from mock_detection_services import (
+    create_mock_vandalism_detection_service,
+    create_mock_infrastructure_detection_service,
+    create_mock_flooding_detection_service,
+    create_mock_pothole_detection_service,
+    create_mock_garbage_detection_service
 )
 
-ServiceType = Literal["gemini", "huggingface", "mock"]
+
+ServiceType = Literal["gemini", "mock"]
 
 
 def get_service_type() -> ServiceType:
     """
-    Determine which service implementation to use.
+    Determine which service implementation to use based on environment variables.
 
-    Priority when AI_SERVICE_TYPE is not explicitly set:
-        1. Gemini   – if GEMINI_API_KEY is present
-        2. HuggingFace – if HF_TOKEN is present
-        3. Mock     – always available
+    Returns:
+        Service type: "gemini" for production, "mock" for testing
     """
-    explicit = os.environ.get("AI_SERVICE_TYPE", "").lower()
+    # Check for explicit service type override
+    service_type = os.environ.get("AI_SERVICE_TYPE", "").lower()
 
-    if explicit == "mock":
+    if service_type == "mock":
         return "mock"
-    elif explicit == "huggingface":
-        if not os.environ.get("HF_TOKEN"):
-            print("⚠️ HF_TOKEN not found. Falling back to MOCK services.")
-            return "mock"
-        return "huggingface"
-    elif explicit == "gemini":
-        if not os.environ.get("GEMINI_API_KEY"):
-            print("⚠️ GEMINI_API_KEY not found. Falling back to HUGGINGFACE services.")
-            if os.environ.get("HF_TOKEN"):
-                return "huggingface"
-            print("⚠️ HF_TOKEN not found either. Falling back to MOCK services.")
-            return "mock"
+    elif service_type == "gemini":
         return "gemini"
     else:
-        # Auto-detect: gemini → huggingface → mock
-        if os.environ.get("GEMINI_API_KEY"):
-            return "gemini"
-        if os.environ.get("HF_TOKEN"):
-            print("ℹ️ GEMINI_API_KEY not found. Using HUGGINGFACE services.")
-            return "huggingface"
-        print("⚠️ No AI API keys found. Defaulting to MOCK services.")
-        return "mock"
-
-
-# ── Factory functions ────────────────────────────────────────────────────────
-
-_FACTORIES = {
-    "gemini": (
-        create_gemini_action_plan_service,
-        create_gemini_chat_service,
-        create_gemini_mla_summary_service,
-    ),
-    "huggingface": (
-        create_hf_action_plan_service,
-        create_hf_chat_service,
-        create_hf_mla_summary_service,
-    ),
-    "mock": (
-        create_mock_action_plan_service,
-        create_mock_chat_service,
-        create_mock_mla_summary_service,
-    ),
-}
+        # Default to Gemini for production, but allow mock for testing
+        # You can set AI_SERVICE_TYPE=mock in environment for testing
+        return "gemini"
 
 
 def create_action_plan_service(service_type: ServiceType = None) -> ActionPlanService:
+    """Create an action plan service based on the specified type."""
     if service_type is None:
         service_type = get_service_type()
-    return _FACTORIES[service_type][0]()
+
+    if service_type == "mock":
+        return create_mock_action_plan_service()
+    elif service_type == "gemini":
+        return create_gemini_action_plan_service()
+    else:
+        raise ValueError(f"Unknown service type: {service_type}")
 
 
 def create_chat_service(service_type: ServiceType = None) -> ChatService:
+    """Create a chat service based on the specified type."""
     if service_type is None:
         service_type = get_service_type()
-    return _FACTORIES[service_type][1]()
+
+    if service_type == "mock":
+        return create_mock_chat_service()
+    elif service_type == "gemini":
+        return create_gemini_chat_service()
+    else:
+        raise ValueError(f"Unknown service type: {service_type}")
 
 
 def create_mla_summary_service(service_type: ServiceType = None) -> MLASummaryService:
+    """Create an MLA summary service based on the specified type."""
     if service_type is None:
         service_type = get_service_type()
-    return _FACTORIES[service_type][2]()
+
+    if service_type == "mock":
+        return create_mock_mla_summary_service()
+    elif service_type == "gemini":
+        return create_gemini_mla_summary_service()
+    else:
+        raise ValueError(f"Unknown service type: {service_type}")
 
 
-def create_all_ai_services(service_type: ServiceType = None):
+def create_all_ai_services(service_type: ServiceType = None) -> Tuple[
+    ActionPlanService, 
+    ChatService, 
+    MLASummaryService,
+    DetectionService,
+    DetectionService,
+    DetectionService,
+    DetectionService,
+    DetectionService
+]:
+    """
+    Create all AI services with the specified type.
+
+    Returns:
+        Tuple of all AI services: (action_plan, chat, mla_summary, 
+                                   vandalism_detection, infrastructure_detection,
+                                   flooding_detection, pothole_detection, garbage_detection)
+    """
     if service_type is None:
         service_type = get_service_type()
-    print(f"🤖 AI Service Type: {service_type.upper()}")
 
     return (
         create_action_plan_service(service_type),
         create_chat_service(service_type),
         create_mla_summary_service(service_type),
+        create_vandalism_detection_service(service_type),
+        create_infrastructure_detection_service(service_type),
+        create_flooding_detection_service(service_type),
+        create_pothole_detection_service(service_type),
+        create_garbage_detection_service(service_type)
     )
+
+
+def create_vandalism_detection_service(service_type: ServiceType = None) -> DetectionService:
+    """Create a vandalism detection service based on the specified type."""
+    if service_type is None:
+        service_type = get_service_type()
+
+    if service_type == "mock":
+        return create_mock_vandalism_detection_service()
+    else:
+        return create_hf_vandalism_detection_service()
+
+
+def create_infrastructure_detection_service(service_type: ServiceType = None) -> DetectionService:
+    """Create an infrastructure detection service based on the specified type."""
+    if service_type is None:
+        service_type = get_service_type()
+
+    if service_type == "mock":
+        return create_mock_infrastructure_detection_service()
+    else:
+        return create_hf_infrastructure_detection_service()
+
+
+def create_flooding_detection_service(service_type: ServiceType = None) -> DetectionService:
+    """Create a flooding detection service based on the specified type."""
+    if service_type is None:
+        service_type = get_service_type()
+
+    if service_type == "mock":
+        return create_mock_flooding_detection_service()
+    else:
+        return create_hf_flooding_detection_service()
+
+
+def create_pothole_detection_service(service_type: ServiceType = None) -> DetectionService:
+    """Create a pothole detection service based on the specified type."""
+    if service_type is None:
+        service_type = get_service_type()
+
+    if service_type == "mock":
+        return create_mock_pothole_detection_service()
+    else:
+        return create_local_pothole_detection_service()
+
+
+def create_garbage_detection_service(service_type: ServiceType = None) -> DetectionService:
+    """Create a garbage detection service based on the specified type."""
+    if service_type is None:
+        service_type = get_service_type()
+
+    if service_type == "mock":
+        return create_mock_garbage_detection_service()
+    else:
+        return create_local_garbage_detection_service()

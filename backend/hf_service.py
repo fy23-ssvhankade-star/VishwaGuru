@@ -1,27 +1,13 @@
-"""
-DEPRECATED: This module is no longer used.
-Please use local_ml_service.py for local ML model-based detection instead of Hugging Face API.
-
-This file is kept for reference purposes only.
-"""
 import os
 import io
 import httpx
-import base64
-from typing import Union, List, Dict, Any
 from PIL import Image
 import asyncio
-import logging
-
-from backend.exceptions import ExternalAPIException
-
-logger = logging.getLogger(__name__)
 
 # HF_TOKEN is optional for public models but recommended for higher limits
 token = os.environ.get("HF_TOKEN")
 headers = {"Authorization": f"Bearer {token}"} if token else {}
 API_URL = "https://api-inference.huggingface.co/models/openai/clip-vit-base-patch32"
-CAPTION_API_URL = "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-large"
 
 async def query_hf_api(image_bytes, labels, client=None):
     """
@@ -34,6 +20,7 @@ async def query_hf_api(image_bytes, labels, client=None):
         return await _make_request(new_client, image_bytes, labels)
 
 async def _make_request(client, image_bytes, labels):
+    import base64
     image_base64 = base64.b64encode(image_bytes).decode('utf-8')
 
     payload = {
@@ -43,44 +30,26 @@ async def _make_request(client, image_bytes, labels):
         }
     }
 
-        try:
-            response = await client.post(API_URL, headers=headers, json=payload, timeout=20.0)
-            if response.status_code != 200:
-                logger.error(f"HF API Error: {response.status_code} - {response.text}")
-                raise ExternalAPIException("Hugging Face API", f"HTTP {response.status_code}: {response.text}")
-            return response.json()
-        except httpx.HTTPError as e:
-            logger.error(f"HF API HTTP Error: {e}")
-            raise ExternalAPIException("Hugging Face API", str(e)) from e
-        except Exception as e:
-            logger.error(f"HF API Request Exception: {e}")
-            raise ExternalAPIException("Hugging Face API", str(e)) from e
+    try:
+        response = await client.post(API_URL, headers=headers, json=payload, timeout=20.0)
+        if response.status_code != 200:
+            print(f"HF API Error: {response.status_code} - {response.text}")
+            return []
+        return response.json()
     except Exception as e:
-        logger.error(f"Error preparing HF API request: {e}")
-        raise ExternalAPIException("Hugging Face API", str(e)) from e
+        print(f"HF API Request Exception: {e}")
+        return []
 
-def _prepare_image_bytes(image: Union[Image.Image, bytes]) -> bytes:
+async def detect_vandalism_clip(image: Image.Image, client: httpx.AsyncClient = None):
     """
-    Helper to get bytes from PIL Image or return bytes as is.
-    Avoids unnecessary re-encoding if bytes are already available.
-    """
-    if isinstance(image, bytes):
-        return image
-
-    img_byte_arr = io.BytesIO()
-    # If image.format is not available (e.g. newly created image), default to JPEG
-    fmt = image.format if image.format else 'JPEG'
-    image.save(img_byte_arr, format=fmt)
-    return img_byte_arr.getvalue()
-
-async def generate_image_caption(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
-    """
-    Generates a description for the image using Salesforce BLIP model.
+    Detects vandalism/graffiti using Zero-Shot Image Classification with CLIP (Async).
     """
     try:
         labels = ["graffiti", "vandalism", "spray paint", "street art", "clean wall", "public property", "normal street"]
 
-        img_bytes = _prepare_image_bytes(image)
+        img_byte_arr = io.BytesIO()
+        image.save(img_byte_arr, format=image.format if image.format else 'JPEG')
+        img_bytes = img_byte_arr.getvalue()
 
         results = await query_hf_api(img_bytes, labels, client=client)
 
@@ -100,14 +69,16 @@ async def generate_image_caption(image: Union[Image.Image, bytes], client: httpx
                  })
         return detected
     except Exception as e:
-        logger.error(f"HF Detection Error: {e}")
-        raise ExternalAPIException("Hugging Face API", str(e)) from e
+        print(f"HF Detection Error: {e}")
+        return []
 
-async def detect_infrastructure_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
+async def detect_infrastructure_clip(image: Image.Image, client: httpx.AsyncClient = None):
     try:
         labels = ["broken streetlight", "damaged traffic sign", "fallen tree", "damaged fence", "pothole", "clean street", "normal infrastructure"]
 
-        img_bytes = _prepare_image_bytes(image)
+        img_byte_arr = io.BytesIO()
+        image.save(img_byte_arr, format=image.format if image.format else 'JPEG')
+        img_bytes = img_byte_arr.getvalue()
 
         results = await query_hf_api(img_bytes, labels, client=client)
 
@@ -126,14 +97,16 @@ async def detect_infrastructure_clip(image: Union[Image.Image, bytes], client: h
                  })
         return detected
     except Exception as e:
-        logger.error(f"HF Detection Error: {e}")
-        raise ExternalAPIException("Hugging Face API", str(e)) from e
+        print(f"HF Detection Error: {e}")
+        return []
 
-async def detect_flooding_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
+async def detect_flooding_clip(image: Image.Image, client: httpx.AsyncClient = None):
     try:
         labels = ["flooded street", "waterlogging", "blocked drain", "heavy rain", "dry street", "normal road"]
 
-        img_bytes = _prepare_image_bytes(image)
+        img_byte_arr = io.BytesIO()
+        image.save(img_byte_arr, format=image.format if image.format else 'JPEG')
+        img_bytes = img_byte_arr.getvalue()
 
         results = await query_hf_api(img_bytes, labels, client=client)
 
@@ -152,5 +125,5 @@ async def detect_flooding_clip(image: Union[Image.Image, bytes], client: httpx.A
                  })
         return detected
     except Exception as e:
-        logger.error(f"HF Detection Error: {e}")
-        raise ExternalAPIException("Hugging Face API", str(e)) from e
+        print(f"HF Detection Error: {e}")
+        return []

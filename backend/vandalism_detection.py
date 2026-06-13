@@ -1,8 +1,8 @@
-from backend.local_ml_service import detect_vandalism_local
+from hf_service import detect_vandalism_clip
 from PIL import Image
 
-async def detect_vandalism(image: Image.Image):
+def detect_vandalism(image: Image.Image):
     """
-    Wrapper for vandalism detection using Local ML Service.
+    Wrapper for vandalism detection using HF Service.
     """
-    return await detect_vandalism_local(image)
+    return detect_vandalism_clip(image)

@@ -1,9 +1,9 @@
 from PIL import Image
-from backend.local_ml_service import detect_flooding_local
+from hf_service import detect_flooding_clip
 
-async def detect_flooding(image: Image.Image):
+def detect_flooding(image: Image.Image):
     """
     Detects flooding in an image.
-    Delegates to the Local ML Service.
+    Delegates to the Hugging Face service.
     """
-    return await detect_flooding_local(image)
+    return detect_flooding_clip(image)
