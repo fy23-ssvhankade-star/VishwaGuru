@@ -172,11 +172,11 @@ async def create_issue(
         # Save to DB only if no nearby issues found or deduplication failed
         if deduplication_info is None or not deduplication_info.has_nearby_issues:
             # Blockchain feature: calculate integrity hash for the report
-            # Optimization: Use cache for the last hash to maintain the chain with near-zero overhead
+            # Optimization: Use memory cache for last hash to eliminate DB lookup
             prev_hash = blockchain_last_hash_cache.get("last_integrity_hash")
 
             if prev_hash is None:
-                # Cache miss: Fetch only the last hash from DB
+                # Cache miss: Fetch from DB using projected query
                 prev_issue = await run_in_threadpool(
                     lambda: db.query(Issue.integrity_hash).order_by(Issue.id.desc()).first()
                 )
@@ -211,7 +211,7 @@ async def create_issue(
             # Offload blocking DB operations to threadpool
             await run_in_threadpool(save_issue_db, db, new_issue)
 
-            # Update last hash cache
+            # Update last hash cache for the next report
             blockchain_last_hash_cache.set(data=integrity_hash, key="last_integrity_hash")
         else:
             # Don't create new issue, just return deduplication info
@@ -629,24 +629,26 @@ def get_user_issues(
 async def verify_blockchain_integrity(issue_id: int, db: Session = Depends(get_db)):
     """
     Verify the cryptographic integrity of a report using the blockchain-style chaining.
-    Optimized: Uses stored previous hash to eliminate redundant lookup for the parent record.
+    Optimized: Uses column projection and denormalized previous hash to eliminate extra DB query.
     """
-    # Fetch current issue data
-    # Optimization: Include previous_integrity_hash to verify the chain in one step
+    # Fetch current issue data including its recorded link to previous block
     current_issue = await run_in_threadpool(
         lambda: db.query(
-            Issue.id, Issue.description, Issue.category, Issue.integrity_hash, Issue.previous_integrity_hash
+            Issue.id,
+            Issue.description,
+            Issue.category,
+            Issue.integrity_hash,
+            Issue.previous_integrity_hash
         ).filter(Issue.id == issue_id).first()
     )
 
     if not current_issue:
         raise HTTPException(status_code=404, detail="Issue not found")
 
-    # Use stored previous hash if available, otherwise fall back to DB lookup (for legacy records)
-    if current_issue.previous_integrity_hash is not None:
-        prev_hash = current_issue.previous_integrity_hash
-    else:
-        # Fallback for legacy records without previous_integrity_hash column populated
+    prev_hash = current_issue.previous_integrity_hash
+
+    # Fallback for legacy records missing the previous_integrity_hash column
+    if prev_hash is None:
         prev_issue_hash = await run_in_threadpool(
             lambda: db.query(Issue.integrity_hash).filter(Issue.id < issue_id).order_by(Issue.id.desc()).first()
         )
@@ -667,6 +669,7 @@ async def verify_blockchain_integrity(issue_id: int, db: Session = Depends(get_d
     return BlockchainVerificationResponse(
         is_valid=is_valid,
         current_hash=current_issue.integrity_hash,
+        previous_hash=prev_hash,
         computed_hash=computed_hash,
         message=message
     )
