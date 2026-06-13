@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 class TrendAnalyzer:
     def __init__(self):
-        self._word_pattern = re.compile(r'\w+')
+        self._word_re = re.compile(r'\w+')
         self.stop_words = {
             "the", "a", "an", "in", "on", "at", "to", "for", "of", "and", "is", "are",
             "was", "were", "this", "that", "it", "with", "from", "by", "as", "be",
@@ -51,15 +51,9 @@ class TrendAnalyzer:
         Optimized: Batch join and lowercasing reduces string object creation overhead.
         Using pre-compiled regex for faster tokenization.
         """
-        if not issues:
-            return []
-
-        # Optimization: Joining before lowercasing is faster for large sets
         text = " ".join([issue.description for issue in issues if issue.description]).lower()
-
-        # Using pre-compiled regex and faster findall (no word boundaries needed for .split() style behavior)
-        words = self._word_regex.findall(text)
-
+        # Simple tokenization: remove punctuation and split by whitespace
+        words = self._word_re.findall(text)
         filtered_words = [w for w in words if w not in self.stop_words and len(w) > 2 and not w.isdigit()]
 
         counter = Counter(filtered_words)
