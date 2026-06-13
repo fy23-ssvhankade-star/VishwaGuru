@@ -94,6 +94,6 @@
 **Learning:** Performing multiple sequential database queries to verify cryptographically chained records (e.g., fetching a record and then its associated token/metadata from another table) introduces unnecessary latency and increases database load.
 **Action:** Consolidate associated data retrieval into a single SQL `JOIN` query within the verification hot-path. This reduces database round-trips and improves end-to-end latency for blockchain-style integrity checks.
 
-## 2025-05-15 - Tokenizer Implementation Performance
-**Learning:** Benchmarking different Python string tokenization strategies in `CivicRAG` showed that `re.compile(r'[^a-z0-9\s]').sub('', text.lower()).split()` is ~35% faster than `re.findall(r'[a-z0-9]+', text.lower())` for standard civic policy descriptions. The overhead of creating many small strings in `findall` exceeded the cost of a single `sub` and `split`.
-**Action:** Always benchmark specific string processing alternatives in hot paths; the most intuitive "optimized" regex approach isn't always the fastest in Python's implementation.
+## 2026-05-25 - Group-By Consolidation for Single Scan
+**Learning:** Consolidating multiple database aggregate queries into a single query using SQLAlchemy `func.sum(case(...))` for categorical counts alongside other aggregates (like `avg` and `count(distinct)`) measurably improves performance by reducing database roundtrips and redundant table scans.
+**Action:** Use a single SQLAlchemy query with `func.count(func.distinct())`, `func.avg()`, and `func.sum(case(...))` to calculate all metrics in one go when calculating global statistics.
