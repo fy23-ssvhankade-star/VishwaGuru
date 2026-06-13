@@ -93,6 +93,7 @@
 ## 2026-05-20 - Joined Queries for Integrity Verification
 **Learning:** Performing multiple sequential database queries to verify cryptographically chained records (e.g., fetching a record and then its associated token/metadata from another table) introduces unnecessary latency and increases database load.
 **Action:** Consolidate associated data retrieval into a single SQL `JOIN` query within the verification hot-path. This reduces database round-trips and improves end-to-end latency for blockchain-style integrity checks.
-## 2026-06-11 - Pre-compiled Regex for Keyword Extraction
-**Learning:** In bulk text analysis (like `TrendAnalyzer`), using a pre-compiled `re.compile(r'\w+')` with `.findall()` is significantly faster than the default `re.findall(r'\b\w+\b', ...)` while correctly handling word boundaries. Furthermore, batching string combinations (`" ".join(...)`) before lowercasing provides measurable performance improvements over lowercasing string segments individually.
-**Action:** Always pre-compile regular expressions used in loops or hot-paths. When extracting keywords using regex, prefer `\w+` over `\b\w+\b` for better execution speed. Batch string operations (like `join` and `lower`) to minimize overhead.
+
+## 2026-06-11 - Synchronized Blockchain Chaining for Followers
+**Learning:** Concurrent requests to follow a grievance can lead to race conditions in hash chaining if multiple threads read the same "last hash" before any of them commits the next one. This breaks the integrity of the blockchain.
+**Action:** Use a global `threading.Lock` to synchronize hash generation and database commits for chained records. Ensure the in-memory `last_hash_cache` is updated ONLY after a successful `db.commit()` within the lock to maintain consistency across requests.
