@@ -322,10 +322,11 @@ async def upload_visit_images(
     Optimized: Uses single-pass image processing (resize/strip EXIF) and non-blocking I/O.
     """
     try:
-        visit = (
-            db.query(FieldOfficerVisit).filter(FieldOfficerVisit.id == visit_id).first()
+        # Performance Optimization: Wrap blocking DB query in threadpool
+        visit = await run_in_threadpool(
+            lambda: db.query(FieldOfficerVisit).filter(FieldOfficerVisit.id == visit_id).first()
         )
-
+        
         if not visit:
             raise HTTPException(status_code=404, detail=f"Visit {visit_id} not found")
 
@@ -374,10 +375,15 @@ async def upload_visit_images(
             timestamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
             safe_filename = f"visit_{visit_id}_{timestamp}_{idx}.{extension}"
             file_path = os.path.join(VISIT_IMAGES_DIR, safe_filename)
+            
+            # Save file
+            # Performance Optimization: Wrap blocking File I/O in threadpool
+            def _save_image(p, c):
+                with open(p, 'wb') as f:
+                    f.write(c)
 
-            # Performance Boost: Offload blocking File I/O to threadpool
-            await run_in_threadpool(save_processed_image, image_bytes, file_path)
-
+            await run_in_threadpool(_save_image, file_path, content)
+            
             # Store relative path
             relative_path = os.path.join("data", "visit_images", safe_filename)
             image_paths.append(relative_path)
@@ -386,8 +392,8 @@ async def upload_visit_images(
         existing_images.extend(image_paths)
         visit.visit_images = existing_images
         visit.updated_at = datetime.now(timezone.utc)
-
-        # Performance Boost: Offload blocking DB commit to threadpool
+        
+        # Performance Optimization: Wrap blocking DB commit in threadpool
         await run_in_threadpool(db.commit)
         
         logger.info(f"Uploaded {len(images)} images for visit {visit_id}")
