@@ -50,12 +50,16 @@ def client(db_session):
 
 def test_blockchain_verification_success(client, db_session):
     # Create first issue
-    hash1_content = "First issue|Road|"
+    lat1, lon1 = 19.0760, 72.8777
+    lat1_str, lon1_str = f"{lat1:.7f}", f"{lon1:.7f}"
+    hash1_content = f"First issue|Road|{lat1_str}|{lon1_str}|"
     hash1 = hashlib.sha256(hash1_content.encode()).hexdigest()
 
     issue1 = Issue(
         description="First issue",
         category="Road",
+        latitude=lat1,
+        longitude=lon1,
         integrity_hash=hash1,
         previous_integrity_hash=""
     )
@@ -64,12 +68,16 @@ def test_blockchain_verification_success(client, db_session):
     db_session.refresh(issue1)
 
     # Create second issue chained to first
-    hash2_content = f"Second issue|Garbage|{hash1}"
+    lat2, lon2 = 18.5204, 73.8567
+    lat2_str, lon2_str = f"{lat2:.7f}", f"{lon2:.7f}"
+    hash2_content = f"Second issue|Garbage|{lat2_str}|{lon2_str}|{hash1}"
     hash2 = hashlib.sha256(hash2_content.encode()).hexdigest()
 
     issue2 = Issue(
         description="Second issue",
         category="Garbage",
+        latitude=lat2,
+        longitude=lon2,
         integrity_hash=hash2,
         previous_integrity_hash=hash1
     )
@@ -131,8 +139,10 @@ def test_blockchain_verification_failure(client, db_session):
     issue = Issue(
         description="Tampered issue",
         category="Road",
+        latitude=19.0,
+        longitude=72.0,
         integrity_hash="invalidhash",
-        previous_integrity_hash=""
+        previous_integrity_hash="someprevhash"
     )
     db_session.add(issue)
     db_session.commit()

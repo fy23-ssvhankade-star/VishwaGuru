@@ -178,16 +178,12 @@ async def create_issue(
             # Optimization: Use memory cache for last hash to eliminate DB lookup
             prev_hash = blockchain_last_hash_cache.get("last_integrity_hash")
 
-            if prev_hash is None:
-                # Cache miss: Fetch from DB using projected query
-                prev_issue = await run_in_threadpool(
-                    lambda: db.query(Issue.integrity_hash).order_by(Issue.id.desc()).first()
-                )
-                prev_hash = prev_issue[0] if prev_issue and prev_issue[0] else ""
-                blockchain_last_hash_cache.set(data=prev_hash, key="last_integrity_hash")
-
-            # Simple but effective SHA-256 chaining
-            hash_content = f"{description}|{category}|{prev_hash}"
+            # Performance Boost: Store previous hash directly to enable O(1) verification later
+            # Chaining logic: hash(description|category|lat|lon|prev_hash)
+            # Use fixed float formatting (:.7f) for coordinates to ensure hashing consistency
+            lat_str = f"{latitude:.7f}" if latitude is not None else "None"
+            lon_str = f"{longitude:.7f}" if longitude is not None else "None"
+            hash_content = f"{description}|{category}|{lat_str}|{lon_str}|{prev_hash}"
             integrity_hash = hashlib.sha256(hash_content.encode()).hexdigest()
 
             # RAG Retrieval (New)
@@ -635,15 +631,16 @@ def get_user_issues(
 async def verify_blockchain_integrity(issue_id: int, db: Session = Depends(get_db)):
     """
     Verify the cryptographic integrity of a report using the blockchain-style chaining.
-    Optimized: Uses column projection and denormalized previous hash to eliminate extra DB query.
+    Optimized: Uses O(1) retrieval of previous hash from the current record itself.
     """
-    # Fetch current issue data
-    # Optimized: Fetch previous_integrity_hash directly from current issue
+    # Performance Boost: Fetch all data needed for verification in a single query (O(1))
     current_issue = await run_in_threadpool(
         lambda: db.query(
             Issue.id,
             Issue.description,
             Issue.category,
+            Issue.latitude,
+            Issue.longitude,
             Issue.integrity_hash,
             Issue.previous_integrity_hash
         ).filter(Issue.id == issue_id).first()
@@ -652,21 +649,14 @@ async def verify_blockchain_integrity(issue_id: int, db: Session = Depends(get_d
     if not current_issue:
         raise HTTPException(status_code=404, detail="Issue not found")
 
-    # Use stored previous hash instead of querying the previous record
-    # This makes verification O(1) instead of requiring an index scan
-    if current_issue.previous_integrity_hash is not None:
-        prev_hash = current_issue.previous_integrity_hash
-    else:
-        # Fallback for legacy data (before migration)
-        # Fetch previous issue's integrity hash to verify the chain
-        prev_issue_hash = await run_in_threadpool(
-            lambda: db.query(Issue.integrity_hash).filter(Issue.id < issue_id).order_by(Issue.id.desc()).first()
-        )
-        prev_hash = prev_issue_hash[0] if prev_issue_hash and prev_issue_hash[0] else ""
+    # Use the stored previous hash instead of performing another database lookup
+    prev_hash = current_issue.previous_integrity_hash or ""
 
-    # Recompute hash based on current data and previous hash
-    # Chaining logic: hash(description|category|prev_hash)
-    hash_content = f"{current_issue.description}|{current_issue.category}|{prev_hash}"
+    # Recompute hash using the same format as creation
+    # Chaining logic: hash(description|category|lat|lon|prev_hash)
+    lat_str = f"{current_issue.latitude:.7f}" if current_issue.latitude is not None else "None"
+    lon_str = f"{current_issue.longitude:.7f}" if current_issue.longitude is not None else "None"
+    hash_content = f"{current_issue.description}|{current_issue.category}|{lat_str}|{lon_str}|{prev_hash}"
     computed_hash = hashlib.sha256(hash_content.encode()).hexdigest()
 
     is_valid = (computed_hash == current_issue.integrity_hash)
