@@ -18,6 +18,8 @@ class TrendAnalyzer:
             "issue", "problem", "complaint", "regarding", "please", "help", "fix",
             "near", "opposite", "behind", "front", "road", "street", "lane"
         }
+        # Pre-compile regex for faster tokenization in hot path
+        self._word_re = re.compile(r'\w+')
         # Pre-compile regex to extract words; \w+ is faster than \b\w+\b
         self._word_pattern = re.compile(r'\w+')
 
@@ -48,6 +50,10 @@ class TrendAnalyzer:
         """
         Extract top 5 most common keywords from issue descriptions.
         """
+        # Optimized: Batch join strings first, then lower() once
+        text = " ".join([issue.description for issue in issues if issue.description]).lower()
+        # Optimized: Use pre-compiled \w+ instead of re.findall(\b\w+\b)
+        words = self._word_re.findall(text)
         # Optimization: batch string segments into one `.join()` before `.lower()`,
         # and use pre-compiled \w+ regex for faster matching.
         text = " ".join([issue.description for issue in issues if issue.description]).lower()
