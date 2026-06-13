@@ -454,8 +454,8 @@ class ResolutionProofService:
         Returns:
             Verification result dictionary
         """
-        # Optimized: Use count() for total and fetch only the latest record
-        # This is O(1) in memory instead of loading all records with .all()
+        # Performance Boost: Optimized to fetch only the latest record using .first()
+        # instead of .all() to minimize database data transfer and memory overhead.
         evidence_count = db.query(ResolutionEvidence).filter(
             ResolutionEvidence.grievance_id == grievance_id
         ).count()
@@ -473,7 +473,7 @@ class ResolutionProofService:
                 "message": "No resolution evidence found for this grievance"
             }
 
-        # Fetch ONLY the most recent evidence record
+        # Use the most recent evidence
         evidence = db.query(ResolutionEvidence).filter(
             ResolutionEvidence.grievance_id == grievance_id
         ).order_by(ResolutionEvidence.id.desc()).first()
