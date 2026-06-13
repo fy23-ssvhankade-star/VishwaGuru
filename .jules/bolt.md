@@ -98,6 +98,6 @@
 **Learning:** Performing multiple sequential database queries to verify cryptographically chained records (e.g., fetching a record and then its associated token/metadata from another table) introduces unnecessary latency and increases database load.
 **Action:** Consolidate associated data retrieval into a single SQL `JOIN` query within the verification hot-path. This reduces database round-trips and improves end-to-end latency for blockchain-style integrity checks.
 
-## 2026-05-21 - Batch String Processing & Regex Pre-compilation
-**Learning:** In `TrendAnalyzer.analyze`, performing string transformations like `.lower()` on each element in a list comprehension before joining is less efficient than joining the strings first and then calling `.lower()` once on the result. Additionally, using `re.findall` with a raw string pattern incurs repeated compilation overhead compared to using a pre-compiled regex object's `.findall()` method.
-**Action:** Always batch string operations (join then transform) to reduce function call overhead and memory churn. Pre-compile regex patterns in the `__init__` of service classes to ensure peak performance in hot paths.
+## 2026-05-21 - Bitwise Set Intersection in Hot Paths
+**Learning:** In high-frequency set operations (like RAG Jaccard similarity), using the bitwise `&` operator for intersection is measurably faster than the `.intersection()` method as it avoids a method lookup and is implemented as a direct C-level operation.
+**Action:** Prefer `set_a & set_b` over `set_a.intersection(set_b)` in performance-critical hot paths to shave off microseconds in tight loops.
