@@ -102,6 +102,8 @@ def equirectangular_distance(
     return R * math.sqrt(x * x + y * y)
 
 
+DEG_TO_RAD = math.pi / 180.0
+
 def find_nearby_issues(
     issues: List[Issue],
     target_lat: float,
@@ -117,7 +119,7 @@ def find_nearby_issues(
         target_lat: Target latitude
         target_lon: Target longitude
         radius_meters: Search radius in meters (default 50m)
-        pre_filtered: If True, skips the bounding box pre-filter (useful if input is already filtered)
+        pre_filtered: Whether the issues list has already been spatially filtered by the caller
 
     Returns:
         List of tuples (issue, distance_meters) for issues within radius
@@ -133,13 +135,10 @@ def find_nearby_issues(
     # For larger distances, fallback to precise Haversine calculation.
     if radius_meters > 10000:
         for issue in issues:
-            lat = issue.latitude
-            lon = issue.longitude
-
-            if lat is None or lon is None:
+            if getattr(issue, 'latitude', None) is None or getattr(issue, 'longitude', None) is None:
                 continue
 
-            # Apply bounding box pre-filter if not already filtered
+            # Apply bounding box pre-filter
             if not pre_filtered:
                 if issue.latitude < min_lat or issue.latitude > max_lat or \
                    issue.longitude < min_lon or issue.longitude > max_lon:
@@ -153,46 +152,38 @@ def find_nearby_issues(
         R = 6371000.0
         radius_sq = radius_meters * radius_meters
 
-        target_lat_rad = math.radians(target_lat)
-        target_lon_rad = math.radians(target_lon)
+        target_lat_rad = target_lat * DEG_TO_RAD
         # Cosine term is constant for the target latitude in equirectangular projection
         cos_lat = math.cos(target_lat_rad)
 
-        # Optimization: Pre-calculate scaling factor
-        DEG_TO_RAD = math.pi / 180.0
+        # Hoist constants to avoid inner-loop recalculation
+        R_RAD_SQ = (R * DEG_TO_RAD) ** 2
 
         for issue in issues:
-            lat = issue.latitude
-            lon = issue.longitude
-
-            if lat is None or lon is None:
+            if getattr(issue, 'latitude', None) is None or getattr(issue, 'longitude', None) is None:
                 continue
 
-            # Apply bounding box pre-filter if not already filtered
+            # Apply bounding box pre-filter
             if not pre_filtered:
                 if issue.latitude < min_lat or issue.latitude > max_lat or \
                    issue.longitude < min_lon or issue.longitude > max_lon:
                     continue
 
-            # Inline conversion to radians
-            lat_rad = math.radians(lat)
-            lon_rad = math.radians(lon)
-
-            dlat = lat_rad - target_lat_rad
-            dlon = lon_rad - target_lon_rad
+            dlat = issue.latitude - target_lat
+            dlon = issue.longitude - target_lon
 
             # Handle longitude wrapping (dateline crossing)
-            if dlon > math.pi:
-                dlon -= 2 * math.pi
-            elif dlon < -math.pi:
-                dlon += 2 * math.pi
+            if dlon > 180.0:
+                dlon -= 360.0
+            elif dlon < -180.0:
+                dlon += 360.0
 
             x = dlon * cos_lat
             y = dlat
 
             # Squared distance check avoids expensive sqrt()
-            # (x*R)^2 + (y*R)^2 = R^2 * (x^2 + y^2)
-            dist_sq = (x * x + y * y) * R * R
+            # Equivalent to equirectangular distance using degree deltas
+            dist_sq = (x*x + y*y) * R_RAD_SQ
 
             if dist_sq <= radius_sq:
                 nearby_issues.append((issue, math.sqrt(dist_sq)))
