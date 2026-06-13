@@ -20,6 +20,8 @@ class TrendAnalyzer:
         }
         # Pre-compile regex for faster tokenization in hot path
         self._word_re = re.compile(r'\w+')
+        # Pre-compile regex to extract words; \w+ is faster than \b\w+\b
+        self._word_pattern = re.compile(r'\w+')
 
     def analyze(self, issues: List[Issue]) -> Dict[str, Any]:
         """
@@ -52,6 +54,11 @@ class TrendAnalyzer:
         text = " ".join([issue.description for issue in issues if issue.description]).lower()
         # Optimized: Use pre-compiled \w+ instead of re.findall(\b\w+\b)
         words = self._word_re.findall(text)
+        # Optimization: batch string segments into one `.join()` before `.lower()`,
+        # and use pre-compiled \w+ regex for faster matching.
+        text = " ".join([issue.description for issue in issues if issue.description]).lower()
+        # Simple tokenization: remove punctuation and split by whitespace
+        words = self._word_pattern.findall(text)
         filtered_words = [w for w in words if w not in self.stop_words and len(w) > 2 and not w.isdigit()]
 
         counter = Counter(filtered_words)
