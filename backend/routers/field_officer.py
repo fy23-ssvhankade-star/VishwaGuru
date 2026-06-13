@@ -438,21 +438,22 @@ def get_visit_statistics(db: Session = Depends(get_db)):
             return Response(content=cached_json, media_type="application/json")
 
         # Optimized: Use a single aggregate query to fetch multiple statistics in one database roundtrip
-        stats = db.query(
-            func.count(FieldOfficerVisit.id).label('total_visits'),
+        agg_stats = db.query(
             func.count(func.distinct(FieldOfficerVisit.officer_email)).label('unique_officers'),
             func.avg(FieldOfficerVisit.distance_from_site).label('avg_distance'),
+            func.count(FieldOfficerVisit.id).label('total_visits'),
             func.sum(case((FieldOfficerVisit.verified_at.isnot(None), 1), else_=0)).label('verified_visits'),
             func.sum(case((FieldOfficerVisit.within_geofence == True, 1), else_=0)).label('within_geofence_count'),
             func.sum(case((FieldOfficerVisit.within_geofence == False, 1), else_=0)).label('outside_geofence_count')
         ).first()
 
-        total_visits = stats.total_visits or 0
-        verified_visits = int(stats.verified_visits or 0)
-        within_geofence_count = int(stats.within_geofence_count or 0)
-        outside_geofence_count = int(stats.outside_geofence_count or 0)
-        unique_officers = stats.unique_officers or 0
-        average_distance = stats.avg_distance
+        total_visits = int(agg_stats.total_visits or 0) if agg_stats else 0
+        verified_visits = int(agg_stats.verified_visits or 0) if agg_stats else 0
+        within_geofence_count = int(agg_stats.within_geofence_count or 0) if agg_stats else 0
+        outside_geofence_count = int(agg_stats.outside_geofence_count or 0) if agg_stats else 0
+
+        unique_officers = agg_stats.unique_officers or 0 if agg_stats else 0
+        average_distance = agg_stats.avg_distance if agg_stats else None
         
         # Round to 2 decimals if not None
         if average_distance is not None:
