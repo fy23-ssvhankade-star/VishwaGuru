@@ -69,17 +69,18 @@ class ThreadSafeCache:
             self._data.move_to_end(key)
             self._timestamps[key] = current_time
             self._timestamps.move_to_end(key)
-            
-            logger.debug(f"Cache entry set, current size={len(self._data)}")
-    
+
+            # Avoid logging sensitive keys
+            # logger.debug(f"Cache set: key={key}, size={len(self._data)}")
+
     def invalidate(self, key: str = "default") -> None:
         """
         Thread-safe invalidation of specific key.
         """
         with self._lock:
             self._remove_key(key)
-            logger.debug("Cache entry invalidated")
-    
+            logger.debug(f"Cache invalidated: key={key}")
+
     def clear(self) -> None:
         """
         Thread-safe clear all cache entries.
@@ -152,7 +153,7 @@ class ThreadSafeCache:
         try:
             lru_key, _ = self._data.popitem(last=False)
             self._timestamps.pop(lru_key, None)
-            logger.debug("Evicted LRU cache entry")
+            logger.debug(f"Evicted LRU cache entry: {lru_key}")
         except KeyError:
             pass
 
@@ -188,7 +189,6 @@ user_upload_cache = ThreadSafeCache(
 blockchain_last_hash_cache = ThreadSafeCache(ttl=3600, max_size=1)
 grievance_last_hash_cache = ThreadSafeCache(ttl=3600, max_size=1)
 resolution_last_hash_cache = ThreadSafeCache(ttl=3600, max_size=1)
-token_last_hash_cache = ThreadSafeCache(ttl=3600, max_size=1)
 visit_last_hash_cache = ThreadSafeCache(ttl=3600, max_size=2)
 audit_last_hash_cache = ThreadSafeCache(ttl=3600, max_size=2)
 evidence_audit_last_hash_cache = ThreadSafeCache(ttl=3600, max_size=1)

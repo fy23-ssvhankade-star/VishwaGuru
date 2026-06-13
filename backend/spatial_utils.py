@@ -28,15 +28,18 @@ def get_bounding_box(
     Calculate the bounding box coordinates for a given radius.
     Returns (min_lat, max_lat, min_lon, max_lon).
     """
-    # Pre-calculated constant: 180 / (6378137.0 * math.pi)
-    LAT_OFFSET_MULT = 8.983152841195214e-06
+    # Earth's radius in meters
+    R = 6378137.0
 
-    # Offset positions in decimal degrees
-    lat_offset = radius_meters * LAT_OFFSET_MULT
-
+    # Coordinate offsets in radians
     # Prevent division by zero at poles
     effective_lat = max(min(lat, 89.9), -89.9)
-    lon_offset = lat_offset / math.cos(math.radians(effective_lat))
+    dlat = radius_meters / R
+    dlon = radius_meters / (R * math.cos(math.pi * effective_lat / 180.0))
+
+    # Offset positions in decimal degrees
+    lat_offset = dlat * 180.0 / math.pi
+    lon_offset = dlon * 180.0 / math.pi
 
     min_lat = lat - lat_offset
     max_lat = lat + lat_offset
@@ -80,27 +83,24 @@ def equirectangular_distance(
     Returns distance in meters.
     """
     R = 6371000.0  # Earth's radius in meters
-    deg_to_rad = math.pi / 180.0
 
     # Convert decimal degrees to radians
-    lat1_rad = lat1 * deg_to_rad
-    lat2_rad = lat2 * deg_to_rad
+    lat1_rad, lat2_rad = math.radians(lat1), math.radians(lat2)
+    lon1_rad, lon2_rad = math.radians(lon1), math.radians(lon2)
 
     # Calculate differences
     dlat = lat2_rad - lat1_rad
-    dlon = (lon2 - lon1) * deg_to_rad
+    dlon = lon2_rad - lon1_rad
 
     # Handle longitude wrapping (dateline crossing)
     # Normalize dlon to [-pi, pi]
     dlon = (dlon + math.pi) % (2 * math.pi) - math.pi
 
-    x = dlon * math.cos((lat1_rad + lat2_rad) * 0.5)
+    x = dlon * math.cos((lat1_rad + lat2_rad) / 2)
     y = dlat
 
     return R * math.sqrt(x * x + y * y)
 
-
-DEG_TO_RAD = math.pi / 180.0
 
 def find_nearby_issues(
     issues: List[Issue],
@@ -116,24 +116,18 @@ def find_nearby_issues(
         target_lat: Target latitude
         target_lon: Target longitude
         radius_meters: Search radius in meters (default 50m)
-        pre_filtered: If True, skips the bounding box pre-filter (caller must pre-filter)
 
     Returns:
         List of tuples (issue, distance_meters) for issues within radius
     """
     nearby_issues = []
 
-    # Optimization: pre-filter using a bounding box to avoid math on distant points
-    min_lat, max_lat, min_lon, max_lon = get_bounding_box(
-        target_lat, target_lon, radius_meters
-    )
-
     # Optimization: Use inline Equirectangular approximation for short distances (< 10km)
     # This avoids function call overhead and repeated radian conversions.
     # For larger distances, fallback to precise Haversine calculation.
     if radius_meters > 10000:
         for issue in issues:
-            if getattr(issue, 'latitude', None) is None or getattr(issue, 'longitude', None) is None:
+            if issue.latitude is None or issue.longitude is None:
                 continue
             distance = haversine_distance(
                 target_lat, target_lon, issue.latitude, issue.longitude
@@ -142,46 +136,40 @@ def find_nearby_issues(
                 nearby_issues.append((issue, distance))
     else:
         # Optimized path for common case (small radius)
+        R = 6371000.0
         radius_sq = radius_meters * radius_meters
-        deg_to_rad = math.pi / 180.0
 
-        # Precalculate constants in meters per degree for the target latitude
-        # This avoids expensive math.radians() calls inside the loop for both lat and lon
-        meters_per_deg_lat = deg_to_rad * R
-        meters_per_deg_lon = meters_per_deg_lat * math.cos(target_lat * deg_to_rad)
+        target_lat_rad = math.radians(target_lat)
+        target_lon_rad = math.radians(target_lon)
+        # Cosine term is constant for the target latitude in equirectangular projection
+        cos_lat = math.cos(target_lat_rad)
 
         for issue in issues:
             if issue.latitude is None or issue.longitude is None:
                 continue
 
-            # Calculate differences in degrees
-            dlat = issue.latitude - target_lat
-            dlon = issue.longitude - target_lon
+            # Inline conversion to radians
+            lat_rad = math.radians(issue.latitude)
+            lon_rad = math.radians(issue.longitude)
 
-            # Handle dateline crossing in degrees
-            if dlon > 180.0:
-                dlon -= 360.0
-            elif dlon < -180.0:
-                dlon += 360.0
+            dlat = lat_rad - target_lat_rad
+            dlon = lon_rad - target_lon_rad
 
-            # Convert degree differences directly to meters using precalculated factors
-            y = dlat * meters_per_deg_lat
-            x = dlon * meters_per_deg_lon
+            # Handle longitude wrapping (dateline crossing)
+            if dlon > math.pi:
+                dlon -= 2 * math.pi
+            elif dlon < -math.pi:
+                dlon += 2 * math.pi
 
-            dist_sq = x * x + y * y
+            x = dlon * cos_lat
+            y = dlat
 
-                # Handle longitude wrapping (dateline crossing)
-                if dlon > 180.0:
-                    dlon -= 360.0
-                elif dlon < -180.0:
-                    dlon += 360.0
+            # Squared distance check avoids expensive sqrt()
+            # (x*R)^2 + (y*R)^2 = R^2 * (x^2 + y^2)
+            dist_sq = (x * x + y * y) * R * R
 
-                x = dlon * meters_per_degree_lon
-                y = dlat * meters_per_degree_lat
-                dist_sq = (x*x + y*y)
-
-                if dist_sq <= radius_sq:
-                    nearby_issues.append((issue, math.sqrt(dist_sq)))
+            if dist_sq <= radius_sq:
+                nearby_issues.append((issue, math.sqrt(dist_sq)))
 
     # Sort by distance (closest first)
     nearby_issues.sort(key=lambda x: x[1])

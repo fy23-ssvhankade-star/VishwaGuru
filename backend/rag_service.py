@@ -86,6 +86,8 @@ class CivicRAG:
         len_query = len(query_tokens)
         if not len_query:
             return None
+
+        query_len = len(query_tokens)
         best_score = 0.0
         best_formatted = None
 
@@ -93,7 +95,6 @@ class CivicRAG:
             policy_tokens = prepared["content_tokens"]
 
             # Optimization 1: Fast early-exit for zero overlap
-            # Optimized: Early exit using isdisjoint which is faster than computing intersection
             if query_tokens.isdisjoint(policy_tokens):
                 continue
 
