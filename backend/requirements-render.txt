@@ -5,6 +5,8 @@ sqlalchemy
 python-telegram-bot
 google-generativeai
 python-multipart
+psycopg2-binary
+python-magic
 huggingface-hub
 httpx
 pywebpush
