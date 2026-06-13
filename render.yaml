@@ -26,8 +26,6 @@ services:
       # Database URL (use Neon, Supabase, or similar)
       - key: DATABASE_URL
         sync: false
-      - key: SECRET_KEY
-        sync: false
       # Application settings
       - key: ENVIRONMENT
         value: production

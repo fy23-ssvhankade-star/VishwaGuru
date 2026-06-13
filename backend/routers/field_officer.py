@@ -15,16 +15,15 @@ from datetime import datetime, timezone
 from backend.database import get_db
 from backend.models import FieldOfficerVisit, Issue, Grievance, User
 from backend.dependencies import get_current_active_user
-from backend.cache import visit_last_hash_cache
 from backend.schemas import (
     OfficerCheckInRequest,
     OfficerCheckOutRequest,
     FieldOfficerVisitResponse,
     PublicFieldOfficerVisitResponse,
+    BlockchainVerificationResponse,
     VisitHistoryResponse,
     VisitStatsResponse,
-    VisitImageUploadResponse,
-    BlockchainVerificationResponse
+    VisitImageUploadResponse
 )
 from backend.geofencing_service import (
     is_within_geofence,
@@ -34,7 +33,6 @@ from backend.geofencing_service import (
     get_geofencing_service
 )
 from backend.cache import visit_last_hash_cache
-from backend.schemas import BlockchainVerificationResponse
 
 logger = logging.getLogger(__name__)
 
@@ -97,21 +95,8 @@ def officer_check_in(request: OfficerCheckInRequest, db: Session = Depends(get_d
             radius_meters=request.geofence_radius_meters or 100.0
         )
         
-        # Create visit record
-        # Fix: Strip milliseconds and timezone for deterministic hashing
-        check_in_time = datetime.now(timezone.utc).replace(microsecond=0)
-
-        # Blockchain feature: retrieve previous hash for chaining
-        # Use cache for O(1) retrieval
-        prev_hash = visit_last_hash_cache.get("last_hash")
-        if prev_hash is None:
-            # Cache miss: Fetch from DB
-            prev_visit = db.query(FieldOfficerVisit.visit_hash).order_by(FieldOfficerVisit.id.desc()).first()
-            prev_hash = prev_visit[0] if prev_visit and prev_visit[0] else ""
-            visit_last_hash_cache.set(data=prev_hash, key="last_hash")
-        
-        # Blockchain Chaining: Fetch latest visit hash
-        # Use high-performance cache with DB fallback
+        # Blockchain feature: calculate integrity hash for the visit
+        # Performance Boost: Use thread-safe cache to eliminate DB query for last hash
         prev_hash = visit_last_hash_cache.get("last_hash")
         if prev_hash is None:
             # Cache miss: Fetch only the last hash from DB
@@ -119,17 +104,20 @@ def officer_check_in(request: OfficerCheckInRequest, db: Session = Depends(get_d
             prev_hash = prev_visit[0] if prev_visit and prev_visit[0] else ""
             visit_last_hash_cache.set(data=prev_hash, key="last_hash")
 
+        # Create visit record
+        check_in_time = datetime.now(timezone.utc)
+        
         visit_data = {
             'issue_id': request.issue_id,
             'officer_email': request.officer_email,
             'check_in_latitude': request.check_in_latitude,
             'check_in_longitude': request.check_in_longitude,
-            'check_in_time': check_in_time, # Pass datetime object to helper
+            'check_in_time': check_in_time.isoformat(),
             'visit_notes': request.visit_notes or '',
             'previous_visit_hash': prev_hash
         }
         
-        # Generate immutable HMAC hash with chaining
+        # Generate immutable hash with chaining
         visit_hash = generate_visit_hash(visit_data)
         
         new_visit = FieldOfficerVisit(
@@ -152,20 +140,11 @@ def officer_check_in(request: OfficerCheckInRequest, db: Session = Depends(get_d
             is_public=True
         )
         
-        new_visit.previous_visit_hash = prev_hash
-
         db.add(new_visit)
         db.commit()
-
-        # Update cache for next visit ONLY after successful commit
-        visit_last_hash_cache.set(data=visit_hash, key="last_hash")
-
         db.refresh(new_visit)
-
-        # Update cache after successful commit
-        visit_last_hash_cache.set(data=visit_hash, key="last_hash")
         
-        # Update cache for next visit after successful commit
+        # Update cache after successful commit
         visit_last_hash_cache.set(data=visit_hash, key="last_hash")
 
         logger.info(
@@ -191,10 +170,10 @@ def officer_check_in(request: OfficerCheckInRequest, db: Session = Depends(get_d
             visit_images=new_visit.visit_images,
             visit_duration_minutes=new_visit.visit_duration_minutes,
             status=new_visit.status,
-            visit_hash=new_visit.visit_hash,
-            previous_visit_hash=new_visit.previous_visit_hash,
             verified_by=new_visit.verified_by,
             verified_at=new_visit.verified_at,
+            visit_hash=new_visit.visit_hash,
+            previous_visit_hash=new_visit.previous_visit_hash,
             is_public=new_visit.is_public,
             created_at=new_visit.created_at
         )
@@ -268,10 +247,10 @@ def officer_check_out(request: OfficerCheckOutRequest, db: Session = Depends(get
             visit_images=visit.visit_images,
             visit_duration_minutes=visit.visit_duration_minutes,
             status=visit.status,
-            visit_hash=visit.visit_hash,
-            previous_visit_hash=visit.previous_visit_hash,
             verified_by=visit.verified_by,
             verified_at=visit.verified_at,
+            visit_hash=visit.visit_hash,
+            previous_visit_hash=visit.previous_visit_hash,
             is_public=visit.is_public,
             created_at=visit.created_at
         )
@@ -520,6 +499,7 @@ def verify_visit(
         logger.info(f"Visit {visit_id} verified by {verifier_email}")
         
         return {"message": "Visit verified successfully", "visit_id": visit_id}
+        
     except HTTPException:
         raise
     except Exception as e:
@@ -528,57 +508,62 @@ def verify_visit(
 
 
 @router.get("/field-officer/{visit_id}/blockchain-verify", response_model=BlockchainVerificationResponse)
-def verify_visit_blockchain_integrity(visit_id: int, db: Session = Depends(get_db)):
+def verify_visit_blockchain(visit_id: int, db: Session = Depends(get_db)):
     """
-    Verify the cryptographic integrity of a visit record using O(1) single-record verification.
+    Verify the cryptographic integrity of a field officer visit using blockchain-style chaining.
+    Optimized: Uses previous_visit_hash column for O(1) verification.
     """
     try:
-        visit = db.query(
-            FieldOfficerVisit.issue_id,
-            FieldOfficerVisit.officer_email,
-            FieldOfficerVisit.check_in_latitude,
-            FieldOfficerVisit.check_in_longitude,
-            FieldOfficerVisit.check_in_time,
-            FieldOfficerVisit.visit_notes,
-            FieldOfficerVisit.visit_hash,
-            FieldOfficerVisit.previous_visit_hash
-        ).filter(FieldOfficerVisit.id == visit_id).first()
+        visit = db.query(FieldOfficerVisit).filter(FieldOfficerVisit.id == visit_id).first()
 
         if not visit:
             raise HTTPException(status_code=404, detail="Visit not found")
 
-        # Determine previous hash (O(1) from stored column)
-        prev_hash = visit.previous_visit_hash or ""
-
-        # Reconstruct visit data for hash verification
-        # Normalization of time must match the generation logic
+        # Chaining logic: previous_visit_hash is already stored in the record
+        # Chaining data components must match generate_visit_hash
         visit_data = {
             'issue_id': visit.issue_id,
             'officer_email': visit.officer_email,
             'check_in_latitude': visit.check_in_latitude,
             'check_in_longitude': visit.check_in_longitude,
-            'check_in_time': visit.check_in_time, # Pass datetime object
+            'check_in_time': visit.check_in_time,
             'visit_notes': visit.visit_notes or '',
-            'previous_visit_hash': prev_hash
+            'previous_visit_hash': visit.previous_visit_hash or ''
         }
 
-        # Verify integrity using the service helper
         is_valid = verify_visit_integrity(visit_data, visit.visit_hash)
-        computed_hash = generate_visit_hash(visit_data)
 
-        message = (
-            "Integrity verified. This visit record is cryptographically sealed and part of an immutable chain."
-            if is_valid
-            else "Integrity check failed! The record data does not match its cryptographic seal."
-        )
+        # Also verify the link to previous record's hash if it exists
+        if is_valid and visit.previous_visit_hash:
+            # For O(1) we trust the stored previous_visit_hash for the current record's seal,
+            # but we can also check if a record with that hash actually exists
+            prev_exists = db.query(FieldOfficerVisit.id).filter(
+                FieldOfficerVisit.visit_hash == visit.previous_visit_hash
+            ).first()
+            if not prev_exists:
+                # This doesn't mean the CURRENT record is tampered, but the CHAIN is broken
+                message = "Integrity verified, but chain link refers to a missing previous record."
+                return BlockchainVerificationResponse(
+                    is_valid=True,
+                    current_hash=visit.visit_hash,
+                    computed_hash=visit.visit_hash, # verify_visit_integrity already checked this
+                    message=message
+                )
+
+        if is_valid:
+            message = "Integrity verified. This visit record is cryptographically sealed and has not been tampered with."
+        else:
+            message = "Integrity check failed! The visit data does not match its cryptographic seal."
 
         return BlockchainVerificationResponse(
             is_valid=is_valid,
             current_hash=visit.visit_hash,
-            computed_hash=computed_hash,
+            computed_hash=generate_visit_hash(visit_data),
             message=message
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error verifying visit blockchain for {visit_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to verify visit integrity")
+        logger.error(f"Error verifying visit {visit_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Verification failed")

@@ -52,16 +52,12 @@ class ThreadSafeCache:
         with self._lock:
             current_time = time.time()
             
-            # We don't need to aggressively clean up expired entries on every `set`
-            # since we have max_size eviction and `get` also checks for expiration.
-            # This speeds up hot-path cache population.
+            # Clean up expired entries before adding new one
+            self._cleanup_expired(current_time)
             
             # If cache is full, evict least recently used entry
             if len(self._data) >= self._max_size and key not in self._data:
-                # First try to clean up expired to free space, if still full, then evict LRU
-                self._cleanup_expired(current_time)
-                if len(self._data) >= self._max_size:
-                    self._evict_lru()
+                self._evict_lru()
             
             # Set new data atomically (adds to end, updating if exists)
             self._data[key] = data
@@ -178,7 +174,6 @@ recent_issues_cache = ThreadSafeCache(ttl=300, max_size=20)  # 5 minutes TTL, ma
 nearby_issues_cache = ThreadSafeCache(ttl=60, max_size=100)  # 1 minute TTL, max 100 entries
 user_upload_cache = ThreadSafeCache(ttl=3600, max_size=1000)  # 1 hour TTL for upload limits
 blockchain_last_hash_cache = ThreadSafeCache(ttl=3600, max_size=1)
-visit_last_hash_cache = ThreadSafeCache(ttl=3600, max_size=2)
 grievance_last_hash_cache = ThreadSafeCache(ttl=3600, max_size=1)
-visit_last_hash_cache = ThreadSafeCache(ttl=3600, max_size=2)
+visit_last_hash_cache = ThreadSafeCache(ttl=3600, max_size=2)  # For O(1) visit chaining
 user_issues_cache = ThreadSafeCache(ttl=300, max_size=50) # 5 minutes TTL

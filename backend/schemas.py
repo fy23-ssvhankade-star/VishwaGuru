@@ -513,10 +513,10 @@ class FieldOfficerVisitResponse(BaseModel):
     visit_images: Optional[List[str]] = Field(None, description="Visit image paths")
     visit_duration_minutes: Optional[int] = Field(None, description="Visit duration")
     status: str = Field(..., description="Visit status")
-    visit_hash: Optional[str] = Field(None, description="Integrity hash")
-    previous_visit_hash: Optional[str] = Field(None, description="Previous visit hash")
     verified_by: Optional[str] = Field(None, description="Verified by")
     verified_at: Optional[datetime] = Field(None, description="Verification timestamp")
+    visit_hash: Optional[str] = Field(None, description="Integrity hash")
+    previous_visit_hash: Optional[str] = Field(None, description="Previous visit hash")
     is_public: bool = Field(..., description="Public visibility")
     created_at: datetime = Field(..., description="Creation timestamp")
 
@@ -543,6 +543,8 @@ class PublicFieldOfficerVisitResponse(BaseModel):
     status: str = Field(..., description="Visit status")
     verified_by: Optional[str] = Field(None, description="Verified by")
     verified_at: Optional[datetime] = Field(None, description="Verification timestamp")
+    visit_hash: Optional[str] = Field(None, description="Integrity hash")
+    previous_visit_hash: Optional[str] = Field(None, description="Previous visit hash")
     is_public: bool = Field(..., description="Public visibility")
     created_at: datetime = Field(..., description="Creation timestamp")
 
