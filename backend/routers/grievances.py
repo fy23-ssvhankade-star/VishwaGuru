@@ -27,6 +27,8 @@ from backend.schemas import (
     ClosureStatusResponse,
     BlockchainVerificationResponse,
 )
+from backend.cache import grievances_list_cache, grievance_stats_cache
+from fastapi import Response
 from backend.grievance_service import GrievanceService
 from backend.closure_service import ClosureService
 from backend.cache import grievance_list_cache, escalation_stats_cache
@@ -46,12 +48,12 @@ def get_grievances(
 ):
     """
     Get list of grievances with escalation history.
-    Optimized: Uses selectinload for audit_logs and serialization caching.
+    Optimized: Uses serialization caching and selectinload for audit_logs.
     """
     try:
-        # Check cache first
+        # Check cache
         cache_key = f"grievances_{status}_{category}_{limit}_{offset}"
-        cached_json = grievance_list_cache.get(cache_key)
+        cached_json = grievances_list_cache.get(cache_key)
         if cached_json:
             return Response(content=cached_json, media_type="application/json")
 
@@ -100,9 +102,9 @@ def get_grievances(
                 "escalation_history": escalation_history
             })
 
-        # Cache pre-serialized JSON to bypass Pydantic overhead
+        # Cache serialized JSON to bypass Pydantic overhead on hits
         json_data = json.dumps(result)
-        grievance_list_cache.set(json_data, cache_key)
+        grievances_list_cache.set(json_data, cache_key)
 
         return Response(content=json_data, media_type="application/json")
 
@@ -172,13 +174,19 @@ def get_grievance(grievance_id: int, db: Session = Depends(get_db)):
 def get_escalation_stats(db: Session = Depends(get_db)):
     """
     Get escalation statistics.
-    Optimized: Uses a single multi-metric aggregate query and serialization caching.
+    Optimized: Uses serialization caching and a single GROUP BY query.
     """
     try:
-        # Check cache first
-        cached_json = escalation_stats_cache.get("global_stats")
+        # Check cache
+        cached_json = grievance_stats_cache.get("default")
         if cached_json:
             return Response(content=cached_json, media_type="application/json")
+
+        # Perform aggregation in a single query for performance
+        status_counts = db.query(
+            Grievance.status,
+            func.count(Grievance.id)
+        ).group_by(Grievance.status).all()
 
         # Perform aggregation in a single query for maximum performance
         # Using func.sum(case(...)) is faster than group_by for a fixed set of statuses
@@ -196,7 +204,7 @@ def get_escalation_stats(db: Session = Depends(get_db)):
 
         escalation_rate = (escalated_grievances / total_grievances * 100) if total_grievances > 0 else 0
 
-        data = {
+        stats_data = {
             "total_grievances": total_grievances,
             "escalated_grievances": escalated_grievances,
             "active_grievances": active_grievances,
@@ -204,9 +212,9 @@ def get_escalation_stats(db: Session = Depends(get_db)):
             "escalation_rate": escalation_rate
         }
 
-        # Cache pre-serialized JSON to bypass Pydantic overhead
-        json_data = json.dumps(data)
-        escalation_stats_cache.set(json_data, "global_stats")
+        # Cache serialized JSON to bypass Pydantic overhead on hits
+        json_data = json.dumps(stats_data)
+        grievance_stats_cache.set(json_data, "default")
 
         return Response(content=json_data, media_type="application/json")
 

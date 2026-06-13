@@ -450,5 +450,9 @@ class EvidenceAuditLog(Base):
     integrity_hash = Column(String, nullable=True)
     previous_integrity_hash = Column(String, nullable=True, index=True)
 
+    # Blockchain integrity fields
+    integrity_hash = Column(String, nullable=True)
+    previous_integrity_hash = Column(String, nullable=True, index=True)
+
     # Relationship
     evidence = relationship("ResolutionEvidence", back_populates="audit_logs")
