@@ -94,6 +94,6 @@
 **Learning:** Performing multiple sequential database queries to verify cryptographically chained records (e.g., fetching a record and then its associated token/metadata from another table) introduces unnecessary latency and increases database load.
 **Action:** Consolidate associated data retrieval into a single SQL `JOIN` query within the verification hot-path. This reduces database round-trips and improves end-to-end latency for blockchain-style integrity checks.
 
-## 2026-05-25 - Group-By Consolidation for Single Scan
-**Learning:** Consolidating multiple database aggregate queries into a single query using SQLAlchemy `func.sum(case(...))` for categorical counts alongside other aggregates (like `avg` and `count(distinct)`) measurably improves performance by reducing database roundtrips and redundant table scans.
-**Action:** Use a single SQLAlchemy query with `func.count(func.distinct())`, `func.avg()`, and `func.sum(case(...))` to calculate all metrics in one go when calculating global statistics.
+## 2025-05-18 - Database-level Text Truncation
+**Learning:** Fetching full, potentially large text fields (like issue descriptions) from the database only to truncate them in the application layer is inefficient. It increases database I/O, network bandwidth, and application memory usage.
+**Action:** Use `func.substr(Model.column, 1, length).label("column")` in SQLAlchemy queries to truncate text at the source. This significantly reduces the data payload in list views and high-traffic endpoints.
