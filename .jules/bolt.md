@@ -94,10 +94,6 @@
 **Learning:** Performing multiple sequential database queries to verify cryptographically chained records (e.g., fetching a record and then its associated token/metadata from another table) introduces unnecessary latency and increases database load.
 **Action:** Consolidate associated data retrieval into a single SQL `JOIN` query within the verification hot-path. This reduces database round-trips and improves end-to-end latency for blockchain-style integrity checks.
 
-## 2026-06-08 - String Joining & Regex Findall
-**Learning:** In bulk string operations, iterating and applying `.lower()` to each item inside a list comprehension creates unnecessary intermediate string objects. Similarly, `re.findall(r'\b\w+\b', ...)` is slower than pre-compiling `re.compile(r'\w+')` and using `.findall()` because the latter avoids the extra word boundary checks while still effectively tokenizing words in most alphanumeric texts.
-**Action:** For simple keyword extraction across multiple texts, batch the strings using `.join()` *before* applying `.lower()` to the combined text. Use `re.compile(r'\w+')` to quickly extract alphanumeric tokens instead of relying on `\b` boundaries unless strict word boundaries inside complex punctuation are required.
-
-## 2026-06-08 - Idiomatic Set Intersection
-**Learning:** Calling the `.intersection(other_set)` method incurs slightly more overhead due to Python attribute lookup compared to using the bitwise `&` operator (`set_a & set_b`).
-**Action:** In high-traffic hot paths like RAG retrieval where set intersections are computed in tight loops, prefer the bitwise `&` operator for computing intersections to shave off marginal overhead and improve code idiomaticity.
+## 2026-05-25 - Keyword Extraction Optimization
+**Learning:** In bulk text analysis scenarios like `TrendAnalyzer`, performing `.lower()` inside a list comprehension on many small string segments before joining them creates unnecessary intermediate objects and method overhead. Additionally, using `re.findall(r'\b\w+\b')` parses the string slower than pre-compiling `re.compile(r'\w+')` and executing `.findall()`, as the greedy `\w+` implicitly matches word boundaries with identical functional output for tokens.
+**Action:** When extracting alphabetic tokens from collections of text, join the list of strings first, then apply `.lower()` once. Pre-compile the regex pattern `\w+` in the class `__init__` rather than repeatedly passing the string pattern `\b\w+\b` to the `re` module in hot loops. Always include in-code comments starting with `# Optimization:` to explain these techniques.
