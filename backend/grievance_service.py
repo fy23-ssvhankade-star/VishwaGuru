@@ -137,6 +137,10 @@ class GrievanceService:
             db.commit()
             db.refresh(grievance)
 
+            # Invalidate caches
+            grievance_list_cache.clear()
+            escalation_stats_cache.clear()
+
             # Update cache after successful commit
             grievance_last_hash_cache.set(data=integrity_hash, key="last_hash")
 
@@ -224,6 +228,9 @@ class GrievanceService:
 
                     if new_issue_status:
                         issue.status = new_issue_status
+                        # Invalidate caches
+                        grievance_list_cache.clear()
+                        escalation_stats_cache.clear()
                         if new_issue_status == "resolved":
                             issue.resolved_at = datetime.now(timezone.utc)
                         elif new_issue_status == "in_progress":

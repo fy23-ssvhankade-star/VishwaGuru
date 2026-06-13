@@ -73,15 +73,6 @@
 ## 2026-04-17 - ORM Counting vs func.count().scalar()
 **Learning:** Using `db.query(Model).filter(...).count()` can be slower and have more ORM overhead than `db.query(func.count(Model.id)).filter(...).scalar() or 0` or doing an early `.first()` exit.
 **Action:** When counting records or verifying existence, prefer early `.first()` exits combined with `func.count().scalar()` for performance in high-traffic APIs.
-
-## 2026-04-20 - Async File I/O in Voice Submission
-**Learning:** Saving audio recordings (up to 10MB) synchronously in a FastAPI async endpoint blocks the main event loop, significantly increasing tail latency for all concurrent users during high-traffic periods.
-**Action:** Wrap blocking synchronous File I/O operations like `f.write()` in `run_in_threadpool` to offload them to a separate thread, keeping the event loop responsive for other requests.
-
-## 2026-05-15 - Serialization Caching Bypass
-**Learning:** Caching raw Python objects (like SQLAlchemy models or Pydantic instances) in a high-traffic API still incurs significant overhead because FastAPI/Pydantic must re-validate and re-serialize the data on every request.
-**Action:** Serialize data to a JSON string using `json.dumps()` BEFORE caching. On cache hits, return a raw `fastapi.Response(content=..., media_type="application/json")`. This bypasses the validation and serialization layer, resulting in significant performance gains (up to 50x in benchmarks).
-
-## 2026-06-12 - Threadpool Offloading for Tail Latency
-**Learning:** Mixed I/O operations (Database and File System) in FastAPI `async def` endpoints block the event loop, causing severe tail latency spikes under concurrency. Explicitly offloading these to `run_in_threadpool` is essential for maintaining responsiveness.
-**Action:** Wrap all synchronous DB and File I/O operations in `run_in_threadpool`. For purely blocking background tasks, use standard `def` instead of `async def` to leverage FastAPI's automatic threadpool execution.
+## 2026-04-19 - Serialization Caching for FastAPI Performance
+**Learning:** Bypassing Pydantic's validation and serialization layer by caching pre-serialized JSON strings and returning a raw `fastapi.Response` can reduce response latency by up to 50x in high-traffic read-heavy endpoints. This is significantly more effective than object-level caching.
+**Action:** Identify hot read endpoints with complex Pydantic models and implement serialization caching with explicit invalidation on mutations.
