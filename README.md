@@ -1,89 +1,126 @@
-# VishwaGuru
+# 🌍 VishwaGuru
 
-VishwaGuru is an open source platform empowering India's youth to engage with democracy. It uses AI to simplify contacting representatives, filing grievances, and organizing community action. Built for India's languages and governance, it turns selfies and videos into real civic impact.
+VishwaGuru is an AI-powered platform designed to help users analyze civic issues and generate actionable solutions using modern web technologies and AI models.
 
-## Features
+---
 
-- **AI-Powered Action Plans**: Generates WhatsApp messages and email drafts for civic issues using Google's Gemini API.
-- **Issue Reporting**: Users can report issues via a web interface or a Telegram bot.
-- **Local & Production Ready**: Supports SQLite for local development and PostgreSQL for production.
-- **Modern Stack**: Built with React (Vite) and FastAPI.
+## ✨ Features
 
-## Prerequisites
+- 🤖 **AI-generated action plans**: Using Google Gemini to create WhatsApp messages, email drafts, and X (Twitter) posts.
+- ⚡ **FastAPI-powered backend**: High-performance asynchronous API.
+- 🎨 **Modern React + Vite frontend**: Responsive and user-friendly interface.
+- 📱 **Telegram bot integration**: Report issues directly from your favorite messaging app.
+- 🗄️ **SQLite (dev) & PostgreSQL (prod)**: Flexible database options for development and production.
+- ☁️ **Cloud Native**: Designed for deployment on Netlify, Render, and Neon.
+- 📍 **Spatial Deduplication**: Automatically detects nearby issues to prevent duplicates.
+- 🔍 **Unified Detection**: AI-powered detection for potholes, garbage, vandalism, and more.
+- 🏛️ **MLA Lookup**: Find your Maharashtra representative by pincode and file grievances.
 
-Before you begin, ensure you have the following installed:
+---
 
-- **Python 3.8+**
-- **Node.js 18+** and **npm**
-- **Git**
+## 🛠️ Project Setup (Local)
 
-## Installation & Deployment Guides
-
-This project is structured to be easily deployable on **Firebase** (Google Cloud) or other platforms like Render/Netlify.
-
-For specific installation and deployment instructions, please verify the `README.md` in each folder:
-
-*   **[Frontend Documentation](./frontend/README.md)**: Instructions for installing dependencies, running locally, and deploying to **Firebase Hosting**.
-*   **[Backend Documentation](./backend/README.md)**: Instructions for setting up the API, running with Docker, and deploying to **Google Cloud Run** (Firebase Backend).
-*   **[Data Documentation](./data/README.md)**: Details about the static data files used by the application.
-
-## Quick Start (Local)
-
-### 1. Clone the Repository
-
+### 📥 Clone the Repository
 ```bash
-git clone <repository_url>
-cd vishwaguru
+git clone https://github.com/Ewocs/VishwaGuru.git
+cd VishwaGuru
 ```
 
-### 2. Backend Setup
+---
 
-1.  Create a virtual environment:
-    ```bash
-    python -m venv venv
-    source venv/bin/activate  # On Windows: venv\Scripts\activate
-    ```
-2.  Install dependencies:
-    ```bash
-    pip install -r backend/requirements.txt
-    ```
-3.  Run the server:
-    ```bash
-    python -m uvicorn backend.main:app --reload
-    ```
+## ⚙️ Backend Setup
 
-### 3. Frontend Setup
+### Create Virtual Environment
+```bash
+# Linux/macOS
+python3 -m venv venv
+source venv/bin/activate
 
-1.  Navigate to frontend:
-    ```bash
-    cd frontend
-    ```
-2.  Install dependencies:
-    ```bash
-    npm install
-    ```
-3.  Run the dev server:
-    ```bash
-    npm run dev
-    ```
+# Windows
+python -m venv venv
+venv\Scripts\activate
+```
 
-## Deployment (Firebase)
+### Install Dependencies
+```bash
+pip install -r backend/requirements.txt
+```
 
-The project includes a `firebase.json` for easy deployment to the Firebase ecosystem.
+### 🔐 Environment Configuration
+```bash
+cp .env.example .env
+```
 
-1.  **Frontend**: Deployed to Firebase Hosting.
-2.  **Backend**: Deployed to Google Cloud Run, with Firebase Hosting configured to rewrite `/api` requests to the backend service.
+Set the following in your `.env` file:
+```env
+TELEGRAM_BOT_TOKEN=your_bot_token
+GEMINI_API_KEY=your_api_key
+DATABASE_URL=sqlite:///./data/issues.db
+FRONTEND_URL=http://localhost:5173
+```
 
-See the [Frontend README](./frontend/README.md) and [Backend README](./backend/README.md) for detailed steps.
+---
 
-## Contributing
+## 🎨 Frontend Setup
+```bash
+cd frontend
+npm install
+```
 
-1.  Fork the repository.
-2.  Create a new branch (`git checkout -b feature/YourFeature`).
-3.  Commit your changes (`git commit -m 'Add some feature'`).
-4.  Push to the branch (`git push origin feature/YourFeature`).
-5.  Open a Pull Request.
+---
 
-## License
+## 🏃‍♂️ Running Locally
 
-This project is licensed under the **AGPL-3.0** License.
+| Service | Command | URL |
+|------|--------|-----|
+| Backend | PYTHONPATH=. python -m uvicorn backend.main:app --reload | http://localhost:8000 |
+| Frontend | cd frontend && npm run dev | http://localhost:5173 |
+
+---
+
+## 🛠️ Tech Stack
+
+- **Frontend**: React 18+, Vite, Tailwind CSS, Lucide Icons
+- **Backend**: Python 3.12+, FastAPI, SQLAlchemy, Pydantic
+- **Database**: SQLite (Dev), PostgreSQL (Prod via Neon)
+- **AI/ML**: Google Gemini Pro, Hugging Face Inference API (CLIP), Ultralytics (YOLO)
+- **Bot**: python-telegram-bot
+
+---
+
+## 🏗️ Architecture
+
+VishwaGuru follows a modern client-server architecture:
+
+1.  **Frontend (Netlify)**: A React application that communicates with the backend via REST APIs.
+2.  **Backend (Render)**: A FastAPI server that handles logic, AI integrations, and database operations.
+3.  **Database (Neon)**: A serverless PostgreSQL database for persistent storage.
+4.  **AI Services**: Integrates Google Gemini for text generation and Hugging Face/Local ML for image analysis.
+
+---
+
+## 📚 Documentation
+
+- [ARCHITECTURE.md](ARCHITECTURE.md) - Detailed system design
+- [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) - Step-by-step deployment instructions
+- [CONTRIBUTING.md](CONTRIBUTING.md) - Guidelines for contributors
+- [backend/README.md](backend/README.md) - Backend-specific details
+- [Historic Reports](docs/archived/README.md) - Archived strategies and issue reports
+
+---
+
+## 📄 License
+
+GNU Affero General Public License v3.0 (AGPL-3.0)
+
+<div align="center">
+
+![VishwaGuru Banner](https://img.shields.io/badge/VishwaGuru-Civic%20Engagement-blue?style=for-the-badge&logo=github)
+![License](https://img.shields.io/badge/License-AGPL--3.0-green?style=flat-square)
+![Python](https://img.shields.io/badge/Python-3.12+-blue?style=flat-square&logo=python)
+![React](https://img.shields.io/badge/React-18+-61dafb?style=flat-square&logo=react)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi)
+
+**Empowering India's youth to engage with democracy through AI-powered civic action** 🚀
+
+</div>

@@ -1,13 +1,27 @@
+"""
+DEPRECATED: This module is no longer used.
+Please use local_ml_service.py for local ML model-based detection instead of Hugging Face API.
+
+This file is kept for reference purposes only.
+"""
 import os
 import io
 import httpx
+import base64
+from typing import Union, List, Dict, Any
 from PIL import Image
 import asyncio
+import logging
+
+from backend.exceptions import ExternalAPIException
+
+logger = logging.getLogger(__name__)
 
 # HF_TOKEN is optional for public models but recommended for higher limits
 token = os.environ.get("HF_TOKEN")
 headers = {"Authorization": f"Bearer {token}"} if token else {}
 API_URL = "https://api-inference.huggingface.co/models/openai/clip-vit-base-patch32"
+CAPTION_API_URL = "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-large"
 
 async def query_hf_api(image_bytes, labels, client=None):
     """
@@ -20,7 +34,6 @@ async def query_hf_api(image_bytes, labels, client=None):
         return await _make_request(new_client, image_bytes, labels)
 
 async def _make_request(client, image_bytes, labels):
-    import base64
     image_base64 = base64.b64encode(image_bytes).decode('utf-8')
 
     payload = {
@@ -33,23 +46,38 @@ async def _make_request(client, image_bytes, labels):
     try:
         response = await client.post(API_URL, headers=headers, json=payload, timeout=20.0)
         if response.status_code != 200:
-            print(f"HF API Error: {response.status_code} - {response.text}")
-            return []
+            logger.error(f"HF API Error: {response.status_code} - {response.text}")
+            raise ExternalAPIException("Hugging Face API", f"HTTP {response.status_code}: {response.text}")
         return response.json()
+    except httpx.HTTPError as e:
+        logger.error(f"HF API HTTP Error: {e}")
+        raise ExternalAPIException("Hugging Face API", str(e)) from e
     except Exception as e:
-        print(f"HF API Request Exception: {e}")
-        return []
+        logger.error(f"HF API Request Exception: {e}")
+        raise ExternalAPIException("Hugging Face API", str(e)) from e
 
-async def detect_vandalism_clip(image: Image.Image, client: httpx.AsyncClient = None):
+def _prepare_image_bytes(image: Union[Image.Image, bytes]) -> bytes:
     """
-    Detects vandalism/graffiti using Zero-Shot Image Classification with CLIP (Async).
+    Helper to get bytes from PIL Image or return bytes as is.
+    Avoids unnecessary re-encoding if bytes are already available.
+    """
+    if isinstance(image, bytes):
+        return image
+
+    img_byte_arr = io.BytesIO()
+    # If image.format is not available (e.g. newly created image), default to JPEG
+    fmt = image.format if image.format else 'JPEG'
+    image.save(img_byte_arr, format=fmt)
+    return img_byte_arr.getvalue()
+
+async def generate_image_caption(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
+    """
+    Generates a description for the image using Salesforce BLIP model.
     """
     try:
         labels = ["graffiti", "vandalism", "spray paint", "street art", "clean wall", "public property", "normal street"]
 
-        img_byte_arr = io.BytesIO()
-        image.save(img_byte_arr, format=image.format if image.format else 'JPEG')
-        img_bytes = img_byte_arr.getvalue()
+        img_bytes = _prepare_image_bytes(image)
 
         results = await query_hf_api(img_bytes, labels, client=client)
 
@@ -69,16 +97,14 @@ async def detect_vandalism_clip(image: Image.Image, client: httpx.AsyncClient = 
                  })
         return detected
     except Exception as e:
-        print(f"HF Detection Error: {e}")
-        return []
+        logger.error(f"HF Detection Error: {e}")
+        raise ExternalAPIException("Hugging Face API", str(e)) from e
 
-async def detect_infrastructure_clip(image: Image.Image, client: httpx.AsyncClient = None):
+async def detect_infrastructure_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
     try:
         labels = ["broken streetlight", "damaged traffic sign", "fallen tree", "damaged fence", "pothole", "clean street", "normal infrastructure"]
 
-        img_byte_arr = io.BytesIO()
-        image.save(img_byte_arr, format=image.format if image.format else 'JPEG')
-        img_bytes = img_byte_arr.getvalue()
+        img_bytes = _prepare_image_bytes(image)
 
         results = await query_hf_api(img_bytes, labels, client=client)
 
@@ -97,16 +123,14 @@ async def detect_infrastructure_clip(image: Image.Image, client: httpx.AsyncClie
                  })
         return detected
     except Exception as e:
-        print(f"HF Detection Error: {e}")
-        return []
+        logger.error(f"HF Detection Error: {e}")
+        raise ExternalAPIException("Hugging Face API", str(e)) from e
 
-async def detect_flooding_clip(image: Image.Image, client: httpx.AsyncClient = None):
+async def detect_flooding_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
     try:
         labels = ["flooded street", "waterlogging", "blocked drain", "heavy rain", "dry street", "normal road"]
 
-        img_byte_arr = io.BytesIO()
-        image.save(img_byte_arr, format=image.format if image.format else 'JPEG')
-        img_bytes = img_byte_arr.getvalue()
+        img_bytes = _prepare_image_bytes(image)
 
         results = await query_hf_api(img_bytes, labels, client=client)
 
@@ -125,5 +149,5 @@ async def detect_flooding_clip(image: Image.Image, client: httpx.AsyncClient = N
                  })
         return detected
     except Exception as e:
-        print(f"HF Detection Error: {e}")
-        return []
+        logger.error(f"HF Detection Error: {e}")
+        raise ExternalAPIException("Hugging Face API", str(e)) from e
