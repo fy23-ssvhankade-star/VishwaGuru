@@ -343,22 +343,26 @@ async def upload_visit_images(
         image_paths = []
 
         for idx, image in enumerate(images):
-            # Performance Boost: Check file size without reading full content into memory (O(1) seek)
-            await image.seek(0, 2)  # Seek to end
-            file_size = image.tell()
-            await image.seek(0)  # Reset pointer
-
-            if file_size > MAX_UPLOAD_SIZE:
+            # Validate content_type is present
+            if not image.content_type:
                 raise HTTPException(
-                    status_code=413,
-                    detail=f"File {image.filename} too large. Maximum allowed is {MAX_UPLOAD_SIZE // (1024*1024)}MB",
+                    status_code=400, detail="File must have a content type"
                 )
 
-            # Validate extension (Fast early-exit)
+            # Validate file type
+            if not image.content_type.startswith("image/"):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"File must be an image, got {image.content_type}",
+                )
+
+            # Validate filename is present
+            if not image.filename:
+                raise HTTPException(status_code=400, detail="File must have a filename")
+
+            # Validate extension
             extension = (
-                image.filename.split(".")[-1].lower()
-                if image.filename and "." in image.filename
-                else ""
+                image.filename.split(".")[-1].lower() if "." in image.filename else ""
             )
             if extension not in ALLOWED_IMAGE_EXTENSIONS:
                 raise HTTPException(
@@ -366,16 +370,35 @@ async def upload_visit_images(
                     detail=f"File extension '{extension}' not allowed. Allowed: {', '.join(ALLOWED_IMAGE_EXTENSIONS)}",
                 )
 
-            # Performance Boost: Unified pipeline for validation, resizing, and EXIF stripping
-            # Reduces redundant Encode/Decode cycles and storage footprint.
+            # Read and validate file size without loading into memory
+            image.file.seek(0, 2)
+            file_size = image.file.tell()
+            image.file.seek(0)
+
+            if file_size > MAX_UPLOAD_SIZE:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"File {image.filename} exceeds maximum size of {MAX_UPLOAD_SIZE / 1024 / 1024:.1f} MB",
+                )
+
+            # Use process_uploaded_image for resizing and EXIF stripping
             _, image_bytes = await process_uploaded_image(image)
 
-            # Generate secure filename using UUID to prevent collisions and path traversal
-            safe_filename = f"visit_{visit_id}_{uuid.uuid4().hex}.{extension}"
-            file_path = os.path.join(VISIT_IMAGES_DIR, safe_filename)
+            # Generate secure filename
+            import os.path
 
-            # Performance Boost: Wrap blocking synchronous File I/O in threadpool to keep event loop responsive
-            await run_in_threadpool(save_processed_image, image_bytes, file_path)
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+            # Ensure extension is safe by forcing it to alphanumeric, though we already validated it
+            safe_ext = "".join(c for c in extension if c.isalnum())
+            safe_filename = f"visit_{visit_id}_{timestamp}_{idx}.{safe_ext}"
+            file_path = os.path.join(VISIT_IMAGES_DIR, os.path.basename(safe_filename))
+
+            # Save file using threadpool to prevent event loop blocking
+            def _save_file(path, data):
+                with open(path, "wb") as f:
+                    f.write(data)
+
+            await run_in_threadpool(_save_file, file_path, image_bytes)
 
             # Store relative path
             relative_path = os.path.join("data", "visit_images", safe_filename)
@@ -478,39 +501,31 @@ def get_visit_statistics(db: Session = Depends(get_db)):
         if cached_json:
             return Response(content=cached_json, media_type="application/json")
 
-        # Optimized: Standard GROUP BY is measurably faster than multiple func.sum(case(...)) aggregations.
-        groups = db.query(
-            FieldOfficerVisit.verified_at.isnot(None).label('is_verified'),
-            FieldOfficerVisit.within_geofence,
-            func.count(FieldOfficerVisit.id)
-        ).group_by(
-            FieldOfficerVisit.verified_at.isnot(None),
-            FieldOfficerVisit.within_geofence
-        ).all()
-
-        # Second query for global aggregates
-        global_stats = db.query(
-            func.count(func.distinct(FieldOfficerVisit.officer_email)).label('unique_officers'),
-            func.avg(FieldOfficerVisit.distance_from_site).label('avg_distance')
+        # Optimized: Use a single aggregate query to fetch multiple statistics in one database roundtrip
+        stats = db.query(
+            func.count(FieldOfficerVisit.id).label("total"),
+            func.sum(
+                case((FieldOfficerVisit.verified_at.isnot(None), 1), else_=0)
+            ).label("verified"),
+            func.sum(
+                case((FieldOfficerVisit.within_geofence == True, 1), else_=0)
+            ).label("within_geofence"),
+            func.sum(
+                case((FieldOfficerVisit.within_geofence == False, 1), else_=0)
+            ).label("outside_geofence"),
+            func.count(func.distinct(FieldOfficerVisit.officer_email)).label(
+                "unique_officers"
+            ),
+            func.avg(FieldOfficerVisit.distance_from_site).label("avg_distance"),
         ).first()
 
-        total_visits = 0
-        verified_visits = 0
-        within_geofence_count = 0
-        outside_geofence_count = 0
+        total_visits = stats.total or 0
+        verified_visits = int(stats.verified or 0)
+        within_geofence_count = int(stats.within_geofence or 0)
+        outside_geofence_count = int(stats.outside_geofence or 0)
+        unique_officers = stats.unique_officers or 0
+        average_distance = stats.avg_distance
 
-        for is_ver, in_geo, count in groups:
-            total_visits += count
-            if is_ver:
-                verified_visits += count
-            if in_geo is True:
-                within_geofence_count += count
-            elif in_geo is False:
-                outside_geofence_count += count
-
-        unique_officers = global_stats.unique_officers or 0
-        average_distance = global_stats.avg_distance
-        
         # Round to 2 decimals if not None
         if average_distance is not None:
             average_distance = round(float(average_distance), 2)
