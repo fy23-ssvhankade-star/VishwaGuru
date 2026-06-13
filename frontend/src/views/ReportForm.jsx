@@ -13,7 +13,7 @@ import { detectorsApi } from '../api';
 const API_URL = import.meta.env.VITE_API_URL || '';
 
 const ReportForm = ({ setView, setLoading, setError, setActionPlan, loading }) => {
-  const { t, i18n } = useTranslation();
+  const { i18n } = useTranslation();
   const locationState = useLocation().state || {};
   const [formData, setFormData] = useState({
     description: locationState.description || '',
@@ -357,8 +357,7 @@ const ReportForm = ({ setView, setLoading, setError, setActionPlan, loading }) =
         setSubmitStatus({ state: 'success', message: 'Report saved offline. Will sync when online.' });
         setActionPlan(fakeActionPlan); // Show fallback plan
         setView('action');
-      } catch (error) {
-        console.error("Offline save failed", error);
+      } catch (err) { // eslint-disable-line no-unused-vars
         setSubmitStatus({ state: 'error', message: 'Failed to save offline.' });
         setError('Failed to save report offline.');
       } finally {
@@ -417,40 +416,40 @@ const ReportForm = ({ setView, setLoading, setError, setActionPlan, loading }) =
   };
 
   return (
-    <div className="mt-12 max-w-2xl mx-auto pb-20">
-      <motion.div
-        initial={{ opacity: 0, y: 30 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="relative"
-      >
-        {/* Decorative background glow */}
-        <div className="absolute -top-20 -left-20 w-64 h-64 bg-blue-500/10 rounded-full blur-[100px] -z-10"></div>
-        <div className="absolute -bottom-20 -right-20 w-64 h-64 bg-purple-500/10 rounded-full blur-[100px] -z-10"></div>
-
-        <div className="bg-white/70 dark:bg-gray-900/70 backdrop-blur-3xl rounded-[2.5rem] border border-white/20 dark:border-gray-800/50 shadow-2xl overflow-hidden p-8 md:p-12">
-          {/* Header */}
-          <div className="text-center mb-10 space-y-3">
-            <h2 className="text-3xl md:text-4xl font-black text-gray-900 dark:text-white tracking-tight">
-              {t('home.landing.cta') || 'Report Civic Issue'}
-            </h2>
-            <p className="text-gray-500 dark:text-gray-400 font-medium">
-              Join thousands of citizens making their city better.
-            </p>
-            <div className="h-1.5 w-16 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full mx-auto"></div>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-8">
-            {/* Category Section */}
-            <div className="space-y-3">
-              <label className="text-sm font-black text-gray-700 dark:text-gray-300 uppercase tracking-widest ml-1 flex items-center gap-2">
-                <Layers size={14} className="text-blue-600" />
-                {t('home.landing.features.civicIssues')}
-              </label>
-              <div className="relative group">
-                <select
-                  className="w-full bg-white/50 dark:bg-gray-800/50 rounded-2xl border-2 border-gray-100 dark:border-gray-800 p-4 pl-5 appearance-none focus:outline-none focus:border-blue-600 dark:focus:border-blue-400 font-bold text-gray-900 dark:text-white transition-all transition-colors cursor-pointer group-hover:bg-white dark:group-hover:bg-gray-800"
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+    <div className="mt-6">
+       <h2 className="text-xl font-semibold mb-4 text-center">Report an Issue</h2>
+       <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Category</label>
+            <select
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border"
+              value={formData.category}
+              onChange={(e) => setFormData({...formData, category: e.target.value})}
+            >
+              <option value="road">Road / Potholes</option>
+              <option value="water">Water Supply</option>
+              <option value="garbage">Garbage / Sanitation</option>
+              <option value="streetlight">Streetlight</option>
+              <option value="college_infra">College Infrastructure</option>
+              <option value="women_safety">Women Safety</option>
+              <option value="vandalism">Vandalism / Graffiti</option>
+            </select>
+            {analyzingSmartScan && (
+                <div className="text-xs text-blue-600 mt-1 animate-pulse flex items-center gap-1">
+                    <Loader2 size={12} className="animate-spin"/>
+                    AI is analyzing image for category...
+                </div>
+            )}
+            {analysisErrors.smartScan && (
+                <div className="text-xs text-orange-600 mt-1 flex items-center gap-1">
+                    <AlertTriangle size={12} />
+                    {analysisErrors.smartScan}
+                </div>
+            )}
+            {smartCategory && (
+                <div
+                    onClick={() => setFormData({...formData, category: smartCategory.mapped})}
+                    className="mt-2 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-100 p-2 rounded-lg cursor-pointer hover:bg-purple-100 transition flex items-center justify-between group"
                 >
                   <option value="road">{t('home.issues.pothole')}</option>
                   <option value="water">{t('home.issues.waterLeak')}</option>

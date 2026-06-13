@@ -2,10 +2,16 @@ from fastapi import FastAPI, Form, UploadFile, File, Depends, BackgroundTasks, R
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.concurrency import run_in_threadpool
-from fastapi.staticfiles import StaticFiles
+from sqlalchemy import func
+from sqlalchemy.orm import Session, defer, joinedload
+from pydantic import BaseModel
 from contextlib import asynccontextmanager
 from functools import lru_cache
-from typing import List
+from typing import List, Union, Any, Dict, Optional
+from datetime import datetime, timedelta, timezone
+from PIL import Image
+
+import json
 import os
 import sys
 from pathlib import Path
@@ -49,7 +55,15 @@ from backend.hf_api_service import (
     detect_pest_clip,
     detect_severity_clip,
     detect_smart_scan_clip,
-    generate_image_caption
+    generate_image_caption,
+    analyze_urgency_text,
+    verify_resolution_vqa,
+    detect_depth_map,
+    detect_water_leak_clip,
+    detect_accessibility_issue_clip,
+    detect_crowd_density_clip,
+    detect_audio_event,
+    transcribe_audio
 )
 
 def validate_image_for_processing(image):
@@ -746,6 +760,27 @@ async def detect_audio_endpoint(request: Request, file: UploadFile = File(...)):
         return {"detections": detections}
     except Exception as e:
         logger.error(f"Audio detection error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.post("/api/transcribe-audio")
+async def transcribe_audio_endpoint(request: Request, file: UploadFile = File(...)):
+    # Basic audio validation
+    if hasattr(file, 'size') and file.size and file.size > 25 * 1024 * 1024:
+         raise HTTPException(status_code=413, detail="Audio file too large (max 25MB)")
+
+    try:
+        audio_bytes = await file.read()
+    except Exception as e:
+        logger.error(f"Invalid audio file: {e}", exc_info=True)
+        raise HTTPException(status_code=400, detail="Invalid audio file")
+
+    try:
+        client = request.app.state.http_client
+        text = await transcribe_audio(audio_bytes, client=client)
+        return {"text": text}
+    except Exception as e:
+        logger.error(f"Transcription error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
