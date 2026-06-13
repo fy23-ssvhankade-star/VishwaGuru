@@ -166,9 +166,8 @@ class ClosureService:
             GrievanceFollower.grievance_id == grievance_id
         ).scalar()
         
-        # Optimized: Get all confirmation counts in a single query using GROUP BY.
-        # This is measurably faster than multiple func.sum(case(...)) statements for categorical columns
-        # (e.g., ~0.9s vs ~1.2s per 1000 iterations according to benchmark_closure_status.py)
+        # Get all confirmation counts in a single query instead of multiple round-trips
+        # Optimized: Group by is faster than sum(case()) in SQLite/Postgres for this workload
         counts = db.query(
             ClosureConfirmation.confirmation_type,
             func.count(ClosureConfirmation.id)
