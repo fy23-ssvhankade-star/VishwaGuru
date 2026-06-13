@@ -32,7 +32,7 @@ const MyReportsView = () => {
   useEffect(() => {
     if (localStorage.getItem('user_email')) {
         const email = localStorage.getItem('user_email');
-        if (email) fetchIssues(email).catch(console.error);
+        if (email) fetchIssues(email);
     }
   }, []);
 
