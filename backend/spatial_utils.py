@@ -109,7 +109,6 @@ def find_nearby_issues(
     target_lat: float,
     target_lon: float,
     radius_meters: float = 50.0,
-    pre_filtered: bool = False
 ) -> List[Tuple[Issue, float]]:
     """
     Find issues within a specified radius of a target location.
@@ -127,8 +126,9 @@ def find_nearby_issues(
     nearby_issues = []
 
     # Optimization: pre-filter using a bounding box to avoid math on distant points
-    if not pre_filtered:
-        min_lat, max_lat, min_lon, max_lon = get_bounding_box(target_lat, target_lon, radius_meters)
+    min_lat, max_lat, min_lon, max_lon = get_bounding_box(
+        target_lat, target_lon, radius_meters
+    )
 
     # Optimization: Use inline Equirectangular approximation for short distances (< 10km)
     # This avoids function call overhead and repeated radian conversions.
@@ -139,10 +139,13 @@ def find_nearby_issues(
                 continue
 
             # Apply bounding box pre-filter
-            if not pre_filtered:
-                if issue.latitude < min_lat or issue.latitude > max_lat or \
-                   issue.longitude < min_lon or issue.longitude > max_lon:
-                    continue
+            if (
+                issue.latitude < min_lat
+                or issue.latitude > max_lat
+                or issue.longitude < min_lon
+                or issue.longitude > max_lon
+            ):
+                continue
 
             distance = haversine_distance(
                 target_lat, target_lon, issue.latitude, issue.longitude
@@ -151,43 +154,39 @@ def find_nearby_issues(
                 nearby_issues.append((issue, distance))
     else:
         # Optimized path for common case (small radius)
-        # Hoist constant factor calculations outside the loop
-        # R * (pi / 180) is the approximate meters per degree of latitude
-        m_per_deg_lat = 6371000.0 * (math.pi / 180.0)
-        # For longitude, we multiply by cos(latitude)
-        m_per_deg_lon = m_per_deg_lat * math.cos(math.radians(target_lat))
-
         radius_sq = radius_meters * radius_meters
 
-        if pre_filtered:
-            for issue in issues:
-                lat = issue.latitude
-                lon = issue.longitude
-                if lat is None or lon is None:
-                    continue
+        # Precompute constant factor calculations (meters per degree)
+        lat_meters_per_deg = 6371000.0 * (math.pi / 180.0)
+        lon_meters_per_deg = lat_meters_per_deg * math.cos(math.radians(target_lat))
+
+        for issue in issues:
+            if issue.latitude is None or issue.longitude is None:
+                continue
 
             # Apply bounding box pre-filter
-            if not pre_filtered:
-                if issue.latitude < min_lat or issue.latitude > max_lat or \
-                   issue.longitude < min_lon or issue.longitude > max_lon:
-                    continue
+            if (
+                issue.latitude < min_lat
+                or issue.latitude > max_lat
+                or issue.longitude < min_lon
+                or issue.longitude > max_lon
+            ):
+                continue
 
-            # Calculate differences in degrees
             dlat = issue.latitude - target_lat
             dlon = issue.longitude - target_lon
 
             # Handle longitude wrapping (dateline crossing)
-            if dlon > 180:
-                dlon -= 360
-            elif dlon < -180:
-                dlon += 360
+            if dlon > 180.0:
+                dlon -= 360.0
+            elif dlon < -180.0:
+                dlon += 360.0
 
-            # Convert to meters using pre-calculated constants
-            dx = dlon * m_per_deg_lon
-            dy = dlat * m_per_deg_lat
+            x = dlon * lon_meters_per_deg
+            y = dlat * lat_meters_per_deg
 
-            # Squared distance check avoids expensive sqrt() and repeated math.radians calls
-            dist_sq = dx*dx + dy*dy
+            # Squared distance check avoids expensive sqrt()
+            dist_sq = x * x + y * y
 
                 # Handle longitude wrapping (dateline crossing)
                 if dlon > 180.0:
