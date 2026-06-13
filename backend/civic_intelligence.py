@@ -1,3 +1,4 @@
+from sqlalchemy import func
 import json
 import os
 import logging
@@ -208,7 +209,6 @@ class CivicIntelligenceEngine:
         last_24h = now - timedelta(hours=24)
 
         # Count resolutions in last 24h
-        # Optimized: Use func.count(Issue.id) with .scalar() to prevent SQLAlchemy ORM overhead
         resolved_count = db.query(func.count(Issue.id)).filter(
             Issue.resolved_at >= last_24h
         ).scalar() or 0

@@ -1,3 +1,4 @@
+from sqlalchemy import func
 """
 Resolution Proof Service - Cryptographic Verification for OnGround Resolution (Issue #292)
 
@@ -518,9 +519,11 @@ class ResolutionProofService:
         Returns:
             Verification result dictionary
         """
-        # Optimized: Use .first() to check existence and fetch the latest record BEFORE
-        # executing the expensive .count() query. This acts as an early exit and avoids
-        # the count query entirely when no evidence exists, saving a database roundtrip.
+        # Optimized: Use .count() and .first() to avoid loading all historical evidence
+        # records into memory, reducing O(N) database transfer and memory overhead.
+        evidence_count = db.query(func.count(ResolutionEvidence.id)).filter(
+            ResolutionEvidence.grievance_id == grievance_id
+        ).scalar() or 0
 
         # Use the most recent evidence
         evidence = db.query(ResolutionEvidence).filter(
