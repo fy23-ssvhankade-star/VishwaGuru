@@ -146,7 +146,6 @@ def get_leaderboard(db: Session = Depends(get_db)):
         except Exception:
             masked_email = "User***"
 
-        # Construct dictionary directly to bypass Pydantic model validation/serialization overhead
         leaderboard_data.append({
             "user_email": masked_email,
             "reports_count": count,
