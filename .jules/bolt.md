@@ -97,7 +97,10 @@
 ## 2026-05-20 - Joined Queries for Integrity Verification
 **Learning:** Performing multiple sequential database queries to verify cryptographically chained records (e.g., fetching a record and then its associated token/metadata from another table) introduces unnecessary latency and increases database load.
 **Action:** Consolidate associated data retrieval into a single SQL `JOIN` query within the verification hot-path. This reduces database round-trips and improves end-to-end latency for blockchain-style integrity checks.
+## 2025-06-25 - Keyword Extraction Pre-compiled Regex
+**Learning:** In `backend/trend_analyzer.py`, executing the default inline `re.findall(r'\b\w+\b', ...)` regex pattern to tokenize and extract keywords during array iteration causes significant regex recompilation and string creation overhead for large issue lists.
+**Action:** Always pre-compile standard regex patterns (`self._keyword_pattern = re.compile(r'\w+')`) in the `__init__` constructor. Batch string segments using a single `.join()` operation before tokenizing, which drastically speeds up the tokenization of large civic descriptions while maintaining valid boundaries and Unicode support.
 
-## 2026-05-21 - Bitwise Set Intersection in Hot Paths
-**Learning:** In high-frequency set operations (like RAG Jaccard similarity), using the bitwise `&` operator for intersection is measurably faster than the `.intersection()` method as it avoids a method lookup and is implemented as a direct C-level operation.
-**Action:** Prefer `set_a & set_b` over `set_a.intersection(set_b)` in performance-critical hot paths to shave off microseconds in tight loops.
+## 2026-06-25 - Netlify Deployment Node Version Mismatch
+**Learning:** Netlify defaults to older Node.js versions which fail to parse `lockfileVersion: 3` (npm v9+) during deployments, causing `Deploy failed` errors across check suites like Pages changed, Header rules, and Redirect rules.
+**Action:** Always ensure `NODE_VERSION = "20"` (or appropriate modern version) is explicitly set in the `[build.environment]` section of `netlify.toml` for repositories using modern frontend tooling like Vite.

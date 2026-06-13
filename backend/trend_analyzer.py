@@ -20,7 +20,7 @@ class TrendAnalyzer:
             "issue", "problem", "complaint", "regarding", "please", "help", "fix",
             "near", "opposite", "behind", "front", "road", "street", "lane"
         }
-        self._word_pattern = re.compile(r'\w+')
+        self._keyword_pattern = re.compile(r'\w+')
 
     def analyze(self, issues: List[Issue]) -> Dict[str, Any]:
         """
@@ -51,12 +51,9 @@ class TrendAnalyzer:
         Optimized: Joins all descriptions first, then calls lower() once.
         Uses pre-compiled regex findall for faster tokenization (~30% gain).
         """
-        # Batch processing: join then lower() is faster than lower() in list comprehension
-        all_text = " ".join([issue.description for issue in issues if issue.description]).lower()
-
-        # Use pre-compiled regex pattern
-        words = self._token_pattern.findall(all_text)
-
+        text = " ".join([issue.description for issue in issues if issue.description]).lower()
+        # Simple tokenization: remove punctuation and split by whitespace
+        words = self._keyword_pattern.findall(text)
         filtered_words = [w for w in words if w not in self.stop_words and len(w) > 2 and not w.isdigit()]
 
         counter = Counter(filtered_words)
