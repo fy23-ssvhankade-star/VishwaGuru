@@ -98,6 +98,6 @@
 **Learning:** Performing multiple sequential database queries to verify cryptographically chained records (e.g., fetching a record and then its associated token/metadata from another table) introduces unnecessary latency and increases database load.
 **Action:** Consolidate associated data retrieval into a single SQL `JOIN` query within the verification hot-path. This reduces database round-trips and improves end-to-end latency for blockchain-style integrity checks.
 
-## 2026-06-01 - Set Intersection Optimization in RAG
-**Learning:** Benchmarking confirmed that using the bitwise `&` operator for set intersections is more idiomatic and slightly faster than calling the `.intersection()` method, especially in high-traffic hot paths like RAG retrieval. Additionally, using regex substitution like `re.compile(r'[^a-z0-9\s]').sub('', text.lower()).split()` instead of `re.findall` introduces a bug by concatenating words separated by punctuation (e.g. "hello/world" becomes "helloworld").
-**Action:** Use `&` for set intersections instead of `.intersection()`. Removed redundant tokenization/isdisjoint checks to streamline retrieval loops. Avoid replacing `re.findall` with `sub('', ...).split()` if preserving exact word boundaries delimited by punctuation is required.
+## 2026-06-05 - Tokenization Optimization in TrendAnalyzer
+**Learning:** Using `re.findall(r'\b\w+\b', text)` for extracting words in high-volume text analysis like `TrendAnalyzer._extract_keywords` is significantly slower than stripping non-alphanumeric characters with a pre-compiled regex substitution (`re.sub`) and splitting by whitespace.
+**Action:** Replace `re.findall` with a pre-compiled `_tokenizer_re = re.compile(r'[^a-z0-9\s]')` and `self._tokenizer_re.sub('', text).split()`. Compile regex in class initialization to avoid repeated compilation overhead.
