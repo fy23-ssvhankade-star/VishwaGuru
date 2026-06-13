@@ -86,6 +86,10 @@
 **Learning:** In RAG (Retrieval-Augmented Generation) systems with static or semi-static policy datasets, performing tokenization, regex substitution, and string formatting inside the retrieval loop is a significant bottleneck that scales with the number of policies.
 **Action:** Move all deterministic operations (tokenization, formatting, regex matching prep) to a one-time initialization step to ensure the retrieval hot-path only performs necessary set intersections and similarity calculations.
 
-## 2026-05-18 - Mathematical Set Operations for Jaccard Similarity
-**Learning:** Calculating Jaccard similarity (|A ∩ B| / |A ∪ B|) using `set.union()` inside a retrieval loop incurs significant O(N) memory allocation and population overhead. Since |A ∪ B| = |A| + |B| - |A ∩ B|, the union size can be calculated via O(1) arithmetic if set sizes are pre-calculated.
-**Action:** Pre-calculate set lengths for static data. In retrieval loops, use `isdisjoint()` for early exits and the inclusion-exclusion formula to avoid explicit set union operations.
+## 2025-05-18 - Optimized Jaccard Similarity for RAG
+**Learning:** Calculating Jaccard similarity in a hot loop can be optimized by using the inclusion-exclusion principle (|A ∪ B| = |A| + |B| - |A ∩ B|) to avoid the overhead of set union construction. Combining this with  for early exits significantly reduces CPU cycles for non-matching documents.
+**Action:** Use mathematical union length and  for set similarity comparisons in high-frequency retrieval paths.
+
+## 2025-05-18 - Optimized Jaccard Similarity for RAG
+**Learning:** Calculating Jaccard similarity in a hot loop can be optimized by using the inclusion-exclusion principle (|A ∪ B| = |A| + |B| - |A ∩ B|) to avoid the overhead of set union construction. Combining this with `isdisjoint()` for early exits significantly reduces CPU cycles for non-matching documents.
+**Action:** Use mathematical union length and `isdisjoint()` for set similarity comparisons in high-frequency retrieval paths.

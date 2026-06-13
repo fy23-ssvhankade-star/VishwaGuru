@@ -51,7 +51,7 @@ class CivicRAG:
             self._prepared_policies.append({
                 'title_tokens': self._tokenize(title),
                 'content_tokens': content_tokens,
-                'content_token_count': len(content_tokens),
+                'content_tokens_len': len(content_tokens),
                 'formatted': f"**{title}**: {text} (Source: {source})",
                 'original': policy
             })
@@ -77,32 +77,33 @@ class CivicRAG:
         if query_token_count == 0:
             return None
 
-        query_len = len(query_tokens)
+        query_tokens_len = len(query_tokens)
         best_score = 0.0
         best_formatted = None
 
         for prepared in self._prepared_policies:
             policy_tokens = prepared['content_tokens']
 
-            # Performance: Use isdisjoint for fast early-exit when there is no overlap
+            # Optimization: Use isdisjoint() for fast early exit
             if query_tokens.isdisjoint(policy_tokens):
                 continue
 
-            # Jaccard Similarity: |A ∩ B| / |A ∪ B|
-            intersection_count = len(query_tokens.intersection(policy_tokens))
+            # Jaccard Similarity
+            # Optimization: Mathematical union length |A union B| = |A| + |B| - |A intersection B|
+            # This avoids the overhead of building a new set with .union()
+            intersection = query_tokens.intersection(policy_tokens)
+            intersection_len = len(intersection)
 
-            # Performance: Use mathematical formula for union length: |A ∪ B| = |A| + |B| - |A ∩ B|
-            # This avoids O(N) allocation and population of a new union set.
-            union_count = query_token_count + prepared['content_token_count'] - intersection_count
+            union_len = query_tokens_len + prepared['content_tokens_len'] - intersection_len
 
-            if union_count == 0:
+            if union_len == 0:
                 continue
 
-            score = intersection_count / union_count
+            score = intersection_len / union_len
 
             # Boost score if title words match (weighted)
-            title_tokens = prepared['title_tokens']
-            if not query_tokens.isdisjoint(title_tokens):
+            # Optimization: Use isdisjoint() for faster boolean check
+            if not query_tokens.isdisjoint(prepared['title_tokens']):
                 score += 0.2  # Bonus for title match
 
             if score > best_score:
