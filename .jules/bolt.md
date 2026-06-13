@@ -94,6 +94,6 @@
 **Learning:** Performing multiple sequential database queries to verify cryptographically chained records (e.g., fetching a record and then its associated token/metadata from another table) introduces unnecessary latency and increases database load.
 **Action:** Consolidate associated data retrieval into a single SQL `JOIN` query within the verification hot-path. This reduces database round-trips and improves end-to-end latency for blockchain-style integrity checks.
 
-## 2026-05-25 - Keyword Extraction Optimization
-**Learning:** In bulk text analysis scenarios like `TrendAnalyzer`, performing `.lower()` inside a list comprehension on many small string segments before joining them creates unnecessary intermediate objects and method overhead. Additionally, using `re.findall(r'\b\w+\b')` parses the string slower than pre-compiling `re.compile(r'\w+')` and executing `.findall()`, as the greedy `\w+` implicitly matches word boundaries with identical functional output for tokens.
-**Action:** When extracting alphabetic tokens from collections of text, join the list of strings first, then apply `.lower()` once. Pre-compile the regex pattern `\w+` in the class `__init__` rather than repeatedly passing the string pattern `\b\w+\b` to the `re` module in hot loops. Always include in-code comments starting with `# Optimization:` to explain these techniques.
+## 2026-05-21 - Regex Tokenization Bottleneck
+**Learning:** In bulk text processing (like keyword extraction), using a complex regex pattern like `\b\w+\b` inside a loop for each document is significantly slower than joining all text and using a pre-compiled, simpler pattern like `\w+`.
+**Action:** Always batch string operations and use pre-compiled regex objects for high-traffic tokenization paths. Avoid redundant `.lower()` calls on small substrings.
