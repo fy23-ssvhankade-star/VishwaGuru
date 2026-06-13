@@ -261,13 +261,12 @@ async def submit_voice_issue(
         
         # Store relative path for portability
         relative_audio_path = os.path.join("data", "audio_recordings", audio_filename)
-
+        
         # Blockchain feature: calculate integrity hash for the report
         # Performance Boost: Use thread-safe cache to eliminate DB query for last hash
         prev_hash = blockchain_last_hash_cache.get("last_hash")
         if prev_hash is None:
             # Cache miss: Fetch only the last hash from DB
-            # Performance Optimization: Wrap blocking DB query in threadpool
             prev_issue = await run_in_threadpool(
                 lambda: db.query(Issue.integrity_hash).order_by(Issue.id.desc()).first()
             )
@@ -275,7 +274,6 @@ async def submit_voice_issue(
             blockchain_last_hash_cache.set(data=prev_hash, key="last_hash")
 
         # Simple but effective SHA-256 chaining
-        # Format must match backend/routers/issues.py for a consistent chain
         hash_content = f"{final_description}|{issue_category.value}|{prev_hash}"
         integrity_hash = hashlib.sha256(hash_content.encode()).hexdigest()
 
@@ -319,13 +317,12 @@ async def submit_voice_issue(
             previous_integrity_hash=prev_hash
         )
         
-        # Wrapped blocking DB operations in run_in_threadpool to keep event loop responsive
-        def save_issue():
-            db.add(new_issue)
-            db.commit()
-            db.refresh(new_issue)
+        db.add(new_issue)
+        db.commit()
+        db.refresh(new_issue)
 
-        await run_in_threadpool(save_issue)
+        # Update cache for next report AFTER successful DB commit
+        blockchain_last_hash_cache.set(data=integrity_hash, key="last_hash")
         
         # Update cache for next report AFTER successful DB commit
         blockchain_last_hash_cache.set(data=integrity_hash, key="last_hash")
