@@ -109,7 +109,7 @@ def find_nearby_issues(
     target_lat: float,
     target_lon: float,
     radius_meters: float = 50.0,
-    pre_filtered: bool = False
+    skip_bbox: bool = False,
 ) -> List[Tuple[Issue, float]]:
     """
     Find issues within a specified radius of a target location.
@@ -127,8 +127,11 @@ def find_nearby_issues(
     nearby_issues = []
 
     # Optimization: pre-filter using a bounding box to avoid math on distant points
-    if not pre_filtered:
-        min_lat, max_lat, min_lon, max_lon = get_bounding_box(target_lat, target_lon, radius_meters)
+    # Performance Boost: Allow skipping bounding box check if input is already filtered (Issue #SPATIAL-OPT)
+    if not skip_bbox:
+        min_lat, max_lat, min_lon, max_lon = get_bounding_box(
+            target_lat, target_lon, radius_meters
+        )
 
     # Optimization: Use inline Equirectangular approximation for short distances (< 10km)
     # This avoids function call overhead and repeated radian conversions.
@@ -138,24 +141,32 @@ def find_nearby_issues(
             if getattr(issue, 'latitude', None) is None or getattr(issue, 'longitude', None) is None:
                 continue
 
-            if not pre_filtered:
-                # Apply bounding box pre-filter
-                if issue.latitude < min_lat or issue.latitude > max_lat or \
-                   issue.longitude < min_lon or issue.longitude > max_lon:
+            # Apply bounding box pre-filter
+            if not skip_bbox:
+                if (
+                    issue.latitude < min_lat
+                    or issue.latitude > max_lat
+                    or issue.longitude < min_lon
+                    or issue.longitude > max_lon
+                ):
                     continue
 
-            distance = haversine_distance(target_lat, target_lon, lat, lon)
+            distance = haversine_distance(
+                target_lat, target_lon, issue.latitude, issue.longitude
+            )
             if distance <= radius_meters:
                 nearby_issues.append((issue, distance))
     else:
         # Optimized path for common case (small radius)
         radius_sq = radius_meters * radius_meters
 
-        # Pre-calculate meters per degree for latitude and longitude to avoid radians math in loop
-        # 1 degree of latitude is constant (approx)
-        meters_per_degree_lat = 111194.92664455873  # 6371000.0 * (math.pi / 180.0)
-        # 1 degree of longitude shrinks towards poles
-        meters_per_degree_lon = meters_per_degree_lat * math.cos(target_lat * 0.017453292519943295)
+        # Performance Boost: Hoist radian conversion constants (O(1) instead of O(N))
+        DEG_TO_RAD = math.pi / 180.0
+        target_lat_rad = target_lat * DEG_TO_RAD
+        target_lon_rad = target_lon * DEG_TO_RAD
+
+        # Cosine term is constant for the target latitude in equirectangular projection
+        cos_lat = math.cos(target_lat_rad)
 
         if pre_filtered:
             for issue in issues:
@@ -164,14 +175,19 @@ def find_nearby_issues(
                 if lat is None or lon is None:
                     continue
 
-                dlat = lat - target_lat
-                dlon = lon - target_lon
+            # Apply bounding box pre-filter
+            if not skip_bbox:
+                if (
+                    issue.latitude < min_lat
+                    or issue.latitude > max_lat
+                    or issue.longitude < min_lon
+                    or issue.longitude > max_lon
+                ):
+                    continue
 
-                # Handle longitude wrapping (dateline crossing)
-                if dlon > 180.0:
-                    dlon -= 360.0
-                elif dlon < -180.0:
-                    dlon += 360.0
+            # Inline conversion to radians (Optimized: multiply by constant)
+            lat_rad = issue.latitude * DEG_TO_RAD
+            lon_rad = issue.longitude * DEG_TO_RAD
 
                 x = dlon * meters_per_degree_lon
                 y = dlat * meters_per_degree_lat
@@ -191,8 +207,9 @@ def find_nearby_issues(
                    lon < min_lon or lon > max_lon:
                     continue
 
-                dlat = lat - target_lat
-                dlon = lon - target_lon
+            # Squared distance check avoids expensive sqrt()
+            # (x*R)^2 + (y*R)^2 = R^2 * (x^2 + y^2)
+            dist_sq = (x * x + y * y) * R * R
 
                 # Handle longitude wrapping (dateline crossing)
                 if dlon > 180.0:
