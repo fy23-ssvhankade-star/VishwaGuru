@@ -94,6 +94,6 @@
 **Learning:** Performing multiple sequential database queries to verify cryptographically chained records (e.g., fetching a record and then its associated token/metadata from another table) introduces unnecessary latency and increases database load.
 **Action:** Consolidate associated data retrieval into a single SQL `JOIN` query within the verification hot-path. This reduces database round-trips and improves end-to-end latency for blockchain-style integrity checks.
 
-## 2025-05-18 - Database-level Text Truncation
-**Learning:** Fetching full, potentially large text fields (like issue descriptions) from the database only to truncate them in the application layer is inefficient. It increases database I/O, network bandwidth, and application memory usage.
-**Action:** Use `func.substr(Model.column, 1, length).label("column")` in SQLAlchemy queries to truncate text at the source. This significantly reduces the data payload in list views and high-traffic endpoints.
+## 2025-05-15 - Column Projection in Blockchain Verification
+**Learning:** Loading full SQLAlchemy model instances for cryptographic verification endpoints adds unnecessary overhead, especially when tables contain large fields like JSON metadata or Text notes. Projected `Row` objects support attribute access and are significantly faster for read-only checks.
+**Action:** Use `db.query(Model.col1, Model.col2)` instead of `db.query(Model)` in blockchain verification hot-paths to reduce DB I/O and memory pressure.
