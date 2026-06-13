@@ -8,8 +8,8 @@ logger = logging.getLogger(__name__)
 
 class CivicRAG:
     def __init__(self, policies_path: str = "backend/data/civic_policies.json"):
-        # Pre-compile regex for performance
-        self._tokenizer_re = re.compile(r'[^a-z0-9\s]')
+        # Performance Boost: Pre-compile regex for faster tokenization
+        self._token_regex = re.compile(r'[^a-z0-9\s]')
 
         # Try to locate the file robustly
         if not os.path.exists(policies_path):
@@ -25,13 +25,22 @@ class CivicRAG:
                      policies_path = alt_path_root
 
         self.policies = []
-        self._prepared_policies = []
+        self.pretokenized_policies = []
+
         try:
             if os.path.exists(policies_path):
                 with open(policies_path, 'r') as f:
                     self.policies = json.load(f)
-                self._prepare_policies()
-                logger.info(f"Loaded and prepared {len(self.policies)} civic policies for RAG.")
+                logger.info(f"Loaded {len(self.policies)} civic policies for RAG.")
+
+                # Performance Boost: Pre-tokenize all policies during initialization
+                # to avoid redundant O(N) processing on every retrieve call.
+                for policy in self.policies:
+                    content = f"{policy.get('title', '')} {policy.get('text', '')}"
+                    self.pretokenized_policies.append({
+                        "content_tokens": self._tokenize(content),
+                        "title_tokens": self._tokenize(policy.get('title', ''))
+                    })
             else:
                 logger.warning(f"Civic policies file not found at {policies_path}")
         except Exception as e:
@@ -59,8 +68,8 @@ class CivicRAG:
     def _tokenize(self, text: str) -> set:
         """Simple tokenizer: lowercase, remove non-alphanumeric, split."""
         text = text.lower()
-        # Keep only alphanumeric and spaces - using pre-compiled regex
-        text = self._tokenizer_re.sub('', text)
+        # Performance Boost: Use pre-compiled regex
+        text = self._token_regex.sub('', text)
         return set(text.split())
 
     def retrieve(self, query: str, threshold: float = 0.05) -> Optional[str]:
@@ -81,8 +90,9 @@ class CivicRAG:
         best_score = 0.0
         best_formatted = None
 
-        for prepared in self._prepared_policies:
-            policy_tokens = prepared['content_tokens']
+        for policy, pretokenized in zip(self.policies, self.pretokenized_policies):
+            # Performance Boost: Use pre-calculated token sets
+            policy_tokens = pretokenized["content_tokens"]
 
             # Optimization: Use isdisjoint() for fast early exit
             if query_tokens.isdisjoint(policy_tokens):
@@ -100,9 +110,9 @@ class CivicRAG:
             score = intersection_len / union_len
 
             # Boost score if title words match (weighted)
-            # Optimized: Use fast short-circuit isdisjoint check instead of full intersection
-            title_tokens = prepared['title_tokens']
-            if not query_tokens.isdisjoint(title_tokens):
+            title_tokens = pretokenized["title_tokens"]
+            title_match = len(query_tokens.intersection(title_tokens))
+            if title_match > 0:
                 score += 0.2  # Bonus for title match
 
             if score > best_score:
