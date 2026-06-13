@@ -94,6 +94,6 @@
 **Learning:** Performing multiple sequential database queries to verify cryptographically chained records (e.g., fetching a record and then its associated token/metadata from another table) introduces unnecessary latency and increases database load.
 **Action:** Consolidate associated data retrieval into a single SQL `JOIN` query within the verification hot-path. This reduces database round-trips and improves end-to-end latency for blockchain-style integrity checks.
 
-## 2026-05-21 - Spatial Calculation Optimization via Hoisting and Pre-filtering
-**Learning:** In high-frequency spatial search paths (like deduplication), repeated `math.radians` calls and redundant bounding box checks on pre-filtered SQL results add significant CPU overhead.
-**Action:** Hoist constant factor calculations (meters per degree) outside the search loop. Introduce a `pre_filtered` flag to skip redundant Python-side bounding box checks when the dataset has already been narrowed down by the database. Observed ~20% latency reduction in benchmarks.
+## 2026-05-22 - Multi-Category Aggregate Consolidation
+**Learning:** Consolidating multiple database aggregate queries (e.g., categorical counts via `GROUP BY` and general metrics via `func.avg`/`func.count(distinct)`) into a single SQLAlchemy query using `func.sum(case(...))` significantly reduces database round-trips and redundant table scans. In benchmarks with 2000 records, this improved performance by ~60% (~0.5ms vs ~1.2ms).
+**Action:** When gathering multiple distinct metrics from the same table, prefer a single unified aggregate query using conditional `case` statements for category-specific counts instead of multiple round-trips.
