@@ -6,6 +6,7 @@ import os
 import json
 import logging
 import hashlib
+import hmac
 from datetime import datetime, timezone
 
 from backend.database import get_db
@@ -691,55 +692,51 @@ def verify_grievance_blockchain(grievance_id: int, db: Session = Depends(get_db)
         raise HTTPException(status_code=500, detail="Failed to verify grievance integrity")
 
 
-@router.get("/closure-confirmation/{confirmation_id}/blockchain-verify", response_model=BlockchainVerificationResponse)
-def verify_closure_confirmation_blockchain(
-    confirmation_id: int,
+@router.get("/grievances/audit/{audit_id}/blockchain-verify", response_model=BlockchainVerificationResponse)
+def verify_escalation_audit_blockchain(
+    audit_id: int,
     db: Session = Depends(get_db)
 ):
     """
-    Verify the cryptographic integrity of a closure confirmation record using blockchain-style chaining.
+    Verify the cryptographic integrity of an escalation audit log using blockchain-style chaining.
     Optimized: Uses previous_integrity_hash column for O(1) verification.
     """
     try:
-        confirmation = db.query(
-            ClosureConfirmation.grievance_id,
-            ClosureConfirmation.user_email,
-            ClosureConfirmation.confirmation_type,
-            ClosureConfirmation.integrity_hash,
-            ClosureConfirmation.previous_integrity_hash
-        ).filter(ClosureConfirmation.id == confirmation_id).first()
+        audit = db.query(
+            EscalationAudit.id,
+            EscalationAudit.grievance_id,
+            EscalationAudit.previous_authority,
+            EscalationAudit.new_authority,
+            EscalationAudit.reason,
+            EscalationAudit.integrity_hash,
+            EscalationAudit.previous_integrity_hash
+        ).filter(EscalationAudit.id == audit_id).first()
 
-        if not confirmation:
-            raise HTTPException(status_code=404, detail="Closure confirmation not found")
+        if not audit:
+            raise HTTPException(status_code=404, detail="Audit log not found")
 
         # Determine previous hash (O(1) from stored column)
-        prev_hash = confirmation.previous_integrity_hash or ""
+        prev_hash = audit.previous_integrity_hash or ""
 
         # Recompute hash based on current data and previous hash
-        # Chaining logic: hash(grievance_id|user_email|confirmation_type|prev_hash)
-        hash_content = f"{confirmation.grievance_id}|{confirmation.user_email}|{confirmation.confirmation_type}|{prev_hash}"
+        # Chaining logic: HMAC-SHA256(grievance_id|prev_authority|new_authority|reason|prev_hash)
+        from backend.config import get_auth_config
+        auth_config = get_auth_config()
+        secret_key = auth_config.secret_key.encode()
+        reason_value = audit.reason.value if hasattr(audit.reason, 'value') else audit.reason
+        chain_content = f"{audit.grievance_id}|{audit.previous_authority}|{audit.new_authority}|{reason_value}|{prev_hash}"
+        computed_hash = hmac.new(secret_key, chain_content.encode(), hashlib.sha256).hexdigest()
 
-        secret_key = get_auth_config().secret_key
-        computed_hash = hmac.new(
-            secret_key.encode('utf-8'),
-            hash_content.encode('utf-8'),
-            hashlib.sha256
-        ).hexdigest()
+        is_valid = (computed_hash == audit.integrity_hash)
 
-        if confirmation.integrity_hash is None:
-            is_valid = False
-            message = "No integrity hash present for this confirmation record; cryptographic integrity cannot be verified."
+        if is_valid:
+            message = "Integrity verified. This audit log is cryptographically sealed and part of a secure chain."
         else:
-            is_valid = hmac.compare_digest(computed_hash, confirmation.integrity_hash)
-            message = (
-                "Integrity verified. This closure confirmation record is cryptographically sealed."
-                if is_valid
-                else "Integrity check failed! The confirmation data does not match its cryptographic seal."
-            )
+            message = "Integrity check failed! The audit data does not match its cryptographic seal."
 
         return BlockchainVerificationResponse(
             is_valid=is_valid,
-            current_hash=confirmation.integrity_hash,
+            current_hash=audit.integrity_hash,
             computed_hash=computed_hash,
             message=message
         )
@@ -747,5 +744,5 @@ def verify_closure_confirmation_blockchain(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error verifying closure confirmation blockchain for {confirmation_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to verify confirmation integrity")
+        logger.error(f"Error verifying audit blockchain for {audit_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to verify audit integrity")
