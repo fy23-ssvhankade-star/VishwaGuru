@@ -154,17 +154,9 @@ class Issue(Base):
     latitude = Column(Float, nullable=True, index=True)
     longitude = Column(Float, nullable=True, index=True)
     location = Column(String, nullable=True)
-    action_plan = Column(JSON, nullable=True)
-    integrity_hash = Column(String(255), index=True, nullable=True)  # Blockchain integrity seal
-    previous_integrity_hash = Column(String(255), index=True, nullable=True)  # Link to previous block
-    
-    # Voice and Language Support (Issue #291)
-    submission_type = Column(String, default="text")  # 'text', 'voice'
-    original_language = Column(String, nullable=True)  # Language code (e.g., 'hi', 'mr', 'en')
-    original_text = Column(Text, nullable=True)  # Original text in regional language
-    transcription_confidence = Column(Float, nullable=True)  # Confidence score for voice transcriptions
-    manual_correction_applied = Column(Boolean, default=False)  # Flag for manual corrections
-    audio_file_path = Column(String, nullable=True)  # Path to stored audio file
+    action_plan = Column(JSONEncodedDict, nullable=True)
+    integrity_hash = Column(String, nullable=True)  # Blockchain integrity seal
+    previous_integrity_hash = Column(String, nullable=True)
 
 class PushSubscription(Base):
     __tablename__ = "push_subscriptions"

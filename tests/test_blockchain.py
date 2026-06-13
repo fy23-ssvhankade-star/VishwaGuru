@@ -1,3 +1,30 @@
+
+import sys
+import os
+sys.path.append(os.getcwd())
+from unittest.mock import MagicMock
+
+# Mock heavy dependencies BEFORE importing backend modules
+sys.modules["ultralytics"] = MagicMock()
+sys.modules["ultralyticsplus"] = MagicMock()
+sys.modules["torch"] = MagicMock()
+sys.modules["transformers"] = MagicMock()
+sys.modules["google"] = MagicMock()
+sys.modules["google.generativeai"] = MagicMock()
+sys.modules["telegram"] = MagicMock()
+sys.modules["telegram.ext"] = MagicMock()
+sys.modules["firebase_admin"] = MagicMock()
+sys.modules["firebase_functions"] = MagicMock()
+sys.modules["cv2"] = MagicMock()
+sys.modules["PIL"] = MagicMock()
+sys.modules["PIL.Image"] = MagicMock()
+sys.modules["magic"] = MagicMock()
+sys.modules["sklearn"] = MagicMock()
+sys.modules["numpy"] = MagicMock()
+sys.modules["scipy"] = MagicMock()
+sys.modules["pywebpush"] = MagicMock()
+sys.modules["async_lru"] = MagicMock()
+
 from fastapi.testclient import TestClient
 import pytest
 import hashlib
@@ -104,7 +131,8 @@ def test_blockchain_verification_failure(client, db_session):
     issue = Issue(
         description="Tampered issue",
         category="Road",
-        integrity_hash="invalidhash"
+        integrity_hash="invalidhash",
+        previous_integrity_hash=""
     )
     db_session.add(issue)
     db_session.commit()
@@ -134,3 +162,41 @@ def test_upvote_optimization(client, db_session):
     # Verify in DB
     db_session.refresh(issue)
     assert issue.upvotes == 11
+
+def test_blockchain_verification_legacy_fallback(client, db_session):
+    # Test backward compatibility for issues without previous_integrity_hash
+
+    # Create first issue
+    hash1_content = "Legacy Issue 1|Road|"
+    hash1 = hashlib.sha256(hash1_content.encode()).hexdigest()
+
+    issue1 = Issue(
+        description="Legacy Issue 1",
+        category="Road",
+        integrity_hash=hash1
+        # previous_integrity_hash is None (default)
+    )
+    db_session.add(issue1)
+    db_session.commit()
+    db_session.refresh(issue1)
+
+    # Create second issue chained to first
+    hash2_content = f"Legacy Issue 2|Garbage|{hash1}"
+    hash2 = hashlib.sha256(hash2_content.encode()).hexdigest()
+
+    issue2 = Issue(
+        description="Legacy Issue 2",
+        category="Garbage",
+        integrity_hash=hash2
+        # previous_integrity_hash is None (default)
+    )
+    db_session.add(issue2)
+    db_session.commit()
+    db_session.refresh(issue2)
+
+    # Verify second issue - should work via fallback query
+    response = client.get(f"/api/issues/{issue2.id}/blockchain-verify")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["is_valid"] == True
+    assert data["current_hash"] == hash2
