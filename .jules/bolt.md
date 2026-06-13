@@ -69,6 +69,6 @@
 ## 2026-03-05 - Transaction Consolidation with Blockchain Chaining
 **Learning:** Consolidating multiple database operations into a single transaction reduces disk I/O and latency. However, when using blockchain-style hash chaining with in-memory caches, global caches MUST NOT be updated until after a successful commit to prevent poisoning on rollbacks. Intermediate chaining during the transaction must be handled manually or via a separate local tracking mechanism.
 **Action:** Consolidate multiple `db.commit()` calls into one using `db.flush()` for intermediate IDs. Track generated hashes locally and update global `ThreadSafeCache` only after `db.commit()` succeeds.
-## 2026-04-16 - Optimize count queries in civic intelligence
-**Learning:** Optimizing count queries in SQLAlchemy by replacing `.count()` with `func.count()` requires careful attention to imports, mocking strategies in unit tests, and the underlying data structure in tests. Utilizing `.scalar()` returns the value efficiently.
-**Action:** When replacing ORM queries, explicitly check that the required functions (like `func`) are imported. In unit tests, verify mock setups by testing `hasattr(model, 'name') and model.name == 'count'`.
+## 2026-03-05 - SQLAlchemy .first() Early Exit Optimization
+**Learning:** Checking for record existence using `.count()` can be slow, as it executes a full counting query over matching rows. If you only need to know if at least one record exists and plan to fetch it anyway, executing `.first()` acts as a cheap, early exit. Additionally, using `db.query(func.count(Model.id)).filter(...).scalar() or 0` avoids the ORM overhead of `db.query(Model).filter(...).count()`.
+**Action:** When you need both the latest record and a total count, fetch `.first()` *before* `.count()`. If `.first()` returns None, you can skip the expensive count query entirely, saving a database roundtrip and ORM overhead.
