@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Camera, Upload, CheckCircle, XCircle, AlertTriangle, ArrowLeft, ShieldCheck, ShieldAlert, Link as LinkIcon } from 'lucide-react';
+import { Camera, Upload, CheckCircle, XCircle, AlertTriangle, ArrowLeft, ShieldCheck } from 'lucide-react';
 import { issuesApi } from '../api/issues';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
@@ -14,15 +14,19 @@ const VerifyView = () => {
   const [image, setImage] = useState(null);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [blockchainLoading, setBlockchainLoading] = useState(false);
   const [blockchainResult, setBlockchainResult] = useState(null);
-  const [verifyingBlockchain, setVerifyingBlockchain] = useState(false);
 
   useEffect(() => {
     const fetchIssue = async () => {
       try {
-        // Optimized O(1) fetch instead of O(N) filtering
+        // Optimization: Fetch issue by ID directly (O(1)) instead of searching recent list (O(N))
         const data = await issuesApi.getById(id);
-        setIssue(data);
+        if (data) {
+          setIssue(data);
+        } else {
+          setError("Issue not found.");
+        }
       } catch (err) {
         console.error("Load failed", err);
         setError("Failed to load issue details.");
@@ -50,6 +54,23 @@ const VerifyView = () => {
     if (e.target.files && e.target.files[0]) {
       setImage(e.target.files[0]);
       setResult(null); // Reset result on new image
+    }
+  };
+
+  const handleBlockchainVerify = async () => {
+    setBlockchainLoading(true);
+    setBlockchainResult(null);
+    try {
+      const data = await issuesApi.verifyBlockchain(id);
+      setBlockchainResult(data);
+    } catch (err) {
+      console.error("Blockchain verification failed", err);
+      setBlockchainResult({
+        is_valid: false,
+        message: "Failed to connect to the blockchain verification service."
+      });
+    } finally {
+      setBlockchainLoading(false);
     }
   };
 
@@ -154,57 +175,44 @@ const VerifyView = () => {
       </div>
 
       {/* Blockchain Integrity Seal Section */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="text-blue-600" size={24} />
-            <h2 className="text-xl font-bold">Blockchain Integrity Seal</h2>
-          </div>
-          {!blockchainResult && (
-            <button
-              onClick={handleVerifyBlockchain}
-              disabled={verifyingBlockchain}
-              className="text-sm bg-blue-50 text-blue-700 px-3 py-1 rounded-full font-semibold hover:bg-blue-100 transition disabled:opacity-50"
-            >
-              {verifyingBlockchain ? 'Verifying...' : 'Verify Seal'}
-            </button>
-          )}
+      <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl shadow-sm border border-indigo-100 p-6 mb-6">
+        <div className="flex items-center gap-3 mb-4">
+          <ShieldCheck className="text-indigo-600" size={28} />
+          <h2 className="text-xl font-bold text-indigo-900">Blockchain Integrity Seal</h2>
         </div>
 
-        {blockchainResult ? (
-          <div className={`p-4 rounded-lg ${blockchainResult.is_valid ? 'bg-blue-50 border border-blue-100' : 'bg-orange-50 border border-orange-100'}`}>
-            <div className="flex gap-3">
+        <p className="text-indigo-800 text-sm mb-4">
+          Every report in our system is cryptographically sealed and linked to the previous report, creating an immutable chain of records. Verify that this report hasn't been tampered with.
+        </p>
+
+        <button
+          onClick={handleBlockchainVerify}
+          disabled={blockchainLoading}
+          className="w-full bg-indigo-600 text-white py-2 rounded-lg font-semibold hover:bg-indigo-700 transition disabled:opacity-50"
+        >
+          {blockchainLoading ? 'Verifying Integrity Hash...' : 'Verify Cryptographic Seal'}
+        </button>
+
+        {blockchainResult && (
+          <div className={`mt-4 p-3 rounded border text-sm ${blockchainResult.is_valid ? 'bg-white border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+            <div className="flex items-start gap-2">
               {blockchainResult.is_valid ? (
-                <ShieldCheck size={24} className="text-blue-600 shrink-0" />
+                <CheckCircle size={18} className="text-green-600 mt-0.5" />
               ) : (
-                <ShieldAlert size={24} className="text-orange-600 shrink-0" />
+                <XCircle size={18} className="text-red-600 mt-0.5" />
               )}
               <div>
-                <p className={`font-bold ${blockchainResult.is_valid ? 'text-blue-900' : 'text-orange-900'}`}>
-                  {blockchainResult.is_valid ? 'Integrity Verified' : 'Integrity Compromised'}
-                </p>
-                <p className="text-sm text-gray-600 mb-3">{blockchainResult.message}</p>
-
-                <div className="space-y-2">
-                  <div className="bg-white/50 p-2 rounded text-xs font-mono break-all">
-                    <span className="text-gray-500 block mb-1 uppercase tracking-wider text-[10px] font-bold">Current Hash</span>
+                <p className="font-bold">{blockchainResult.is_valid ? 'Integrity Verified' : 'Integrity Compromised'}</p>
+                <p className="opacity-90">{blockchainResult.message}</p>
+                {blockchainResult.current_hash && (
+                  <div className="mt-2 pt-2 border-t border-gray-100 font-mono text-[10px] break-all">
+                    <p className="font-semibold text-gray-500 mb-1 uppercase tracking-tighter">Current Hash:</p>
                     {blockchainResult.current_hash}
                   </div>
-
-                  {blockchainResult.is_valid && (
-                    <div className="flex items-center gap-2 text-xs text-blue-700 font-medium mt-2">
-                      <LinkIcon size={14} />
-                      Linked to previous report hash
-                    </div>
-                  )}
-                </div>
+                )}
               </div>
             </div>
           </div>
-        ) : (
-          <p className="text-sm text-gray-500 italic">
-            Cryptographically verify that this report hasn't been tampered with since creation.
-          </p>
         )}
       </div>
     </div>

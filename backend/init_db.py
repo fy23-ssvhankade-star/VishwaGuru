@@ -1,7 +1,7 @@
 import sys
 import os
 from pathlib import Path
-from sqlalchemy import text, inspect
+from sqlalchemy import text
 import logging
 
 # Add project root to path
@@ -80,8 +80,20 @@ def migrate_db():
                 if not index_exists("issues", "ix_issues_created_at"):
                     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_issues_created_at ON issues (created_at)"))
 
-                if not index_exists("issues", "ix_issues_status"):
-                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_issues_status ON issues (status)"))
+            # Add previous_integrity_hash column for O(1) blockchain verification
+            try:
+                conn.execute(text("ALTER TABLE issues ADD COLUMN previous_integrity_hash VARCHAR"))
+                print("Migrated database: Added previous_integrity_hash column.")
+            except Exception:
+                pass
+
+            # Add index on user_email
+            try:
+                conn.execute(text("CREATE INDEX ix_issues_user_email ON issues (user_email)"))
+                logger.info("Migrated database: Added index on user_email column.")
+            except Exception:
+                # Index likely already exists
+                pass
 
                 if not index_exists("issues", "ix_issues_latitude"):
                     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_issues_latitude ON issues (latitude)"))
@@ -138,9 +150,7 @@ def migrate_db():
             logger.info("Database migration check completed successfully.")
 
     except Exception as e:
-        logger.error(f"Database migration error: {e}", exc_info=True)
-        # Re-raise to alert deployment failure if migration is critical
-        # raise e
+        logger.error(f"Database migration error: {e}")
 
 if __name__ == "__main__":
     init_db()
