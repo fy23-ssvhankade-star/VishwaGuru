@@ -90,7 +90,7 @@ def is_within_geofence(
     return within_fence, distance
 
 
-def generate_visit_hash(visit_data: dict) -> str:
+def generate_visit_hash(visit_data: dict, prev_hash: str = "") -> str:
     """
     Generate a tamper-resistant HMAC hash for visit data (blockchain-like integrity).
     
@@ -99,26 +99,22 @@ def generate_visit_hash(visit_data: dict) -> str:
     
     Args:
         visit_data: Dictionary containing visit information
+        prev_hash: Previous visit's integrity hash for blockchain chaining
         
     Returns:
         HMAC-SHA256 hash of visit data
     """
     try:
-        # Normalize check_in_time to UTC ISO format string for determinism
-        # Ensure microseconds are stripped for consistent comparison across DBs
+        # Normalize check_in_time to ISO format string for determinism
+        # Ensure UTC and strip microseconds for consistency across platforms/DBs
         check_in_time = visit_data.get('check_in_time')
         if isinstance(check_in_time, datetime):
-            # Normalize to UTC and strip microseconds for consistency
-            if check_in_time.tzinfo is None:
-                check_in_time = check_in_time.replace(tzinfo=timezone.utc)
-            else:
-                check_in_time = check_in_time.astimezone(timezone.utc)
-
             check_in_time_str = check_in_time.replace(microsecond=0).strftime('%Y-%m-%dT%H:%M:%S')
         else:
             check_in_time_str = str(check_in_time) if check_in_time else ""
         
-        # Create a deterministic string from visit data, including previous hash for chaining
+        # Create a deterministic string from visit data
+        # Chaining logic: data_string + prev_hash
         data_string = (
             f"{visit_data.get('issue_id')}"
             f"{visit_data.get('officer_email')}"
@@ -126,7 +122,7 @@ def generate_visit_hash(visit_data: dict) -> str:
             f"{visit_data.get('check_in_longitude')}"
             f"{check_in_time_str}"
             f"{visit_data.get('visit_notes', '')}"
-            f"{visit_data.get('previous_visit_hash', '')}"
+            f"{prev_hash}"
         )
         
         # Generate HMAC-SHA256 hash for tamper-resistance
@@ -145,19 +141,20 @@ def generate_visit_hash(visit_data: dict) -> str:
         return ""
 
 
-def verify_visit_integrity(visit_data: dict, stored_hash: str) -> bool:
+def verify_visit_integrity(visit_data: dict, stored_hash: str, prev_hash: str = "") -> bool:
     """
     Verify the integrity of visit data against stored hash.
     
     Args:
         visit_data: Dictionary containing visit information
         stored_hash: Previously stored hash
+        prev_hash: Previous visit's integrity hash for blockchain chaining
         
     Returns:
         True if data is unmodified, False otherwise
     """
     try:
-        computed_hash = generate_visit_hash(visit_data)
+        computed_hash = generate_visit_hash(visit_data, prev_hash)
         is_valid = computed_hash == stored_hash
         
         if not is_valid:

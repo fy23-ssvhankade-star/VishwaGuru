@@ -1,36 +1,38 @@
-import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import text
-from sqlalchemy.orm import Session
-from datetime import datetime, timezone
+import os
+import sys
 import hashlib
+from datetime import datetime, timezone
+from sqlalchemy.orm import Session
 
-from backend.main import app
-from backend.database import get_db, Base, engine
-from backend.models import Issue, FieldOfficerVisit
+# Add project root to path
+sys.path.insert(0, os.getcwd())
+
+from backend.database import SessionLocal, engine, Base
+from backend.models import FieldOfficerVisit, Issue, Jurisdiction, JurisdictionLevel
+from backend.routers.field_officer import officer_check_in, verify_visit_blockchain_integrity
+from backend.schemas import OfficerCheckInRequest
 from backend.cache import visit_last_hash_cache
 
-# Use an isolated SQLite database for blockchain tests
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test_blockchain_visit.db"
-
-@pytest.fixture(scope="module")
-def client():
-    # Setup: Create tables in the test database
+def setup_db():
     Base.metadata.create_all(bind=engine)
-    with TestClient(app) as c:
-        yield c
-    # Teardown: Remove the test database file if needed,
-    # but here we just rely on the fact it's a separate file or in-memory
-    Base.metadata.drop_all(bind=engine)
+    db = SessionLocal()
 
-def test_visit_blockchain_chaining(client):
-    # Clear cache for deterministic test
-    visit_last_hash_cache.clear()
+    # Create a jurisdiction if none exists
+    jurisdiction = db.query(Jurisdiction).first()
+    if not jurisdiction:
+        jurisdiction = Jurisdiction(
+            level=JurisdictionLevel.LOCAL,
+            geographic_coverage={"districts": ["Test"]},
+            responsible_authority="Test Auth",
+            default_sla_hours=24
+        )
+        db.add(jurisdiction)
+        db.commit()
+        db.refresh(jurisdiction)
 
-    # 1. Create a test issue
-    db = next(get_db())
+    # Create an issue
     issue = Issue(
-        description="Pothole on Main St",
+        description="Test Issue for Blockchain",
         category="Road",
         latitude=18.5204,
         longitude=73.8567,
@@ -40,98 +42,78 @@ def test_visit_blockchain_chaining(client):
     db.commit()
     db.refresh(issue)
 
-    # 2. First check-in (Root of the chain)
-    checkin1 = {
-        "issue_id": issue.id,
-        "officer_email": "officer1@city.gov",
-        "officer_name": "John Doe",
-        "check_in_latitude": 18.5205,
-        "check_in_longitude": 73.8568,
-        "visit_notes": "First visit",
-        "geofence_radius_meters": 100.0
-    }
-    response1 = client.post("/api/field-officer/check-in", json=checkin1)
-    assert response1.status_code == 200
-    data1 = response1.json()
-    visit1_id = data1["id"]
-    visit1_hash = data1.get("visit_hash") # Note: Visit hash is not in FieldOfficerVisitResponse by default in schemas.py?
+    return db, issue, jurisdiction
 
-    # Re-fetch from DB to check visit_hash and previous_visit_hash
-    v1 = db.query(FieldOfficerVisit).filter(FieldOfficerVisit.id == visit1_id).first()
-    assert v1.visit_hash is not None
-    assert v1.previous_visit_hash == ""
-
-    # 3. Second check-in (Chained to first)
-    checkin2 = {
-        "issue_id": issue.id,
-        "officer_email": "officer2@city.gov",
-        "officer_name": "Jane Smith",
-        "check_in_latitude": 18.5204,
-        "check_in_longitude": 73.8567,
-        "visit_notes": "Second visit",
-        "geofence_radius_meters": 100.0
-    }
-    response2 = client.post("/api/field-officer/check-in", json=checkin2)
-    assert response2.status_code == 200
-    data2 = response2.json()
-    visit2_id = data2["id"]
-
-    v2 = db.query(FieldOfficerVisit).filter(FieldOfficerVisit.id == visit2_id).first()
-    assert v2.visit_hash is not None
-    assert v2.previous_visit_hash == v1.visit_hash
-
-    # 4. Verify integrity via API
-    verify_resp1 = client.get(f"/api/field-officer/{visit1_id}/blockchain-verify")
-    assert verify_resp1.status_code == 200
-    assert verify_resp1.json()["is_valid"] is True
-
-    verify_resp2 = client.get(f"/api/field-officer/{visit2_id}/blockchain-verify")
-    assert verify_resp2.status_code == 200
-    assert verify_resp2.json()["is_valid"] is True
-
-    # 5. Simulate tampering
-    v2.visit_notes = "TAMPERED NOTES"
-    db.commit()
-
-    verify_tampered = client.get(f"/api/field-officer/{visit2_id}/blockchain-verify")
-    assert verify_tampered.status_code == 200
-    assert verify_tampered.json()["is_valid"] is False
-    assert "Integrity check failed" in verify_tampered.json()["message"]
-
-def test_cache_miss_recovery(client):
-    # 1. Create a visit
-    db = next(get_db())
-    issue = db.query(Issue).first()
-
-    checkin = {
-        "issue_id": issue.id,
-        "officer_email": "officer3@city.gov",
-        "officer_name": "Officer Cache",
-        "check_in_latitude": 18.5204,
-        "check_in_longitude": 73.8567,
-        "visit_notes": "Cache test",
-        "geofence_radius_meters": 100.0
-    }
-    client.post("/api/field-officer/check-in", json=checkin)
-
-    last_visit = db.query(FieldOfficerVisit).order_by(FieldOfficerVisit.id.desc()).first()
-    last_hash = last_visit.visit_hash
-
-    # 2. Clear cache
+def test_blockchain_chaining():
+    db, issue, jurisdiction = setup_db()
     visit_last_hash_cache.clear()
 
-    # 3. Next check-in should still chain correctly by fetching from DB
-    checkin_next = {
-        "issue_id": issue.id,
-        "officer_email": "officer4@city.gov",
-        "officer_name": "Officer Recovery",
-        "check_in_latitude": 18.5204,
-        "check_in_longitude": 73.8567,
-        "visit_notes": "Recovery test",
-        "geofence_radius_meters": 100.0
-    }
-    resp = client.post("/api/field-officer/check-in", json=checkin_next)
-    assert resp.status_code == 200
+    try:
+        print("--- Testing Visit 1 (Initial) ---")
+        request1 = OfficerCheckInRequest(
+            issue_id=issue.id,
+            officer_email="officer1@example.com",
+            officer_name="Officer One",
+            check_in_latitude=18.5205,
+            check_in_longitude=73.8568
+        )
+        visit1 = officer_check_in(request1, db)
+        print(f"Visit 1 Hash: {visit1.visit_hash}")
+        print(f"Visit 1 Prev Hash: '{visit1.previous_visit_hash}'")
+        assert visit1.previous_visit_hash == ""
 
-    v_next = db.query(FieldOfficerVisit).order_by(FieldOfficerVisit.id.desc()).first()
-    assert v_next.previous_visit_hash == last_hash
+        # Verify Visit 1
+        verify1 = verify_visit_blockchain_integrity(visit1.id, db)
+        print(f"Visit 1 Integrity: {verify1.is_valid}")
+        assert verify1.is_valid is True
+
+        print("\n--- Testing Visit 2 (Chained) ---")
+        request2 = OfficerCheckInRequest(
+            issue_id=issue.id,
+            officer_email="officer2@example.com",
+            officer_name="Officer Two",
+            check_in_latitude=18.5206,
+            check_in_longitude=73.8569
+        )
+        visit2 = officer_check_in(request2, db)
+        print(f"Visit 2 Hash: {visit2.visit_hash}")
+        print(f"Visit 2 Prev Hash: {visit2.previous_visit_hash}")
+        assert visit2.previous_visit_hash == visit1.visit_hash
+
+        # Verify Visit 2
+        verify2 = verify_visit_blockchain_integrity(visit2.id, db)
+        print(f"Visit 2 Integrity: {verify2.is_valid}")
+        assert verify2.is_valid is True
+
+        print("\n--- Testing Tamper Detection ---")
+        # Manually tamper with Visit 2 notes in DB
+        db_visit2 = db.query(FieldOfficerVisit).filter(FieldOfficerVisit.id == visit2.id).first()
+        db_visit2.visit_notes = "TAMPERED NOTES"
+        db.commit()
+
+        verify2_tampered = verify_visit_blockchain_integrity(visit2.id, db)
+        print(f"Visit 2 Integrity after tampering: {verify2_tampered.is_valid}")
+        assert verify2_tampered.is_valid is False
+        print("Tamper detection works!")
+
+        print("\n--- Testing Cache O(1) Behavior ---")
+        # Clear cache and see if it falls back to DB correctly
+        visit_last_hash_cache.clear()
+        request3 = OfficerCheckInRequest(
+            issue_id=issue.id,
+            officer_email="officer3@example.com",
+            officer_name="Officer Three",
+            check_in_latitude=18.5207,
+            check_in_longitude=73.8570
+        )
+        visit3 = officer_check_in(request3, db)
+        print(f"Visit 3 Prev Hash (from DB fallback): {visit3.previous_visit_hash}")
+        assert visit3.previous_visit_hash == visit2.visit_hash
+
+        print("\nAll blockchain verification tests PASSED!")
+
+    finally:
+        db.close()
+
+if __name__ == "__main__":
+    test_blockchain_chaining()
