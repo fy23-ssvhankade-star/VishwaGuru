@@ -236,7 +236,6 @@ async def create_issue(
         # Invalidate cache so new issue appears
         try:
             recent_issues_cache.clear()
-            # Invalidate user history cache to ensure consistency
             user_issues_cache.clear()
         except Exception as e:
             logger.error(f"Error clearing cache: {e}")
@@ -613,10 +612,9 @@ def get_user_issues(
 ):
     """
     Get issues reported by a specific user (identified by email).
-    Optimized: Uses column projection, caching, and raw JSON response for high performance.
+    Optimized: Uses column projection and serialized JSON caching to bypass Pydantic overhead.
     """
-    # Performance Boost: Check cache for serialized JSON
-    cache_key = f"history_{user_email}_{limit}_{offset}"
+    cache_key = f"user_issues_{user_email}_{limit}_{offset}"
     cached_json = user_issues_cache.get(cache_key)
     if cached_json:
         return Response(content=cached_json, media_type="application/json")
@@ -658,7 +656,7 @@ def get_user_issues(
     # Performance Boost: Cache serialized JSON to bypass redundant Pydantic validation
     # and serialization on cache hits. Returning Response directly is ~2-3x faster.
     json_data = json.dumps(data)
-    user_issues_cache.set(json_data, cache_key)
+    user_issues_cache.set(data=json_data, key=cache_key)
     return Response(content=json_data, media_type="application/json")
 
 @router.get("/issues/{issue_id}/blockchain-verify", response_model=BlockchainVerificationResponse)
