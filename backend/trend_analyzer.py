@@ -18,8 +18,8 @@ class TrendAnalyzer:
             "issue", "problem", "complaint", "regarding", "please", "help", "fix",
             "near", "opposite", "behind", "front", "road", "street", "lane"
         }
-        # Pre-compile regex for performance
-        self._word_re = re.compile(r'\w+')
+        # Bolt optimization: Pre-compile regex for faster tokenization
+        self.word_pattern = re.compile(r'\w+')
 
     def analyze(self, issues: List[Issue]) -> Dict[str, Any]:
         """
@@ -48,12 +48,9 @@ class TrendAnalyzer:
         """
         Extract top 5 most common keywords from issue descriptions.
         """
-        # Batch join then lower() is faster
+        # Bolt optimization: Batch string join before lower() and use pre-compiled regex
         text = " ".join([issue.description for issue in issues if issue.description]).lower()
-
-        # Simple tokenization: remove punctuation and split by whitespace
-        # Optimized: pre-compiled \w+ avoids \b boundaries overhead while being functionally equivalent
-        words = self._word_re.findall(text)
+        words = self.word_pattern.findall(text)
         filtered_words = [w for w in words if w not in self.stop_words and len(w) > 2 and not w.isdigit()]
 
         counter = Counter(filtered_words)

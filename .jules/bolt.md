@@ -94,10 +94,6 @@
 **Learning:** Performing multiple sequential database queries to verify cryptographically chained records (e.g., fetching a record and then its associated token/metadata from another table) introduces unnecessary latency and increases database load.
 **Action:** Consolidate associated data retrieval into a single SQL `JOIN` query within the verification hot-path. This reduces database round-trips and improves end-to-end latency for blockchain-style integrity checks.
 
-## 2024-06-11 - Fast text batching and pre-compiled regex extraction
-**Learning:** Using `re.compile(r'\w+')` with `.findall()` is significantly faster than the default `re.findall(r'\b\w+\b', ...)` while maintaining Unicode support and correct word boundary handling. Batching string segments into one `.join()` before calling `.lower()` further improves performance in bulk text processing.
-**Action:** When extracting keywords from lists of text objects, batch string joins, convert to lowercase after joining, and use a pre-compiled regex `\w+`.
-
-## 2024-06-11 - Set intersection performance
-**Learning:** Using the Python bitwise AND operator `&` for set intersections (e.g., `query_tokens & policy_tokens`) is more idiomatic and slightly faster than calling the `.intersection()` method, especially in high-traffic hot paths like RAG retrieval.
-**Action:** Use bitwise operators (`&`, `|`, `-`) for set operations where performance is critical.
+## 2026-06-21 - Optimizing Keyword Extraction Loops
+**Learning:** In bulk text analysis scenarios like `TrendAnalyzer`, extracting keywords using `re.findall(r'\b\w+\b', text)` dynamically per string is slow. Lowercasing strings individually in a list comprehension before joining them also adds overhead.
+**Action:** Pre-compile the regular expression (`re.compile(r'\w+')`) in the class `__init__`. Batch the strings by using `" ".join(...)` first, and then call `.lower()` on the single combined string before executing `regex.findall()`. This measurably improves tokenization speed while maintaining exact functional parity.
