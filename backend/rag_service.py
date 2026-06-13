@@ -89,21 +89,20 @@ class CivicRAG:
                 continue
 
             # Jaccard Similarity
-            # Optimization: Mathematical union length |A union B| = |A| + |B| - |A intersection B|
-            # This avoids the overhead of building a new set with .union()
-            intersection = query_tokens.intersection(policy_tokens)
-            intersection_len = len(intersection)
+            # Optimized: Calculate intersection and mathematically deduce union length
+            # to avoid creating a new set object in memory for union operations.
+            intersection_len = len(query_tokens.intersection(policy_tokens))
 
-            union_len = query_tokens_len + prepared['content_tokens_len'] - intersection_len
-
-            if union_len == 0:
+            if intersection_len == 0:
                 continue
 
+            union_len = len(query_tokens) + len(policy_tokens) - intersection_len
             score = intersection_len / union_len
 
             # Boost score if title words match (weighted)
-            # Optimization: Use isdisjoint() for faster boolean check
-            if not query_tokens.isdisjoint(prepared['title_tokens']):
+            # Optimized: Use fast short-circuit isdisjoint check instead of full intersection
+            title_tokens = prepared['title_tokens']
+            if not query_tokens.isdisjoint(title_tokens):
                 score += 0.2  # Bonus for title match
 
             if score > best_score:

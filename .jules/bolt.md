@@ -86,10 +86,6 @@
 **Learning:** In RAG (Retrieval-Augmented Generation) systems with static or semi-static policy datasets, performing tokenization, regex substitution, and string formatting inside the retrieval loop is a significant bottleneck that scales with the number of policies.
 **Action:** Move all deterministic operations (tokenization, formatting, regex matching prep) to a one-time initialization step to ensure the retrieval hot-path only performs necessary set intersections and similarity calculations.
 
-## 2025-05-18 - Optimized Jaccard Similarity for RAG
-**Learning:** Calculating Jaccard similarity in a hot loop can be optimized by using the inclusion-exclusion principle (|A ∪ B| = |A| + |B| - |A ∩ B|) to avoid the overhead of set union construction. Combining this with  for early exits significantly reduces CPU cycles for non-matching documents.
-**Action:** Use mathematical union length and  for set similarity comparisons in high-frequency retrieval paths.
-
-## 2025-05-18 - Optimized Jaccard Similarity for RAG
-**Learning:** Calculating Jaccard similarity in a hot loop can be optimized by using the inclusion-exclusion principle (|A ∪ B| = |A| + |B| - |A ∩ B|) to avoid the overhead of set union construction. Combining this with `isdisjoint()` for early exits significantly reduces CPU cycles for non-matching documents.
-**Action:** Use mathematical union length and `isdisjoint()` for set similarity comparisons in high-frequency retrieval paths.
+## 2026-05-18 - Mathematical Optimization for Set Operations
+**Learning:** In hot RAG retrieval loops, calculating Jaccard similarity via `query_tokens.union(policy_tokens)` allocates a completely new set object in memory on every iteration, leading to significant overhead. Also, checking if any overlap exists by asserting `len(query_tokens.intersection(title_tokens)) > 0` builds the full intersection set before calculating length.
+**Action:** Use mathematical deduction for union length `len(A) + len(B) - len(A & B)` to skip allocation. Use `.isdisjoint()` for fast short-circuit overlap checking. This halves retrieval latency in high-volume scoring loops.
