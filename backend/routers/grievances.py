@@ -11,8 +11,7 @@ from datetime import datetime, timezone
 from backend.database import get_db
 import hmac
 from backend.config import get_auth_config
-from backend.models import Grievance, EscalationAudit, GrievanceFollower, ClosureConfirmation
-from backend.cache import grievance_list_cache, escalation_stats_cache
+from backend.models import Grievance, EscalationAudit, GrievanceFollower, ClosureConfirmation, GrievanceStatus
 from backend.schemas import (
     GrievanceSummaryResponse,
     EscalationAuditResponse,
@@ -174,7 +173,7 @@ def get_grievance(grievance_id: int, db: Session = Depends(get_db)):
 def get_escalation_stats(db: Session = Depends(get_db)):
     """
     Get escalation statistics.
-    Optimized: Uses serialization caching and a single GROUP BY query.
+    Optimized: Uses a single aggregate query with case sum for multiple metrics, avoiding Python dictionary overhead.
     """
     try:
         # Check cache
@@ -183,18 +182,11 @@ def get_escalation_stats(db: Session = Depends(get_db)):
             return Response(content=cached_json, media_type="application/json")
 
         # Perform aggregation in a single query for performance
-        status_counts = db.query(
-            Grievance.status,
-            func.count(Grievance.id)
-        ).group_by(Grievance.status).all()
-
-        # Perform aggregation in a single query for maximum performance
-        # Using func.sum(case(...)) is faster than group_by for a fixed set of statuses
         stats = db.query(
-            func.count(Grievance.id).label('total'),
-            func.sum(case((Grievance.status == 'escalated', 1), else_=0)).label('escalated'),
-            func.sum(case((Grievance.status == 'open', 1), (Grievance.status == 'in_progress', 1), else_=0)).label('active'),
-            func.sum(case((Grievance.status == 'resolved', 1), else_=0)).label('resolved')
+            func.count(Grievance.id).label("total"),
+            func.sum(case((Grievance.status == GrievanceStatus.ESCALATED, 1), else_=0)).label("escalated"),
+            func.sum(case((Grievance.status.in_([GrievanceStatus.OPEN, GrievanceStatus.IN_PROGRESS]), 1), else_=0)).label("active"),
+            func.sum(case((Grievance.status == GrievanceStatus.RESOLVED, 1), else_=0)).label("resolved")
         ).first()
 
         total_grievances = stats.total or 0
