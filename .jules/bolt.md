@@ -86,10 +86,6 @@
 **Learning:** In RAG (Retrieval-Augmented Generation) systems with static or semi-static policy datasets, performing tokenization, regex substitution, and string formatting inside the retrieval loop is a significant bottleneck that scales with the number of policies.
 **Action:** Move all deterministic operations (tokenization, formatting, regex matching prep) to a one-time initialization step to ensure the retrieval hot-path only performs necessary set intersections and similarity calculations.
 
-## 2026-05-18 - Jaccard Similarity Optimization via Set Arithmetic
-**Learning:** In retrieval loops calculating Jaccard similarity (e.g. RAG), explicitly building a union set `A.union(B)` is expensive due to memory allocation and population.
-**Action:** Use the inclusion-exclusion principle $|A \cup B| = |A| + |B| - |A \cap B|$ to calculate union size in O(1) arithmetic time after calculating the intersection. Pre-calculate $|B|$ (token count) to further reduce overhead. Use `isdisjoint()` for fast early-exit.
-
-## 2026-05-18 - Async Event Loop Blocking in Image Uploads
-**Learning:** Performing synchronous image processing (PIL resize) and file I/O (write) directly in FastAPI async handlers blocks the event loop, causing severe latency spikes under load. Unified processing pipelines (resizing/EXIF stripping) should be offloaded to thread pools to maintain responsiveness.
-**Action:** Use `run_in_threadpool` for all image processing and file write operations in async endpoints. Ensure specific domain limits (like 10MB vs 20MB) are checked before calling generic utilities.
+## 2026-05-18 - Mathematical Set Operations for Jaccard Similarity
+**Learning:** Calculating Jaccard similarity (|A ∩ B| / |A ∪ B|) using `set.union()` inside a retrieval loop incurs significant O(N) memory allocation and population overhead. Since |A ∪ B| = |A| + |B| - |A ∩ B|, the union size can be calculated via O(1) arithmetic if set sizes are pre-calculated.
+**Action:** Pre-calculate set lengths for static data. In retrieval loops, use `isdisjoint()` for early exits and the inclusion-exclusion formula to avoid explicit set union operations.
