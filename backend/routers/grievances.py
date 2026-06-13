@@ -504,23 +504,17 @@ def get_closure_status(grievance_id: int, db: Session = Depends(get_db)):
             raise HTTPException(status_code=404, detail="Grievance not found")
 
         # Optimized: Use a single aggregate query to calculate total followers, confirmations and disputes in one database roundtrip
-        total_followers = (
-            db.query(func.count(GrievanceFollower.id))
-            .filter(GrievanceFollower.grievance_id == grievance_id)
-            .scalar()
-        )
-
+        total_followers = db.query(func.count(GrievanceFollower.id)).filter(
+            GrievanceFollower.grievance_id == grievance_id
+        ).scalar()
+        
         # Get all confirmation counts in a single query instead of multiple round-trips
-        # Optimized: Replace expensive func.sum(case(...)) with a standard GROUP BY
-        counts = (
-            db.query(
-                ClosureConfirmation.confirmation_type,
-                func.count(ClosureConfirmation.id),
-            )
-            .filter(ClosureConfirmation.grievance_id == grievance_id)
-            .group_by(ClosureConfirmation.confirmation_type)
-            .all()
-        )
+        # Optimized: Use group_by instead of sum(case) for better aggregation performance
+        counts = db.query(
+            ClosureConfirmation.confirmation_type,
+            func.count(ClosureConfirmation.id)
+        ).filter(ClosureConfirmation.grievance_id == grievance_id).group_by(ClosureConfirmation.confirmation_type).all()
+        
         counts_dict = dict(counts)
 
         confirmations_count = counts_dict.get("confirmed", 0)
