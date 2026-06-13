@@ -94,6 +94,6 @@
 **Learning:** Performing multiple sequential database queries to verify cryptographically chained records (e.g., fetching a record and then its associated token/metadata from another table) introduces unnecessary latency and increases database load.
 **Action:** Consolidate associated data retrieval into a single SQL `JOIN` query within the verification hot-path. This reduces database round-trips and improves end-to-end latency for blockchain-style integrity checks.
 
-## 2026-06-09 - Ensure Source Implementation is Added
-**Learning:** Adding test files or dummy data directly to verify an integration without providing the core logic implementing the feature causes PR blocks.
-**Action:** Always provide the full actual feature source code when working on tasks that expect the implementation logic.
+## 2025-05-22 - O(1) Blockchain Integrity for Followers
+**Learning:** Adding cryptographic integrity seals to high-traffic entities like followers can introduce database bottlenecks if the previous hash is queried on every insertion.
+**Action:** Use a global `ThreadSafeCache` and a `threading.Lock` to maintain the "head" of the hash chain in memory. This ensures O(1) hash retrieval for chaining while preventing race conditions in a single-process deployment.
