@@ -33,7 +33,7 @@ from backend.cache import recent_issues_cache, nearby_issues_cache
 from backend.hf_api_service import verify_resolution_vqa
 from backend.dependencies import get_http_client
 from backend.rag_service import rag_service
-from backend.adaptive_weights import adaptive_weights
+from backend.config import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -94,11 +94,10 @@ async def create_issue(
 
     if latitude is not None and longitude is not None:
         try:
-            # Find existing open issues within dynamic radius (adaptive)
-            search_radius = adaptive_weights.get_duplicate_search_radius()
-
+            # Find existing open issues within 50 meters (configurable)
+            radius = get_config().deduplication_radius
             # Optimization: Use bounding box to filter candidates in SQL
-            min_lat, max_lat, min_lon, max_lon = get_bounding_box(latitude, longitude, search_radius)
+            min_lat, max_lat, min_lon, max_lon = get_bounding_box(latitude, longitude, radius)
 
             # Performance Boost: Use column projection to avoid loading full model instances
             open_issues = await run_in_threadpool(
@@ -121,11 +120,12 @@ async def create_issue(
             )
 
             nearby_issues_with_distance = find_nearby_issues(
-                open_issues, latitude, longitude, radius_meters=search_radius
+                open_issues, latitude, longitude, radius_meters=radius
             )
 
             if nearby_issues_with_distance:
                 # Found nearby issues - prepare deduplication response
+                limit = get_config().deduplication_limit
                 nearby_responses = [
                     NearbyIssueResponse(
                         id=issue.id,
@@ -138,7 +138,7 @@ async def create_issue(
                         created_at=issue.created_at,
                         status=issue.status
                     )
-                    for issue, distance in nearby_issues_with_distance[:3]  # Limit to top 3 closest
+                    for issue, distance in nearby_issues_with_distance[:limit]  # Limit to configured number
                 ]
 
                 deduplication_info = DeduplicationCheckResponse(
@@ -462,7 +462,10 @@ async def verify_issue_endpoint(
         final_status = updated_issue.status if updated_issue else "open"
         final_upvotes = updated_issue.upvotes if updated_issue else 0
 
-        if updated_issue and updated_issue.upvotes >= 5 and updated_issue.status == "open":
+        # Use configured threshold
+        verification_threshold = get_config().verification_threshold
+
+        if updated_issue and updated_issue.upvotes >= verification_threshold and updated_issue.status == "open":
             await run_in_threadpool(
                 lambda: db.query(Issue).filter(Issue.id == issue_id).update({
                     Issue.status: "verified"
