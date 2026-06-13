@@ -53,25 +53,22 @@ def get_stats(db: Session = Depends(get_db)):
     if cached_stats:
         return JSONResponse(content=cached_stats)
 
-    # Optimized: Single aggregate query for both category breakdowns and system-wide totals
-    # This eliminates a redundant database roundtrip
-    cat_counts = db.query(
+    # ⚡ Bolt Optimization: Consolidate multiple aggregate queries into a single database roundtrip
+    # by grouping by category and accumulating system-wide totals in Python.
+    results = db.query(
         Issue.category,
-        func.count(Issue.id).label("total"),
-        func.sum(case((Issue.status.in_(['resolved', 'verified']), 1), else_=0)).label("resolved")
+        func.count(Issue.id).label('count'),
+        func.sum(case((Issue.status.in_(['resolved', 'verified']), 1), else_=0)).label('resolved_count')
     ).group_by(Issue.category).all()
 
     total = 0
     resolved = 0
     issues_by_category = {}
 
-    for cat, cat_total, cat_resolved in cat_counts:
-        # Sum up system-wide totals
-        total += cat_total or 0
-        resolved += int(cat_resolved or 0)
-
-        # Build category breakdown
-        issues_by_category[cat] = cat_total or 0
+    for cat, count, res_count in results:
+        total += count
+        resolved += int(res_count or 0)
+        issues_by_category[cat] = count
 
     # Pending is everything else
     pending = total - resolved
