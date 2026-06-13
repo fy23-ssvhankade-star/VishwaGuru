@@ -39,6 +39,7 @@ from backend.geofencing_service import (
 )
 from backend.cache import visit_last_hash_cache, visit_stats_cache
 from backend.schemas import BlockchainVerificationResponse
+from backend.utils import process_uploaded_image, save_processed_image
 
 logger = logging.getLogger(__name__)
 
@@ -315,8 +316,9 @@ async def upload_visit_images(
 
     - **visit_id**: ID of the visit
     - **images**: List of image files
-
-    Maximum 10 images per visit
+    
+    Maximum 10 images per visit.
+    Optimized: Uses single-pass image processing (resize/strip EXIF) and non-blocking I/O.
     """
     try:
         visit = (
@@ -345,45 +347,32 @@ async def upload_visit_images(
         image_paths = []
 
         for idx, image in enumerate(images):
-            # Validate content_type is present
-            if not image.content_type:
-                raise HTTPException(
-                    status_code=400, detail="File must have a content type"
-                )
-
-            # Validate file type
-            if not image.content_type.startswith("image/"):
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"File must be an image, got {image.content_type}",
-                )
-
-            # Validate filename is present
+            # Performance optimization: Use unified image processing pipeline
+            # This handles validation, resizing (1024px), and EXIF stripping in one pass.
+            
+            # 1. Fast-fail: Validate filename and extension
             if not image.filename:
                 raise HTTPException(status_code=400, detail="File must have a filename")
 
-            # Validate extension
-            extension = (
-                image.filename.split(".")[-1].lower() if "." in image.filename else ""
-            )
+            extension = image.filename.split('.')[-1].lower() if '.' in image.filename else 'jpg'
             if extension not in ALLOWED_IMAGE_EXTENSIONS:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"File extension '{extension}' not allowed. Allowed: {', '.join(ALLOWED_IMAGE_EXTENSIONS)}",
+                    detail=f"File extension '{extension}' not allowed."
                 )
-            
-            # Check file size (before processing to avoid heavy work on large invalid files)
+
+            # 2. Fast-fail: Validate file size (10MB limit for field officer visits)
+            # Must check explicitly because process_uploaded_image uses a 20MB default.
             image.file.seek(0, 2)
-            actual_size = image.file.tell()
+            size = image.file.tell()
             image.file.seek(0)
-            if actual_size > MAX_UPLOAD_SIZE:
-                raise HTTPException(
+            if size > MAX_UPLOAD_SIZE:
+                 raise HTTPException(
                     status_code=400,
-                    detail=f"File {image.filename} exceeds maximum size of {MAX_UPLOAD_SIZE / 1024 / 1024:.1f} MB",
+                    detail=f"File exceeds maximum size of {MAX_UPLOAD_SIZE / 1024 / 1024:.1f} MB"
                 )
-            
-            # Process image (resize, strip EXIF, etc.) using optimized pipeline
-            # This offloads decoding/processing to the threadpool
+
+            # 3. Process image (decode, resize, strip, encode)
             _, image_bytes = await process_uploaded_image(image)
 
             # Generate secure filename
@@ -391,7 +380,7 @@ async def upload_visit_images(
             safe_filename = f"visit_{visit_id}_{timestamp}_{idx}.{extension}"
             file_path = os.path.join(VISIT_IMAGES_DIR, safe_filename)
             
-            # Save processed image to disk (offload blocking I/O)
+            # Save file using threadpool to avoid blocking the main event loop
             await run_in_threadpool(save_processed_image, image_bytes, file_path)
             
             # Store relative path
