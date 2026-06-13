@@ -162,7 +162,7 @@ async def create_issue(
 
             # Performance Boost: Skip redundant bounding box check as input is already filtered by SQL (Issue #SPATIAL-OPT)
             nearby_issues_with_distance = find_nearby_issues(
-                open_issues, latitude, longitude, radius_meters=50.0, skip_bbox=True
+                open_issues, latitude, longitude, radius_meters=50.0, pre_filtered=True
             )
 
             if nearby_issues_with_distance:
@@ -424,7 +424,7 @@ def get_nearby_issues(
 
         # Performance Boost: Skip redundant bounding box check as input is already filtered by SQL (Issue #SPATIAL-OPT)
         nearby_issues_with_distance = find_nearby_issues(
-            open_issues, latitude, longitude, radius_meters=radius, skip_bbox=True
+            open_issues, latitude, longitude, radius_meters=radius, pre_filtered=True
         )
 
         # Convert to response format and limit results
