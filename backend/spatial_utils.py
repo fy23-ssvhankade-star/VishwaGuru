@@ -119,7 +119,7 @@ def find_nearby_issues(
         target_lat: Target latitude
         target_lon: Target longitude
         radius_meters: Search radius in meters (default 50m)
-        pre_filtered: Whether the issues list has already been spatially filtered by the caller
+        pre_filtered: If True, skips bounding box checks, assuming input is already filtered
 
     Returns:
         List of tuples (issue, distance_meters) for issues within radius
@@ -138,8 +138,8 @@ def find_nearby_issues(
             if getattr(issue, 'latitude', None) is None or getattr(issue, 'longitude', None) is None:
                 continue
 
-            # Apply bounding box pre-filter
             if not pre_filtered:
+                # Apply bounding box pre-filter
                 if issue.latitude < min_lat or issue.latitude > max_lat or \
                    issue.longitude < min_lon or issue.longitude > max_lon:
                     continue
@@ -149,44 +149,63 @@ def find_nearby_issues(
                 nearby_issues.append((issue, distance))
     else:
         # Optimized path for common case (small radius)
-        R = 6371000.0
         radius_sq = radius_meters * radius_meters
 
-        target_lat_rad = target_lat * DEG_TO_RAD
-        # Cosine term is constant for the target latitude in equirectangular projection
-        cos_lat = math.cos(target_lat_rad)
+        # Pre-calculate meters per degree for latitude and longitude to avoid radians math in loop
+        # 1 degree of latitude is constant (approx)
+        meters_per_degree_lat = 111194.92664455873  # 6371000.0 * (math.pi / 180.0)
+        # 1 degree of longitude shrinks towards poles
+        meters_per_degree_lon = meters_per_degree_lat * math.cos(target_lat * 0.017453292519943295)
 
-        # Hoist constants to avoid inner-loop recalculation
-        R_RAD_SQ = (R * DEG_TO_RAD) ** 2
-
-        for issue in issues:
-            if getattr(issue, 'latitude', None) is None or getattr(issue, 'longitude', None) is None:
-                continue
-
-            # Apply bounding box pre-filter
-            if not pre_filtered:
-                if issue.latitude < min_lat or issue.latitude > max_lat or \
-                   issue.longitude < min_lon or issue.longitude > max_lon:
+        if pre_filtered:
+            for issue in issues:
+                lat = issue.latitude
+                lon = issue.longitude
+                if lat is None or lon is None:
                     continue
 
-            dlat = issue.latitude - target_lat
-            dlon = issue.longitude - target_lon
+                dlat = lat - target_lat
+                dlon = lon - target_lon
 
-            # Handle longitude wrapping (dateline crossing)
-            if dlon > 180.0:
-                dlon -= 360.0
-            elif dlon < -180.0:
-                dlon += 360.0
+                # Handle longitude wrapping (dateline crossing)
+                if dlon > 180.0:
+                    dlon -= 360.0
+                elif dlon < -180.0:
+                    dlon += 360.0
 
-            x = dlon * cos_lat
-            y = dlat
+                x = dlon * meters_per_degree_lon
+                y = dlat * meters_per_degree_lat
+                dist_sq = (x*x + y*y)
 
-            # Squared distance check avoids expensive sqrt()
-            # Equivalent to equirectangular distance using degree deltas
-            dist_sq = (x*x + y*y) * R_RAD_SQ
+                if dist_sq <= radius_sq:
+                    nearby_issues.append((issue, math.sqrt(dist_sq)))
+        else:
+            for issue in issues:
+                lat = issue.latitude
+                lon = issue.longitude
+                if lat is None or lon is None:
+                    continue
 
-            if dist_sq <= radius_sq:
-                nearby_issues.append((issue, math.sqrt(dist_sq)))
+                # Apply bounding box pre-filter
+                if lat < min_lat or lat > max_lat or \
+                   lon < min_lon or lon > max_lon:
+                    continue
+
+                dlat = lat - target_lat
+                dlon = lon - target_lon
+
+                # Handle longitude wrapping (dateline crossing)
+                if dlon > 180.0:
+                    dlon -= 360.0
+                elif dlon < -180.0:
+                    dlon += 360.0
+
+                x = dlon * meters_per_degree_lon
+                y = dlat * meters_per_degree_lat
+                dist_sq = (x*x + y*y)
+
+                if dist_sq <= radius_sq:
+                    nearby_issues.append((issue, math.sqrt(dist_sq)))
 
     # Sort by distance (closest first)
     nearby_issues.sort(key=lambda x: x[1])

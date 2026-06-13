@@ -94,6 +94,6 @@
 **Learning:** Performing multiple sequential database queries to verify cryptographically chained records (e.g., fetching a record and then its associated token/metadata from another table) introduces unnecessary latency and increases database load.
 **Action:** Consolidate associated data retrieval into a single SQL `JOIN` query within the verification hot-path. This reduces database round-trips and improves end-to-end latency for blockchain-style integrity checks.
 
-## 2026-06-03 - Redundant Hot-Path Operations
-**Learning:** Redundant operations in hot paths, such as duplicate tokenization in RAG pre-processing or repeated `isdisjoint` checks during retrieval, introduce measurable latency without altering logic. These often stem from refactoring artifacts or copy-paste errors.
-**Action:** Audit hot-path code (RAG retrieval, spatial loops, priority scoring) for line-for-line duplicates and redundant variable assignments. Consolidate logic to ensure each expensive operation (like `_tokenize`) is performed exactly once.
+## 2026-05-21 - Spatial Deduplication Optimization
+**Learning:** Calculating distance values with inline math components inside of loops causes slowdowns for datasets due to redundant execution. Adding pre-filtering parameters from the DB level bounding box allows bounding box logic to be bypassed on the Python side.
+**Action:** Hoist consistent math calculations outside of loops for bulk distance evaluations. Also introduce pre-filtered booleans on search functions to skip duplicate box filtering on data already passed through DB filters.
