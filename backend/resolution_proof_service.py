@@ -518,8 +518,11 @@ class ResolutionProofService:
         Returns:
             Verification result dictionary
         """
-        # Optimized: first fetch the most recent evidence row so we can return early when none exists,
-        # then run a separate func.count(...).scalar() query only when evidence is present.
+        # Optimized: Use func.count() and .first() to avoid loading all historical evidence
+        # records into memory, reducing O(N) database transfer and memory overhead.
+        evidence_count = db.query(func.count(ResolutionEvidence.id)).filter(
+            ResolutionEvidence.grievance_id == grievance_id
+        ).scalar() or 0
 
         # Use the most recent evidence
         evidence = (
