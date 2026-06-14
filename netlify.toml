@@ -8,6 +8,7 @@
 [build.environment]
   NODE_VERSION = "20"
   CI = "false"
+  NODE_OPTIONS = "--max-old-space-size=4096"
 
 # Redirects for SPA
 [[redirects]]

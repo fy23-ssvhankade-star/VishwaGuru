@@ -10,8 +10,10 @@ import logging
 import io
 try:
     import magic
+    HAVE_MAGIC = True
 except ImportError:
-    magic = None
+    HAVE_MAGIC = False
+import mimetypes
 from typing import Optional
 
 try:
@@ -88,12 +90,20 @@ def _validate_uploaded_file_sync(file: UploadFile) -> Optional[Image.Image]:
             file_content = file.file.read(1024)
             file.file.seek(0)  # Reset file pointer
 
+        if HAVE_MAGIC:
             detected_mime = magic.from_buffer(file_content, mime=True)
-
             if detected_mime not in ALLOWED_MIME_TYPES:
                 raise HTTPException(
                     status_code=400,
                     detail=f"Invalid file type. Only image files are allowed. Detected: {detected_mime}"
+                )
+        else:
+            # Fallback if libmagic is missing
+            guessed_mime, _ = mimetypes.guess_type(file.filename or "unknown")
+            if guessed_mime and guessed_mime not in ALLOWED_MIME_TYPES:
+                 raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid file type. Only image files are allowed. Detected: {guessed_mime}"
                 )
 
         # content validation: Try to open with PIL to ensure it's a valid image
@@ -168,16 +178,18 @@ def process_uploaded_image_sync(file: UploadFile) -> tuple[Image.Image, bytes]:
         )
 
     try:
-        if magic:
-            file_content = file.file.read(1024)
-            file.file.seek(0)
-            detected_mime = magic.from_buffer(file_content, mime=True)
+        file_content = file.file.read(1024)
+        file.file.seek(0)
 
+        if HAVE_MAGIC:
+            detected_mime = magic.from_buffer(file_content, mime=True)
             if detected_mime not in ALLOWED_MIME_TYPES:
                 raise HTTPException(
                     status_code=400,
                     detail=f"Invalid file type. Only image files are allowed. Detected: {detected_mime}"
                 )
+
+        # If no magic, rely on PIL below (which is safer anyway for images)
 
         try:
             img = Image.open(file.file)
