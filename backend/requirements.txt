@@ -5,11 +5,12 @@ python-telegram-bot
 google-generativeai
 python-multipart
 psycopg2-binary
+async-lru
 ultralyticsplus==0.0.28
 ultralytics
 opencv-python-headless
 huggingface-hub
-httpx<0.28.0
+httpx
 python-magic
 pywebpush
 # Local ML dependencies (Issue #76)
@@ -17,16 +18,12 @@ torch
 transformers
 Pillow
 firebase-functions
-firebase-admin<7.0.0
+firebase-admin
 a2wsgi
 # Spatial deduplication dependencies
 scikit-learn
 numpy
 pytest
-python-jose[cryptography]
-passlib[bcrypt]
-# Voice and Language Support (Issue #291)
-SpeechRecognition
-pydub
-googletrans==4.0.2
-langdetect
+python-jose
+passlib
+bcrypt==3.2.2

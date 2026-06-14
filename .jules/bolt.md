@@ -38,6 +38,6 @@
 **Learning:** Inconsistent return types in shared utility functions (like `process_uploaded_image`) can cause runtime crashes across multiple modules, especially when some expect tuples and others expect single values. This can lead to deployment failures that are hard to debug without full integration logs.
 **Action:** Always maintain strict return type consistency for core utilities. Use type hints and verify all call sites when changing a function's signature. Ensure that performance-oriented optimizations (like returning multiple processed formats) are applied uniformly.
 
-## 2026-02-09 - Blockchain Verification O(1)
-**Learning:** Storing the `previous_integrity_hash` directly in the record allows for O(1) verification of that record's cryptographic seal without needing to query for the predecessor. This reduces database round-trips by 50% for verification endpoints.
-**Action:** In blockchain-style chaining, always store the link (hash of the previous block) in the current block to avoid expensive lookups during verification.
+## 2026-02-09 - In-Place EXIF Stripping
+**Learning:** Stripping EXIF by creating a new `Image` and pasting the original content (`Image.new` + `paste`) forces a full pixel copy and reallocation, which is O(N) and memory intensive.
+**Action:** Use `img.info.pop('exif', None)` to strip metadata in-place (O(1)) and save the existing image object, avoiding redundant memory allocation and copy operations.

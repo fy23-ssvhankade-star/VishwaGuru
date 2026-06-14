@@ -28,7 +28,6 @@ export const AuthProvider = ({ children }) => {
                 .finally(() => setLoading(false));
         } else {
             apiClient.removeToken();
-            // eslint-disable-next-line react-hooks/set-state-in-effect
             setLoading(false);
         }
     }, [token]);

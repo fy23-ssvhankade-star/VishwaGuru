@@ -8,7 +8,6 @@ import os
 import shutil
 import logging
 import io
-import secrets
 from typing import Optional
 
 from backend.cache import user_upload_cache
@@ -16,8 +15,6 @@ from backend.models import Issue
 from backend.schemas import DetectionResponse
 from backend.pothole_detection import validate_image_for_processing
 from passlib.context import CryptContext
-import secrets
-import string
 
 # Handle python-magic gracefully
 HAS_MAGIC = False
@@ -200,10 +197,9 @@ def process_uploaded_image_sync(file: UploadFile) -> tuple[Image.Image, bytes]:
             img = img.resize((new_width, new_height), Image.Resampling.BILINEAR)
 
         # Strip EXIF
-        # Performance Boost: O(1) stripping by deleting metadata dictionary
-        # instead of O(N) pixel-by-pixel pasting.
-        if "exif" in img.info:
-            del img.info["exif"]
+        # Optimization: Clear EXIF in-place instead of creating a new image (O(1) vs O(N))
+        if 'exif' in img.info:
+            del img.info['exif']
 
         # Save to BytesIO
         output = io.BytesIO()
@@ -277,9 +273,9 @@ def save_file_blocking(file_obj, path, image: Optional[Image.Image] = None):
         else:
              img = Image.open(file_obj)
 
-        # Strip EXIF data (O(1) optimization)
-        if hasattr(img, "info") and "exif" in img.info:
-            del img.info["exif"]
+        # Strip EXIF data by clearing metadata in-place (O(1) vs O(N) copy)
+        if 'exif' in img.info:
+            del img.info['exif']
 
         # Save without EXIF
         # Use original format if available, otherwise default to JPEG if mode is RGB, PNG if RGBA
@@ -299,33 +295,12 @@ def save_issue_db(db: Session, issue: Issue):
     db.refresh(issue)
     return issue
 
-def generate_reference_id() -> str:
-    """Generate a secure random reference ID in format XXXX-XXXX-XXXX"""
-    # 6 bytes = 12 hex chars. We want 3 groups of 4.
-    token = secrets.token_hex(6).upper()
-    return f"{token[:4]}-{token[4:8]}-{token[8:]}"
-
 # --- Password Hashing Utils ---
 
-import bcrypt as _bcrypt
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return _bcrypt.checkpw(
-        plain_password.encode("utf-8"),
-        hashed_password.encode("utf-8")
-    )
+    return pwd_context.verify(plain_password, hashed_password)
 
 def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
-
-def generate_reference_id() -> str:
-    """
-    Generate a secure, random reference ID for issues.
-    Format: XXXX-XXXX-XXXX (Alphanumeric)
-    """
-    alphabet = string.ascii_uppercase + string.digits
-    # Generate 3 groups of 4 chars
-    group1 = ''.join(secrets.choice(alphabet) for _ in range(4))
-    group2 = ''.join(secrets.choice(alphabet) for _ in range(4))
-    group3 = ''.join(secrets.choice(alphabet) for _ in range(4))
-    return f"{group1}-{group2}-{group3}"

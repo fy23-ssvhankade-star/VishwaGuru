@@ -11,30 +11,20 @@ const NoiseDetector = ({ onBack }) => {
     const intervalRef = useRef(null);
     const streamRef = useRef(null);
 
-    const sendAudio = async (blob) => {
-        setStatus('Analyzing...');
-        const formData = new FormData();
-        formData.append('file', blob, 'recording.webm');
+    useEffect(() => {
+        // Cleanup on unmount
+        return () => {
+            stopRecording();
+        };
+    }, []);
 
-        try {
-            const response = await fetch(`${API_URL}/api/detect-audio`, {
-                method: 'POST',
-                body: formData
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                if (data.detections) {
-                     setDetections(data.detections);
-                }
-                setStatus('Listening...');
-            } else {
-                console.error("Audio API error");
-            }
-        } catch (err) {
-            console.error("Audio network error", err);
+    useEffect(() => {
+        if (isRecording) {
+            startLoop();
+        } else {
+            stopLoop();
         }
-    };
+    }, [isRecording]);
 
     const startLoop = async () => {
         setError(null);
@@ -107,22 +97,30 @@ const NoiseDetector = ({ onBack }) => {
         stopLoop();
     };
 
-    useEffect(() => {
-        // Cleanup on unmount
-        return () => {
-            stopRecording();
-        };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    const sendAudio = async (blob) => {
+        setStatus('Analyzing...');
+        const formData = new FormData();
+        formData.append('file', blob, 'recording.webm');
 
-    useEffect(() => {
-        if (isRecording) {
-            startLoop();
-        } else {
-            stopLoop();
+        try {
+            const response = await fetch(`${API_URL}/api/detect-audio`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.detections) {
+                     setDetections(data.detections);
+                }
+                setStatus('Listening...');
+            } else {
+                console.error("Audio API error");
+            }
+        } catch (err) {
+            console.error("Audio network error", err);
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isRecording]);
+    };
 
     return (
         <div className="flex flex-col items-center w-full max-w-md mx-auto p-4">
