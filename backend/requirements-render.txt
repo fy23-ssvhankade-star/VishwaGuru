@@ -20,5 +20,5 @@ pydub
 # Use deep-translator to avoid httpcore version conflicts with python-telegram-bot
 deep-translator
 langdetect
-numpy
+# scikit-learn includes numpy, scipy, joblib dependencies
 scikit-learn
