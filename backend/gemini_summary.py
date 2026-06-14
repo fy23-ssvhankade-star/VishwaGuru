@@ -102,7 +102,29 @@ async def generate_mla_summary(
         return _get_fallback_summary(mla_name, assembly_constituency, district)
     
     try:
-        return await _generate_mla_summary_with_retry(district, assembly_constituency, mla_name, issue_category)
+        issue_context = f" particularly regarding {issue_category} issues" if issue_category else ""
+        
+        prompt = f"""
+        You are helping an Indian citizen understand who represents them. 
+        In one short paragraph (max 100 words), explain that the MLA {mla_name} represents 
+        the assembly constituency {assembly_constituency} in district {district}, state Maharashtra{issue_context}, 
+        and what type of local issues they typically handle.
+        
+        Do not hallucinate phone numbers or emails; only talk about roles and responsibilities.
+        Keep it factual, helpful, and encouraging for civic engagement.
+        """
+        
+        # Generate content without any tools (no Google Search, no internet retrieval)
+        # Explicitly set tools=None to ensure no search/grounding features are used
+        response = await client.aio.models.generate_content(
+            model='gemini-1.5-flash',
+            contents=prompt,
+            config=genai.types.GenerateContentConfig(
+                tools=None  # Explicitly disable all tools including Google Search
+            )
+        )
+        return response.text.strip()
+        
     except Exception as e:
         logger.error(f"Gemini Summary Error after all retries: {e}", exc_info=True)
         # Return fallback after all retries exhausted
