@@ -28,8 +28,10 @@ from backend.main import app
 
 @pytest.fixture
 def client_with_mock_http():
+    import backend.main as b_main
+    import backend.dependencies
     # Patch create_all_ai_services where it is used (in backend.main)
-    with patch.object(backend.main, "create_all_ai_services") as mock_create:
+    with patch.object(b_main, "create_all_ai_services") as mock_create:
          mock_create.return_value = (AsyncMock(), AsyncMock(), AsyncMock())
 
          # Mock http client
@@ -38,6 +40,8 @@ def client_with_mock_http():
          mock_http.__aenter__.return_value = mock_http
          with patch("httpx.AsyncClient", return_value=mock_http):
              with TestClient(app) as c:
+                 c.app.state.http_client = mock_http
+                 backend.dependencies.SHARED_HTTP_CLIENT = mock_http
                  yield c, mock_http
 
 def create_test_image():
@@ -105,19 +109,15 @@ def test_transcribe_audio(client_with_mock_http):
     client, mock_http = client_with_mock_http
     mock_http.post.reset_mock()
 
-    # Mock Whisper response
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {"text": "This is a test transcription."}
-    mock_http.post.return_value = mock_response
-
     audio_content = b"fake audio content"
 
-    response = client.post(
-        "/api/transcribe-audio",
-        files={"file": ("test.wav", audio_content, "audio/wav")}
-    )
+    with patch('backend.voice_service.VoiceService.transcribe_audio', new_callable=MagicMock) as mock_transcribe:
+        mock_transcribe.return_value = {"text": "This is a test transcription.", "error": None, "language": "en", "language_name": "English", "confidence": 0.99}
+        response = client.post(
+            "/api/voice/transcribe",
+            files={"audio_file": ("test.wav", audio_content, "audio/wav")}
+        )
 
     assert response.status_code == 200
     data = response.json()
-    assert data["text"] == "This is a test transcription."
+    assert data["original_text"] == "This is a test transcription."

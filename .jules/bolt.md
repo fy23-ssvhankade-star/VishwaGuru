@@ -38,6 +38,26 @@
 **Learning:** Inconsistent return types in shared utility functions (like `process_uploaded_image`) can cause runtime crashes across multiple modules, especially when some expect tuples and others expect single values. This can lead to deployment failures that are hard to debug without full integration logs.
 **Action:** Always maintain strict return type consistency for core utilities. Use type hints and verify all call sites when changing a function's signature. Ensure that performance-oriented optimizations (like returning multiple processed formats) are applied uniformly.
 
-## 2026-02-18 - O(1) Blockchain Verification
-**Learning:** Blockchain-style integrity chains usually require fetching the previous block to verify the current one, leading to O(N) or O(log N) database overhead. By persisting the `previous_integrity_hash` in each record, verification becomes O(1) as all required data for the current link's validity is contained within the single row or readily available without extra hops.
-**Action:** Store the chain link (previous hash) in the record itself to enable single-query integrity checks. Use fixed float formatting for coordinates in hashes to ensure cross-platform consistency.
+## 2026-02-10 - Serialization Caching vs Object Caching
+**Learning:** Caching raw Python objects (like SQLAlchemy models or Pydantic instances) in a high-traffic API still incurs significant overhead because FastAPI/Pydantic must re-validate and re-serialize the data on every request.
+**Action:** Serialize data to a JSON string BEFORE caching. On cache hits, return a raw `fastapi.Response` with `media_type="application/json"`. This bypasses the validation layer and is measurably faster (2-3x).
+
+## 2026-02-10 - Group-By for Multi-Count Statistics
+**Learning:** Executing multiple `count()` queries with different filters (e.g., for different statuses) causes redundant database scans and network round-trips.
+**Action:** Use a single SQL `GROUP BY` query to fetch counts for all categories/statuses at once, then process the results in Python.
+
+## 2026-02-11 - O(1) Blockchain Verification
+**Learning:** Verifying the integrity of a blockchain-style chain by querying the database for the previous record's hash on every check is inefficient and adds unnecessary latency.
+**Action:** Store the `previous_integrity_hash` directly in the record during creation. This enables O(1) single-record integrity checks without additional database lookups. Use a thread-safe cache to keep the most recent hash in memory to further optimize the creation path.
+
+## 2026-02-11 - Multi-Metric Aggregate Queries
+**Learning:** Executing multiple separate `count()` queries to gather system statistics results in multiple database round-trips and redundant table scans.
+**Action:** Use a single SQLAlchemy query with `func.count()` and `func.sum(case(...))` to calculate all metrics in one go. This reduces network overhead and allows the database to perform calculations in a single pass.
+
+## 2025-02-13 - Substring pre-filtering for regex optimization
+**Learning:** In hot paths (like `PriorityEngine._calculate_urgency`), executing pre-compiled regular expressions (`re.search`) for simple keyword extraction or grouping (e.g., `\b(word1|word2)\b`) is significantly slower than simple Python substring checks (`in text`). The regex engine execution overhead in Python adds up in high-iteration loops like priority scoring.
+**Action:** Always consider pre-extracting literal keywords from simple regex patterns and executing a quick `any(k in text for k in keywords)` pre-filter. Only invoke `regex.search` if the pre-filter passes, avoiding the expensive regex operation on texts that obviously do not match.
+
+## 2025-02-13 - API Route Prefix Consistency
+**Learning:** Inconsistent application of `/api` prefixes between `main.py` router mounting and test suite request paths can lead to 404 errors during testing, even if the logic is correct. This is especially prevalent when multiple agents work on the same codebase with different assumptions about global prefixes.
+**Action:** Always verify that `app.include_router` in `backend/main.py` uses `prefix="/api"` if the test suite (e.g., `tests/test_blockchain.py`) expects it. If a router is mounted without a prefix, ensure tests are updated or the prefix is added to `main.py` to maintain repository-wide consistency.
