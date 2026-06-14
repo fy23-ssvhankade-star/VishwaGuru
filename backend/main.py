@@ -1,4 +1,14 @@
-import sys
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.concurrency import run_in_threadpool
+from sqlalchemy.orm import Session
+from database import engine, get_db
+from models import Base, Issue
+from ai_service import generate_action_plan, chat_with_civic_assistant
+from maharashtra_locator import find_constituency_by_pincode, find_mla_by_constituency
+from pydantic import BaseModel
+from gemini_summary import generate_mla_summary
+import json
 import os
 import io
 
@@ -242,13 +252,68 @@ async def create_issue(
         db.commit()
         db.refresh(db_issue)
 
-        return {
-            "status": "success",
-            "issue_id": db_issue.id,
-            "message": "Issue reported successfully",
-            "ai_analysis": ai_analysis,
-            "action_plan": action_plan
+    return {
+        "id": new_issue.id,
+        "message": "Issue reported successfully",
+        "action_plan": action_plan
+    }
+
+@lru_cache(maxsize=1)
+def _load_responsibility_map():
+    # Assuming the data folder is at the root level relative to where backend is run
+    # Adjust path as necessary. If running from root, it is "data/responsibility_map.json"
+    file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "responsibility_map.json")
+
+    with open(file_path, "r") as f:
+        return json.load(f)
+
+@app.get("/api/responsibility-map")
+def get_responsibility_map():
+    # In a real app, this might read from the file or database
+    # For MVP, we can return the structure directly or read the file
+    try:
+        return _load_responsibility_map()
+    except FileNotFoundError:
+        return {"error": "Data file not found"}
+
+class ChatRequest(BaseModel):
+    query: str
+
+@app.post("/api/chat")
+async def chat_endpoint(request: ChatRequest):
+    response = await chat_with_civic_assistant(request.query)
+    return {"response": response}
+
+@app.get("/api/issues/recent")
+def get_recent_issues(db: Session = Depends(get_db)):
+    # Fetch last 10 issues
+    issues = db.query(Issue).order_by(Issue.created_at.desc()).limit(10).all()
+    # Sanitize data (no emails)
+    return [
+        {
+            "id": i.id,
+            "category": i.category,
+            "description": i.description[:100] + "..." if len(i.description) > 100 else i.description,
+            "created_at": i.created_at,
+            "image_path": i.image_path,
+            "status": i.status
         }
+        for i in issues
+    ]
+
+@app.post("/api/detect-pothole")
+async def detect_pothole_endpoint(image: UploadFile = File(...)):
+    # Read image
+    contents = await image.read()
+    # Convert to PIL Image
+    try:
+        pil_image = Image.open(io.BytesIO(contents))
+    except Exception:
+         raise HTTPException(status_code=400, detail="Invalid image file")
+
+    # Run detection (blocking, so run in threadpool)
+    try:
+        detections = await run_in_threadpool(detect_potholes, pil_image)
     except Exception as e:
         print(f"Error creating issue: {e}")
         return JSONResponse(status_code=500, content={"message": str(e)})

@@ -342,3 +342,29 @@ async def analyze_issue_with_ai(description: str, image_path: Optional[str] = No
              "authority": "Local Authority",
              "action_plan": "Please visit the nearest municipal office."
         }
+
+async def chat_with_civic_assistant(query: str, history: Optional[list] = None) -> str:
+    """
+    Chat with the civic assistant.
+    """
+    if not client:
+        return "I am currently offline. Please try again later."
+
+    try:
+        prompt = f"""
+        You are VishwaGuru, a helpful civic assistant for Indian citizens.
+        User Query: {query}
+
+        Answer the user's question about civic issues, government services, or local administration.
+        If they ask about specific MLAs, tell them to use the "Find My MLA" feature.
+        Keep answers concise and helpful.
+        """
+
+        response = await client.aio.models.generate_content(
+            model='gemini-1.5-flash',
+            contents=prompt
+        )
+        return response.text.strip()
+    except Exception as e:
+        print(f"Gemini Chat Error: {e}")
+        return "I encountered an error processing your request."
