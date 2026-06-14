@@ -29,7 +29,8 @@ def test_blockchain_verification_success(client, db_session):
     issue1 = Issue(
         description="First issue",
         category="Road",
-        integrity_hash=hash1
+        integrity_hash=hash1,
+        previous_integrity_hash=""
     )
     db_session.add(issue1)
     db_session.commit()
@@ -88,6 +89,51 @@ def test_blockchain_with_previous_column(client, db_session):
 
     # Verify via endpoint
     response = client.get(f"/api/issues/{id2}/blockchain-verify")
+    assert response.status_code == 200
+    assert response.json()["is_valid"] == True
+
+def test_blockchain_duplicate_creation(client, db_session):
+    # 1. Create original issue
+    response = client.post(
+        "/api/issues",
+        data={
+            "description": "Original pothole report",
+            "category": "Road",
+            "latitude": 10.0,
+            "longitude": 10.0,
+            "user_email": "user1@example.com"
+        }
+    )
+    assert response.status_code == 201
+    original_id = response.json()["id"]
+
+    # Get hash of original
+    original_issue = db_session.query(Issue).filter(Issue.id == original_id).first()
+    original_hash = original_issue.integrity_hash
+
+    # 2. Create duplicate issue
+    response = client.post(
+        "/api/issues",
+        data={
+            "description": "Duplicate pothole report",
+            "category": "Road",
+            "latitude": 10.0001, # Very close
+            "longitude": 10.0001,
+            "user_email": "user2@example.com"
+        }
+    )
+    assert response.status_code == 201
+    assert response.json()["id"] is None
+    assert response.json()["linked_issue_id"] == original_id
+
+    # 3. Verify duplicate record exists in DB and is linked in blockchain
+    duplicate_issue = db_session.query(Issue).filter(Issue.status == "duplicate").first()
+    assert duplicate_issue is not None
+    assert duplicate_issue.parent_issue_id == original_id
+    assert duplicate_issue.previous_integrity_hash == original_hash
+
+    # 4. Verify integrity of duplicate
+    response = client.get(f"/api/issues/{duplicate_issue.id}/blockchain-verify")
     assert response.status_code == 200
     assert response.json()["is_valid"] == True
 
