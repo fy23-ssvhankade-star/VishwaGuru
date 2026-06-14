@@ -439,7 +439,6 @@ async def detect_abandoned_vehicle_endpoint(request: Request, image: UploadFile 
         logger.error(f"Abandoned vehicle detection error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
-
 @router.post("/api/detect-public-facilities")
 async def detect_public_facilities_endpoint(request: Request, image: UploadFile = File(...)):
     try:
