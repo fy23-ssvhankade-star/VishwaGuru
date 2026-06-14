@@ -8,7 +8,7 @@ import {
   AlertTriangle, MapPin, Search, Activity, Camera, Trash2, ThumbsUp, Brush,
   Droplets, Zap, Truck, Flame, Dog, XCircle, Lightbulb, TreeDeciduous, Bug,
   Scan, ChevronRight, LayoutGrid, Shield, Leaf, Building, CheckCircle, Trophy, Monitor,
-  Volume2, Users, Waves, Accessibility, Siren, Recycle, Eye, ChevronUp, Signpost, Car
+  Volume2, Users, Waves, Accessibility, Siren, Recycle, Eye, ChevronUp, Signpost, Car, Smile
 } from 'lucide-react';
 
 const CameraCheckModal = ({ onClose }) => {
@@ -101,7 +101,7 @@ const Home = ({ setView, fetchResponsibilityMap, recentIssues, handleUpvote, loa
         { id: 'crowd', label: "Crowd", icon: <Users size={24} />, color: 'text-red-500', bg: 'bg-red-50' },
         { id: 'water-leak', label: "Water Leak", icon: <Waves size={24} />, color: 'text-blue-500', bg: 'bg-blue-50' },
         { id: 'waste', label: "Waste Sorter", icon: <Recycle size={24} />, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-        { id: 'accessibility', label: "Accessibility", icon: <Accessibility size={24} />, color: 'text-purple-600', bg: 'bg-purple-50' },
+        { id: 'playground', label: "Playground", icon: <Smile size={24} />, color: 'text-pink-500', bg: 'bg-pink-50' },
       ]
     },
     {
@@ -324,6 +324,16 @@ const Home = ({ setView, fetchResponsibilityMap, recentIssues, handleUpvote, loa
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><path d="M13 8H7"></path><path d="M17 12H7"></path></svg>
         </div>
         <span className="font-semibold text-teal-800 text-sm">Analyze Grievance</span>
+      </button>
+
+      <button
+        onClick={() => setView('playground')}
+        className="flex flex-col items-center justify-center bg-pink-50 border-2 border-pink-100 p-4 rounded-xl hover:bg-pink-100 transition shadow-sm h-32"
+      >
+        <div className="bg-pink-500 text-white p-3 rounded-full mb-2">
+          <Smile size={24} />
+        </div>
+        <span className="font-semibold text-pink-800 text-sm">Playground</span>
       </button>
     </div>
 

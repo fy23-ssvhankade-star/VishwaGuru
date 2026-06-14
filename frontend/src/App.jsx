@@ -1,8 +1,12 @@
 import React, { useState, useEffect, Suspense, useCallback } from 'react';
-import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import ChatWidget from './components/ChatWidget';
+import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { fakeRecentIssues, fakeResponsibilityMap } from './fakeData';
 import { issuesApi, miscApi } from './api';
+
+// Import Components
+import AppHeader from './components/AppHeader';
+import LoadingSpinner from './components/LoadingSpinner';
+import FloatingButtonsManager from './components/FloatingButtonsManager';
 
 // Lazy Load Views
 const Landing = React.lazy(() => import('./views/Landing'));
@@ -41,6 +45,7 @@ const AccessibilityDetector = React.lazy(() => import('./AccessibilityDetector')
 const TrafficSignDetector = React.lazy(() => import('./TrafficSignDetector'));
 const AbandonedVehicleDetector = React.lazy(() => import('./AbandonedVehicleDetector'));
 const MyReportsView = React.lazy(() => import('./views/MyReportsView'));
+const PlaygroundDetector = React.lazy(() => import('./PlaygroundDetector'));
 
 
 // Auth Components
@@ -70,7 +75,7 @@ function AppContent() {
 
   // Safe navigation helper
   const navigateToView = useCallback((view) => {
-    const validViews = ['home', 'map', 'report', 'action', 'mh-rep', 'pothole', 'garbage', 'vandalism', 'flood', 'infrastructure', 'parking', 'streetlight', 'fire', 'animal', 'blocked', 'tree', 'pest', 'smart-scan', 'grievance-analysis', 'noise', 'safety-check', 'my-reports', 'waste', 'water-leak', 'crowd', 'accessibility', 'traffic-sign', 'abandoned-vehicle', 'login', 'signup'];
+    const validViews = ['home', 'map', 'report', 'action', 'mh-rep', 'pothole', 'garbage', 'vandalism', 'flood', 'infrastructure', 'parking', 'streetlight', 'fire', 'animal', 'blocked', 'tree', 'pest', 'smart-scan', 'grievance-analysis', 'noise', 'safety-check', 'my-reports', 'playground'];
     if (validViews.includes(view)) {
       navigate(view === 'home' ? '/home' : `/${view}`);
     } else {
@@ -193,15 +198,6 @@ function AppContent() {
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Login initialIsLogin={false} />} />
             <Route
-              path="/admin/dashboard"
-              element={
-                <ProtectedRoute allowedRoles={['admin']}>
-                  <AdminDashboard />
-                </ProtectedRoute>
-              }
-            />
-
-            <Route
               path="/home"
               element={
                 <Home
@@ -261,13 +257,13 @@ function AppContent() {
                 />
               }
             />
-            <Route path="/pothole" element={<PotholeDetector onBack={() => navigate('/')} />} />
-            <Route path="/garbage" element={<GarbageDetector onBack={() => navigate('/')} />} />
+            <Route path="/pothole" element={<PotholeDetector onBack={() => navigate('/home')} />} />
+            <Route path="/garbage" element={<GarbageDetector onBack={() => navigate('/home')} />} />
             <Route
               path="/vandalism"
               element={
                 <div className="flex flex-col h-full">
-                  <button onClick={() => navigate('/')} className="self-start text-blue-600 mb-2">
+                  <button onClick={() => navigate('/home')} className="self-start text-blue-600 mb-2">
                     &larr; Back
                   </button>
                   <VandalismDetector />
@@ -278,7 +274,7 @@ function AppContent() {
               path="/flood"
               element={
                 <div className="flex flex-col h-full">
-                  <button onClick={() => navigate('/')} className="self-start text-blue-600 mb-2">
+                  <button onClick={() => navigate('/home')} className="self-start text-blue-600 mb-2">
                     &larr; Back
                   </button>
                   <FloodDetector />
@@ -287,30 +283,25 @@ function AppContent() {
             />
             <Route
               path="/infrastructure"
-              element={<InfrastructureDetector onBack={() => navigate('/')} />}
+              element={<InfrastructureDetector onBack={() => navigate('/home')} />}
             />
-            <Route path="/parking" element={<IllegalParkingDetector onBack={() => navigate('/')} />} />
-            <Route path="/streetlight" element={<StreetLightDetector onBack={() => navigate('/')} />} />
-            <Route path="/fire" element={<FireDetector onBack={() => navigate('/')} />} />
-            <Route path="/animal" element={<StrayAnimalDetector onBack={() => navigate('/')} />} />
-            <Route path="/blocked" element={<BlockedRoadDetector onBack={() => navigate('/')} />} />
-            <Route path="/tree" element={<TreeDetector onBack={() => navigate('/')} />} />
-            <Route path="/pest" element={<PestDetector onBack={() => navigate('/')} />} />
-            <Route path="/smart-scan" element={<SmartScanner onBack={() => navigate('/')} />} />
-            <Route path="/grievance-analysis" element={<GrievanceAnalysis onBack={() => navigate('/')} />} />
-            <Route path="/noise" element={<NoiseDetector onBack={() => navigate('/')} />} />
-            <Route path="/waste" element={<WasteDetector onBack={() => navigate('/')} />} />
-            <Route path="/water-leak" element={<WaterLeakDetector onBack={() => navigate('/')} />} />
-            <Route path="/crowd" element={<CrowdDetector onBack={() => navigate('/')} />} />
-            <Route path="/accessibility" element={<AccessibilityDetector onBack={() => navigate('/')} />} />
-            <Route path="/traffic-sign" element={<TrafficSignDetector onBack={() => navigate('/')} />} />
-            <Route path="/abandoned-vehicle" element={<AbandonedVehicleDetector onBack={() => navigate('/')} />} />
+            <Route path="/parking" element={<IllegalParkingDetector onBack={() => navigate('/home')} />} />
+            <Route path="/streetlight" element={<StreetLightDetector onBack={() => navigate('/home')} />} />
+            <Route path="/fire" element={<FireDetector onBack={() => navigate('/home')} />} />
+            <Route path="/animal" element={<StrayAnimalDetector onBack={() => navigate('/home')} />} />
+            <Route path="/blocked" element={<BlockedRoadDetector onBack={() => navigate('/home')} />} />
+            <Route path="/tree" element={<TreeDetector onBack={() => navigate('/home')} />} />
+            <Route path="/pest" element={<PestDetector onBack={() => navigate('/home')} />} />
+            <Route path="/smart-scan" element={<SmartScanner onBack={() => navigate('/home')} />} />
+            <Route path="/grievance-analysis" element={<GrievanceAnalysis onBack={() => navigate('/home')} />} />
+            <Route path="/noise" element={<NoiseDetector onBack={() => navigate('/home')} />} />
+            <Route path="/playground" element={<PlaygroundDetector onBack={() => navigate('/home')} />} />
             <Route path="/safety-check" element={
               <div className="flex flex-col h-full p-4">
-                <button onClick={() => navigate('/')} className="self-start text-blue-600 mb-2 font-bold">
+                <button onClick={() => navigate('/home')} className="self-start text-blue-600 mb-2 font-bold">
                   &larr; Back
                 </button>
-                <CivicEyeDetector onBack={() => navigate('/')} />
+                <CivicEyeDetector onBack={() => navigate('/home')} />
               </div>
             } />
             <Route path="/my-reports" element={

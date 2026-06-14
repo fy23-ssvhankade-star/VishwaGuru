@@ -30,6 +30,10 @@
 **Learning:** Loading full SQLAlchemy model instances for list views or spatial checks is significantly slower and more memory-intensive than selecting only required columns, especially when tables contain large JSON or Text fields.
 **Action:** Use `db.query(Model.col1, Model.col2)` for read-heavy list endpoints and spatial candidate searches. Note that projected results are immutable `Row` objects, so use `db.query(Model).filter(...).update()` for atomic modifications.
 
-## 2026-02-06 - Spatial Query Optimization
-**Learning:** For small distances (e.g., < 1km), the Haversine formula is computationally expensive due to multiple trigonometric calls. An equirectangular approximation (Euclidean distance on scaled lat/lon) is ~4x faster and sufficiently accurate for pre-filtering.
-**Action:** Use `equirectangular_distance_squared` as a fast pre-filter to identify candidates within radius, then compute accurate Haversine distance only for those candidates. Always handle longitude wrapping at the International Date Line. Return Haversine distances to callers for accurate great-circle measurements.
+## 2026-02-15 - React Component Definition & Navigation Props
+**Learning:** Lazy loading components in React (`React.lazy`) creates a dependency on the parent component's scope. If the parent references undefined layout components inline, the app may crash silently or throw confusing errors. Additionally, hardcoding navigation paths (like `navigate('/')`) inside reusable components limits their reuse in different contexts.
+**Action:** Explicitly define or import all layout components before lazy loading routes. Pass navigation handlers (like `onBack`) as props to child components to decouple them from specific routing logic.
+
+## 2026-02-28 - Netlify Build & Lockfile Conflicts
+**Learning:** Checking in `package-lock.json` generated on one OS/Node version can cause `npm install` failures or build errors on Netlify/CI environments due to platform-specific optional dependencies or integrity checksum mismatches. Additionally, aggressive linting rules (like `no-unused-vars` erroring on JSX imports) can block builds if CI treats warnings as errors.
+**Action:** If experiencing persistent CI build failures related to dependencies, try removing `package-lock.json` to force a clean install. Ensure linting rules are set to `warn` for non-critical stylistic checks in CI environments.
