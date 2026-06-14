@@ -1,9 +1,5 @@
-import json
-from sqlalchemy import Column, Integer, String, DateTime, Float, Text, ForeignKey, Enum, Index
-from sqlalchemy.types import TypeDecorator
-from backend.database import Base
-from sqlalchemy.orm import relationship
-
+from sqlalchemy import Column, Integer, String, DateTime, Text
+from database import Base
 import datetime
 import enum
 
@@ -121,27 +117,9 @@ class Issue(Base):
     description = Column(String)
     category = Column(String, index=True)
     image_path = Column(String)
-    source = Column(String)  # 'telegram', 'web', etc.
+    source = Column(String, index=True)  # 'telegram', 'web', etc.
     status = Column(String, default="open", index=True)
-    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), index=True)
-    verified_at = Column(DateTime, nullable=True)
-    assigned_at = Column(DateTime, nullable=True)
-    resolved_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, index=True)
     user_email = Column(String, nullable=True, index=True)
-    assigned_to = Column(String, nullable=True)  # Government official/department
     upvotes = Column(Integer, default=0, index=True)
-    latitude = Column(Float, nullable=True, index=True)
-    longitude = Column(Float, nullable=True, index=True)
-    location = Column(String, nullable=True)
-    action_plan = Column(JSONEncodedDict, nullable=True)
-
-class PushSubscription(Base):
-    __tablename__ = "push_subscriptions"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_email = Column(String, nullable=True, index=True)
-    endpoint = Column(String, unique=True, index=True)
-    p256dh = Column(String)
-    auth = Column(String)
-    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
-    issue_id = Column(Integer, nullable=True)  # Optional: subscription for specific issue updates
+    action_plan = Column(Text, nullable=True)

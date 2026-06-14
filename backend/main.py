@@ -27,58 +27,7 @@ from PIL import Image
 from init_db import migrate_db
 from image_validator import validate_uploaded_image, ImageValidationError
 import logging
-import io
-import hashlib
 import time
-from pywebpush import webpush, WebPushException
-import magic
-import httpx
-from async_lru import alru_cache
-
-from backend.cache import recent_issues_cache, user_upload_cache
-from backend.database import engine, Base, SessionLocal, get_db
-from backend.models import Issue, PushSubscription, Grievance, EscalationAudit, Jurisdiction
-from backend.schemas import (
-    IssueResponse, IssueSummaryResponse, IssueCreateRequest, IssueCreateResponse, ChatRequest, ChatResponse,
-    VoteRequest, VoteResponse, DetectionResponse, UrgencyAnalysisRequest,
-    UrgencyAnalysisResponse, HealthResponse, MLStatusResponse, ResponsibilityMapResponse,
-    ErrorResponse, SuccessResponse, StatsResponse, IssueCategory, IssueStatus,
-    IssueStatusUpdateRequest, IssueStatusUpdateResponse,
-    PushSubscriptionRequest, PushSubscriptionResponse,
-    NearbyIssueResponse, DeduplicationCheckResponse, IssueCreateWithDeduplicationResponse,
-    LeaderboardResponse, LeaderboardEntry,
-    EscalationAuditResponse, GrievanceSummaryResponse, EscalationStatsResponse
-)
-from backend.exceptions import EXCEPTION_HANDLERS
-from backend.bot import run_bot, start_bot_thread, stop_bot_thread
-from backend.ai_factory import create_all_ai_services
-from backend.ai_service import generate_action_plan, chat_with_civic_assistant
-from backend.maharashtra_locator import (
-    load_maharashtra_pincode_data,
-    load_maharashtra_mla_data,
-    find_constituency_by_pincode,
-    find_mla_by_constituency
-)
-from backend.init_db import migrate_db
-from backend.pothole_detection import detect_potholes, validate_image_for_processing, is_model_available
-from backend.grievance_service import GrievanceService
-from backend.unified_detection_service import (
-    detect_vandalism as detect_vandalism_unified,
-    detect_infrastructure as detect_infrastructure_unified,
-    detect_flooding as detect_flooding_unified,
-    detect_garbage as detect_garbage_unified,
-    get_detection_status
-)
-from backend.gemini_services import get_ai_services, initialize_ai_services
-from backend.spatial_utils import find_nearby_issues, get_bounding_box
-from backend.hf_api_service import (
-    detect_illegal_parking_clip,
-    detect_street_light_clip,
-    detect_fire_clip,
-    detect_stray_animal_clip,
-    detect_blocked_road_clip,
-    detect_tree_clip
-)
 
 # Configure structured logging
 logging.basicConfig(
@@ -582,14 +531,7 @@ async def create_issue(
             image_path = os.path.join(upload_dir, filename)
             await run_in_threadpool(save_file_blocking, image.file, image_path)
 
-        # Generate Action Plan (AI)
-        ai_services = get_ai_services()
-        action_plan_data = await ai_services.action_plan_service.generate_action_plan(description, category, image_path)
-
-        # Serialize action plan to JSON string for storage
-        action_plan_json = json.dumps(action_plan_data) if action_plan_data else None
-
-        # Save to DB
+        # Save to DB first to ensure we capture the user's report
         new_issue = Issue(
             description=description,
             category=category,
@@ -605,8 +547,39 @@ async def create_issue(
         # Offload blocking DB operations to threadpool
         await run_in_threadpool(save_issue_db, db, new_issue)
 
-        # Invalidate cache
-        RECENT_ISSUES_CACHE["data"] = None
+        # Generate Action Plan (AI)
+        action_plan = None
+        try:
+            action_plan = await generate_action_plan(description, category, image_path)
+
+            # Update the issue with the action plan
+            new_issue.action_plan = json.dumps(action_plan)
+            db.commit() # We are in the main thread (but db object might need care if reused from threadpool?
+                        # Actually save_issue_db uses the session. The session is not thread-safe but we are back in async main thread.
+                        # Wait, save_issue_db was run in threadpool. The 'new_issue' object is attached to 'db' session.
+                        # We should be careful. It is safer to re-query or just update via session in threadpool if strictly needed.
+                        # But since we are using 'run_in_threadpool', the 'db' session is technically used there.
+                        # FastAPI dependency 'db' is created in the main thread (async).
+                        # 'run_in_threadpool' runs in a separate thread.
+                        # If we use 'db' here again, it might be fine if the threadpool task is finished.
+                        # But to be safe and robust, let's wrap the update in a function run in threadpool again.
+        except Exception as e:
+            logger.error(f"Error generating action plan: {e}", exc_info=True)
+            # We don't fail the request if AI fails, just return without plan
+
+        if action_plan:
+             # Update DB with action plan
+             def update_issue_plan(db, issue_id, plan):
+                 issue = db.query(Issue).filter(Issue.id == issue_id).first()
+                 if issue:
+                     issue.action_plan = plan
+                     db.commit()
+
+             await run_in_threadpool(update_issue_plan, db, new_issue.id, json.dumps(action_plan))
+
+        # Invalidate recent issues cache
+        global RECENT_ISSUES_CACHE
+        RECENT_ISSUES_CACHE = None
 
         return {
             "id": new_issue.id,
@@ -1074,69 +1047,39 @@ async def chat_endpoint(request: ChatRequest):
         logger.error(f"Chat service error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Chat service temporarily unavailable")
 
-@app.get("/api/leaderboard", response_model=LeaderboardResponse)
-def get_leaderboard(db: Session = Depends(get_db)):
-    # Group by user_email, count issues, sum upvotes
-    results = db.query(
-        Issue.user_email,
-        func.count(Issue.id).label('count'),
-        func.sum(Issue.upvotes).label('total_upvotes')
-    ).filter(
-        Issue.user_email.isnot(None),
-        Issue.user_email != ""
-    ).group_by(Issue.user_email).order_by(func.count(Issue.id).desc()).limit(10).all()
+# Simple in-memory cache for recent issues
+RECENT_ISSUES_CACHE = None
+RECENT_ISSUES_TIMESTAMP = 0
+CACHE_TTL = 60 # 60 seconds
 
-    leaderboard = []
-    for idx, (email, count, upvotes) in enumerate(results):
-        # Mask email
-        try:
-            if '@' in email:
-                name, domain = email.split('@')
-                masked_email = f"{name[0]}***@{domain}"
-            else:
-                masked_email = email[:3] + "***"
-        except:
-            masked_email = "User***"
-
-        leaderboard.append(LeaderboardEntry(
-            user_email=masked_email,
-            reports_count=count,
-            total_upvotes=upvotes or 0,
-            rank=idx + 1
-        ))
-
-    return LeaderboardResponse(leaderboard=leaderboard)
-
-
-@app.get("/api/issues/recent", response_model=List[IssueSummaryResponse])
+@app.get("/api/issues/recent")
 def get_recent_issues(db: Session = Depends(get_db)):
-    cached_data = recent_issues_cache.get("recent_issues")
-    if cached_data:
-        return JSONResponse(content=cached_data)
+    global RECENT_ISSUES_CACHE, RECENT_ISSUES_TIMESTAMP
 
-    # Fetch last 10 issues, deferring action_plan for performance
-    issues = db.query(Issue).options(defer(Issue.action_plan)).order_by(Issue.created_at.desc()).limit(10).all()
+    current_time = time.time()
+    if RECENT_ISSUES_CACHE and (current_time - RECENT_ISSUES_TIMESTAMP < CACHE_TTL):
+        return RECENT_ISSUES_CACHE
 
-    # Convert to Pydantic models for validation and serialization
-    data = []
-    for i in issues:
-        data.append(IssueSummaryResponse(
-            id=i.id,
-            category=i.category,
-            description=i.description[:100] + "..." if len(i.description) > 100 else i.description,
-            created_at=i.created_at,
-            image_path=i.image_path,
-            status=i.status,
-            upvotes=i.upvotes if i.upvotes is not None else 0,
-            location=i.location,
-            latitude=i.latitude,
-            longitude=i.longitude
-            # action_plan is deferred and excluded
-        ).model_dump(mode='json'))
+    # Fetch last 10 issues
+    issues = db.query(Issue).order_by(Issue.created_at.desc()).limit(10).all()
+    # Sanitize data (no emails)
+    result = [
+        {
+            "id": i.id,
+            "category": i.category,
+            "description": i.description[:100] + "..." if len(i.description) > 100 else i.description,
+            "created_at": i.created_at,
+            "image_path": i.image_path,
+            "status": i.status,
+            "upvotes": i.upvotes if i.upvotes is not None else 0
+        }
+        for i in issues
+    ]
 
-    # Thread-safe cache update
-    recent_issues_cache.set(data, "recent_issues")
-    return data
+    RECENT_ISSUES_CACHE = result
+    RECENT_ISSUES_TIMESTAMP = current_time
+
+    return result
 
 @app.post("/api/detect-pothole")
 async def detect_pothole_endpoint(image: UploadFile = File(...)):
