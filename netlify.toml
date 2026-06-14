@@ -1,10 +1,14 @@
-# Netlify Configuration for VishwaGuru Frontend
-
-# Build settings
 [build]
   publish = "frontend/dist"
   command = "npm install --prefix frontend && npm run build --prefix frontend"
 
-# Build environment
-[build.environment]
-  NODE_VERSION = "20"
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/api/*"
+  to = "https://vishwaguru-backend.onrender.com/api/:splat"
+  status = 200
+  force = true

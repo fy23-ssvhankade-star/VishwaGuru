@@ -1,14 +1,5 @@
 import React from 'react';
-import { useTranslation } from 'react-i18next';
-import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
-import {
-  AlertTriangle, MapPin, Search, Activity, Camera, Trash2, ThumbsUp, Brush,
-  Droplets, Zap, Truck, Flame, Dog, XCircle, Lightbulb, TreeDeciduous, Bug,
-  Scan, ChevronRight, LayoutGrid, Shield, Leaf, Building, CheckCircle, Trophy, Monitor,
-  Volume2, Users, Waves, Accessibility, Siren, Recycle, Eye, ChevronUp
-} from 'lucide-react';
+import { AlertTriangle, MapPin, Search, Activity, Camera, Trash2, ThumbsUp, Brush, Droplets, Zap, Truck, Flame, Dog, XCircle, Lightbulb, TreePine } from 'lucide-react';
 
 const CameraCheckModal = ({ onClose }) => {
   const videoRef = React.useRef(null);
@@ -45,8 +36,148 @@ const CameraCheckModal = ({ onClose }) => {
           {status === 'error' && <span className="text-red-500 font-medium">Camera access failed. Check permissions.</span>}
           <video ref={videoRef} autoPlay playsInline className={`w-full h-full object-cover ${status === 'active' ? 'block' : 'hidden'}`} />
         </div>
-        {status === 'active' && <p className="text-green-600 font-medium text-sm mb-4">Camera is working correctly!</p>}
-        <button onClick={onClose} className="w-full bg-blue-600 text-white py-2 rounded-lg font-bold">Close</button>
+        <span className="font-semibold text-blue-800 text-sm">Report Issue</span>
+      </button>
+
+      <button
+        onClick={() => setView('pothole')}
+        className="flex flex-col items-center justify-center bg-red-50 border-2 border-red-100 p-4 rounded-xl hover:bg-red-100 transition shadow-sm h-32"
+      >
+        <div className="bg-red-500 text-white p-3 rounded-full mb-2">
+          <Camera size={24} />
+        </div>
+        <span className="font-semibold text-red-800 text-sm">Pothole</span>
+      </button>
+
+      <button
+        onClick={() => setView('garbage')}
+        className="flex flex-col items-center justify-center bg-orange-50 border-2 border-orange-100 p-4 rounded-xl hover:bg-orange-100 transition shadow-sm h-32"
+      >
+        <div className="bg-orange-500 text-white p-3 rounded-full mb-2">
+          <Trash2 size={24} />
+        </div>
+        <span className="font-semibold text-orange-800 text-sm">Garbage</span>
+      </button>
+
+      <button
+        onClick={() => setView('mh-rep')}
+        className="flex flex-col items-center justify-center bg-purple-50 border-2 border-purple-100 p-4 rounded-xl hover:bg-purple-100 transition shadow-sm h-32"
+      >
+        <div className="bg-purple-500 text-white p-3 rounded-full mb-2">
+          <Search size={24} />
+        </div>
+        <span className="font-semibold text-purple-800 text-sm">Find MLA</span>
+      </button>
+
+      <button
+        onClick={() => setView('vandalism')}
+        className="flex flex-col items-center justify-center bg-indigo-50 border-2 border-indigo-100 p-4 rounded-xl hover:bg-indigo-100 transition shadow-sm h-32"
+      >
+        <div className="bg-indigo-500 text-white p-3 rounded-full mb-2">
+          <Brush size={24} />
+        </div>
+        <span className="font-semibold text-indigo-800 text-sm">Graffiti</span>
+      </button>
+
+      <button
+        onClick={() => setView('flood')}
+        className="flex flex-col items-center justify-center bg-cyan-50 border-2 border-cyan-100 p-4 rounded-xl hover:bg-cyan-100 transition shadow-sm h-32"
+      >
+        <div className="bg-cyan-500 text-white p-3 rounded-full mb-2">
+          <Droplets size={24} />
+        </div>
+        <span className="font-semibold text-cyan-800 text-sm">Flood</span>
+      </button>
+
+      <button
+        onClick={() => setView('infrastructure')}
+        className="flex flex-col items-center justify-center bg-yellow-50 border-2 border-yellow-100 p-4 rounded-xl hover:bg-yellow-100 transition shadow-sm h-32"
+      >
+        <div className="bg-yellow-500 text-white p-3 rounded-full mb-2">
+          <Zap size={24} />
+        </div>
+        <span className="font-semibold text-yellow-800 text-sm">Broken Infra</span>
+      </button>
+
+      {/* New Western Style Features */}
+      <button
+        onClick={() => setView('parking')}
+        className="flex flex-col items-center justify-center bg-rose-50 border-2 border-rose-100 p-4 rounded-xl hover:bg-rose-100 transition shadow-sm h-32"
+      >
+        <div className="bg-rose-500 text-white p-3 rounded-full mb-2">
+          <Truck size={24} />
+        </div>
+        <span className="font-semibold text-rose-800 text-sm">Illegal Parking</span>
+      </button>
+
+      <button
+        onClick={() => setView('streetlight')}
+        className="flex flex-col items-center justify-center bg-slate-50 border-2 border-slate-100 p-4 rounded-xl hover:bg-slate-100 transition shadow-sm h-32"
+      >
+        <div className="bg-slate-700 text-white p-3 rounded-full mb-2">
+          <Lightbulb size={24} />
+        </div>
+        <span className="font-semibold text-slate-800 text-sm">Dark Street</span>
+      </button>
+
+      <button
+        onClick={() => setView('fire')}
+        className="flex flex-col items-center justify-center bg-red-100 border-2 border-red-200 p-4 rounded-xl hover:bg-red-200 transition shadow-sm h-32"
+      >
+        <div className="bg-red-600 text-white p-3 rounded-full mb-2">
+          <Flame size={24} />
+        </div>
+        <span className="font-semibold text-red-900 text-sm">Fire/Smoke</span>
+      </button>
+
+      <button
+        onClick={() => setView('animal')}
+        className="flex flex-col items-center justify-center bg-amber-50 border-2 border-amber-100 p-4 rounded-xl hover:bg-amber-100 transition shadow-sm h-32"
+      >
+        <div className="bg-amber-600 text-white p-3 rounded-full mb-2">
+          <Dog size={24} />
+        </div>
+        <span className="font-semibold text-amber-900 text-sm">Stray Animal</span>
+      </button>
+
+      <button
+        onClick={() => setView('blocked')}
+        className="flex flex-col items-center justify-center bg-gray-50 border-2 border-gray-100 p-4 rounded-xl hover:bg-gray-100 transition shadow-sm h-32"
+      >
+        <div className="bg-gray-600 text-white p-3 rounded-full mb-2">
+          <XCircle size={24} />
+        </div>
+        <span className="font-semibold text-gray-800 text-sm">Blocked Road</span>
+      </button>
+
+      <button
+        onClick={() => setView('tree')}
+        className="flex flex-col items-center justify-center bg-green-50 border-2 border-green-100 p-4 rounded-xl hover:bg-green-100 transition shadow-sm h-32"
+      >
+        <div className="bg-green-700 text-white p-3 rounded-full mb-2">
+          <TreePine size={24} />
+        </div>
+        <span className="font-semibold text-green-900 text-sm">Tree Hazard</span>
+      </button>
+    </div>
+
+    <div className="grid grid-cols-1 mt-4">
+       <button
+        onClick={fetchResponsibilityMap}
+        className="flex flex-row items-center justify-center bg-green-50 border-2 border-green-100 p-4 rounded-xl hover:bg-green-100 transition shadow-sm h-16"
+      >
+        <div className="bg-green-500 text-white p-2 rounded-full mr-3">
+          <MapPin size={20} />
+        </div>
+        <span className="font-semibold text-green-800">Who is Responsible?</span>
+      </button>
+    </div>
+
+    {/* Recent Activity Feed */}
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="p-4 border-b border-gray-100 flex items-center gap-2">
+        <Activity size={18} className="text-orange-500" />
+        <h2 className="font-bold text-gray-800">Community Activity</h2>
       </div>
     </div>
   );

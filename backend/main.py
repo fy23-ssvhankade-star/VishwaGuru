@@ -68,22 +68,7 @@ from backend.hf_api_service import (
     detect_fire_clip,
     detect_stray_animal_clip,
     detect_blocked_road_clip,
-    detect_tree_hazard_clip,
-    detect_pest_clip,
-    detect_severity_clip,
-    detect_smart_scan_clip,
-    generate_image_caption,
-    analyze_urgency_text,
-    verify_resolution_vqa,
-    detect_depth_map,
-    detect_water_leak_clip,
-    detect_accessibility_issue_clip,
-    detect_crowd_density_clip,
-    detect_audio_event,
-    transcribe_audio,
-    detect_waste_clip,
-    detect_civic_eye_clip,
-    detect_pothole_clip
+    detect_tree_clip
 )
 
 # Configure structured logging
@@ -1235,6 +1220,22 @@ async def detect_blocked_road_endpoint(request: Request, image: UploadFile = Fil
         return {"detections": detections}
     except Exception as e:
         logger.error(f"Blocked road detection error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.post("/api/detect-tree-hazard")
+async def detect_tree_hazard_endpoint(request: Request, image: UploadFile = File(...)):
+    try:
+        pil_image = await run_in_threadpool(Image.open, image.file)
+    except Exception as e:
+        logger.error(f"Invalid image file: {e}", exc_info=True)
+        raise HTTPException(status_code=400, detail="Invalid image file")
+
+    try:
+        client = request.app.state.http_client
+        detections = await detect_tree_clip(pil_image, client=client)
+        return {"detections": detections}
+    except Exception as e:
+        logger.error(f"Tree hazard detection error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 

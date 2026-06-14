@@ -32,13 +32,6 @@ const FireDetector = React.lazy(() => import('./FireDetector'));
 const StrayAnimalDetector = React.lazy(() => import('./StrayAnimalDetector'));
 const BlockedRoadDetector = React.lazy(() => import('./BlockedRoadDetector'));
 const TreeDetector = React.lazy(() => import('./TreeDetector'));
-const PestDetector = React.lazy(() => import('./PestDetector'));
-const SmartScanner = React.lazy(() => import('./SmartScanner'));
-const NoiseDetector = React.lazy(() => import('./NoiseDetector'));
-const WaterLeakDetector = React.lazy(() => import('./WaterLeakDetector'));
-const AccessibilityDetector = React.lazy(() => import('./AccessibilityDetector'));
-const CrowdDetector = React.lazy(() => import('./CrowdDetector'));
-const SeverityDetector = React.lazy(() => import('./SeverityDetector'));
 
 // Loader
 const Loader = () => (
@@ -426,7 +419,30 @@ function AppContent() {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
 
-  // Clear messages after timeout
+  // Safe navigation helper
+  const navigateToView = (view) => {
+    const validViews = ['home', 'map', 'report', 'action', 'mh-rep', 'pothole', 'garbage', 'vandalism', 'flood', 'infrastructure', 'parking', 'streetlight', 'fire', 'animal', 'blocked', 'tree'];
+    if (validViews.includes(view)) {
+      navigate(view === 'home' ? '/' : `/${view}`);
+    }
+  };
+
+  // Fetch recent issues on mount
+  const fetchRecentIssues = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/issues/recent`);
+      if (response.ok) {
+        const data = await response.json();
+        setRecentIssues(data);
+      } else {
+        throw new Error("Failed to fetch");
+      }
+    } catch (e) {
+      console.error("Failed to fetch recent issues, using fake data", e);
+      setRecentIssues(fakeRecentIssues);
+    }
+  };
+
   useEffect(() => {
     if (error || success) {
       const timer = setTimeout(() => {
@@ -517,127 +533,103 @@ function AppContent() {
       <div className="relative z-10">
         <AppHeader />
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-32 md:pb-20">
-          {/* Main Content Area */}
-          <main className="w-full max-w-6xl mx-auto">
-            {/* Glass morphism card effect */}
-            <div className="relative">
-              <div className="absolute -inset-1 bg-gradient-to-r from-orange-500/20 to-blue-500/20 rounded-3xl blur-xl opacity-70 animate-gradient-slow"></div>
-
-              <div className="relative bg-white/95 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/50 p-6 md:p-10 transition-all duration-500 hover:shadow-3xl">
-                {loading && (
-                  <div className="my-20">
-                    <LoadingSpinner className="mb-4" size="lg" variant="primary" />
-                    <p className="text-gray-600 text-center animate-pulse">
-                      Loading civic data...
-                    </p>
-                  </div>
-                )}
-
-                {error && (
-                  <ErrorAlert
-                    message={error}
-                    onRetry={error.includes("responsibility map") ? fetchResponsibilityMap : null}
-                    variant="error"
-                  />
-                )}
-
-                {success && (
-                  <SuccessAlert message={success} />
-                )}
-
-                {/* Show breadcrumb except on home page */}
-                {location.pathname !== '/home' && <NavigationBreadcrumb />}
-
-                <Suspense fallback={
-                  <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-6">
-                    <LoadingSpinner size="xl" variant="secondary" />
-                    <p className="text-gray-600 font-medium animate-pulse">
-                      Loading {location.pathname === '/home' ? 'Dashboard' : 'Content'}...
-                    </p>
-                    <div className="w-64 h-2 bg-gray-200 rounded-full overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-orange-500 to-blue-500 rounded-full animate-loading-bar"></div>
-                    </div>
-                  </div>
-                }>
-                  <Routes>
-                    {/* Main Views */}
-                    <Route path="/home" element={
-                      <Home
-                        setView={navigateToView}
-                        fetchResponsibilityMap={fetchResponsibilityMap}
-                        recentIssues={recentIssues}
-                        handleUpvote={handleUpvote}
-                      />
-                    } />
-
-                    <Route path="/map" element={
-                      <MapView
-                        responsibilityMap={responsibilityMap}
-                        setView={navigateToView}
-                      />
-                    } />
-
-                    <Route path="/report" element={
-                      <ReportForm
-                        setView={navigateToView}
-                        setLoading={setLoading}
-                        setError={setError}
-                        setActionPlan={setActionPlan}
-                        loading={loading}
-                        setSuccess={setSuccess}
-                      />
-                    } />
-
-                    <Route path="/action" element={
-                      <ActionView
-                        actionPlan={actionPlan}
-                        setActionPlan={setActionPlan}
-                        setView={navigateToView}
-                        setSuccess={setSuccess}
-                      />
-                    } />
-
-                    <Route path="/mh-rep" element={
-                      <MaharashtraRepView
-                        setView={navigateToView}
-                        setLoading={setLoading}
-                        setError={setError}
-                        setMaharashtraRepInfo={setMaharashtraRepInfo}
-                        maharashtraRepInfo={maharashtraRepInfo}
-                        loading={loading}
-                        setSuccess={setSuccess}
-                      />
-                    } />
-
-                    <Route path="/stats" element={<StatsView setView={navigateToView} />} />
-                    <Route path="/leaderboard" element={<LeaderboardView setView={navigateToView} />} />
-                    <Route path="/grievance" element={<GrievanceView setView={navigateToView} />} />
-
-                    {/* Detector Routes */}
-                    {Object.entries(DETECTORS).map(([path, Component]) => (
-                      <Route
-                        key={path}
-                        path={`/${path}`}
-                        element={
-                          <DetectorWrapper onBack={() => navigate('/home')} title={path.replace('-', ' ')}>
-                            <Component />
-                          </DetectorWrapper>
-                        }
-                      />
-                    ))}
-
-                    {/* Dynamic Routes */}
-                    <Route path="/verify/:id" element={<VerifyView />} />
-                    <Route path="*" element={<NotFound />} />
-                  </Routes>
-                </Suspense>
-              </div>
-            </div>
-          </main>
-
-          <AppFooter />
-        </div>
+        <Suspense fallback={
+          <div className="flex justify-center my-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+          </div>
+        }>
+          <Routes>
+            <Route
+              path="/"
+              element={
+                <Home
+                  setView={navigateToView}
+                  fetchResponsibilityMap={fetchResponsibilityMap}
+                  recentIssues={recentIssues}
+                  handleUpvote={handleUpvote}
+                />
+              }
+            />
+            <Route
+              path="/map"
+              element={
+                <MapView
+                  responsibilityMap={responsibilityMap}
+                  setView={navigateToView}
+                />
+              }
+            />
+            <Route
+              path="/report"
+              element={
+                <ReportForm
+                  setView={navigateToView}
+                  setLoading={setLoading}
+                  setError={setError}
+                  setActionPlan={setActionPlan}
+                  loading={loading}
+                />
+              }
+            />
+            <Route
+              path="/action"
+              element={
+                <ActionView
+                  actionPlan={actionPlan}
+                  setView={navigateToView}
+                />
+              }
+            />
+            <Route
+              path="/mh-rep"
+              element={
+                <MaharashtraRepView
+                  setView={navigateToView}
+                  setLoading={setLoading}
+                  setError={setError}
+                  setMaharashtraRepInfo={setMaharashtraRepInfo}
+                  maharashtraRepInfo={maharashtraRepInfo}
+                  loading={loading}
+                />
+              }
+            />
+            <Route path="/pothole" element={<PotholeDetector onBack={() => navigate('/')} />} />
+            <Route path="/garbage" element={<GarbageDetector onBack={() => navigate('/')} />} />
+            <Route
+              path="/vandalism"
+              element={
+                <div className="flex flex-col h-full">
+                  <button onClick={() => navigate('/')} className="self-start text-blue-600 mb-2">
+                    &larr; Back
+                  </button>
+                  <VandalismDetector />
+                </div>
+              }
+            />
+            <Route
+              path="/flood"
+              element={
+                <div className="flex flex-col h-full">
+                  <button onClick={() => navigate('/')} className="self-start text-blue-600 mb-2">
+                    &larr; Back
+                  </button>
+                  <FloodDetector />
+                </div>
+              }
+            />
+            <Route
+              path="/infrastructure"
+              element={<InfrastructureDetector onBack={() => navigate('/')} />}
+            />
+            <Route path="/parking" element={<IllegalParkingDetector onBack={() => navigate('/')} />} />
+            <Route path="/streetlight" element={<StreetLightDetector onBack={() => navigate('/')} />} />
+            <Route path="/fire" element={<FireDetector onBack={() => navigate('/')} />} />
+            <Route path="/animal" element={<StrayAnimalDetector onBack={() => navigate('/')} />} />
+            <Route path="/blocked" element={<BlockedRoadDetector onBack={() => navigate('/')} />} />
+            <Route path="/tree" element={<TreeDetector onBack={() => navigate('/')} />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
 
       </div>
     </div>
