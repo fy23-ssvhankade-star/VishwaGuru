@@ -4,12 +4,9 @@ Spatial utilities for geospatial operations and deduplication.
 import math
 import logging
 from typing import List, Tuple, Optional
-try:
-    from sklearn.cluster import DBSCAN
-except ImportError:
-    DBSCAN = None
-import numpy as np
-import logging
+# Lazy import for heavy ML libraries to improve startup time and reduce memory usage
+# from sklearn.cluster import DBSCAN
+# import numpy as np
 
 from backend.models import Issue
 
@@ -69,6 +66,28 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
     return R * c
 
 
+def equirectangular_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """
+    Calculate the distance between two points using the Equirectangular approximation.
+    Faster than Haversine for small distances (< 100km).
+    Handles dateline wrapping.
+
+    Returns distance in meters.
+    """
+    R = 6371000.0
+    lat1_rad = math.radians(lat1)
+    lat2_rad = math.radians(lat2)
+    lon1_rad = math.radians(lon1)
+    lon2_rad = math.radians(lon2)
+
+    # Handle dateline wrapping
+    diff_lon = (lon2_rad - lon1_rad + math.pi) % (2 * math.pi) - math.pi
+
+    x = diff_lon * math.cos((lat1_rad + lat2_rad) / 2)
+    y = lat2_rad - lat1_rad
+    return R * math.sqrt(x * x + y * y)
+
+
 def find_nearby_issues(
     issues: List[Issue],
     target_lat: float,
@@ -89,14 +108,23 @@ def find_nearby_issues(
     """
     nearby_issues = []
 
+    # Use equirectangular approximation for short distances (< 10km) for performance
+    use_equirectangular = radius_meters < 10000.0
+
     for issue in issues:
         if issue.latitude is None or issue.longitude is None:
             continue
 
-        distance = haversine_distance(
-            target_lat, target_lon,
-            issue.latitude, issue.longitude
-        )
+        if use_equirectangular:
+            distance = equirectangular_distance(
+                target_lat, target_lon,
+                issue.latitude, issue.longitude
+            )
+        else:
+            distance = haversine_distance(
+                target_lat, target_lon,
+                issue.latitude, issue.longitude
+            )
 
         if distance <= radius_meters:
             nearby_issues.append((issue, distance))
@@ -119,9 +147,14 @@ def cluster_issues_dbscan(issues: List[Issue], eps_meters: float = 30.0) -> List
     Returns:
         List of clusters, where each cluster is a list of Issue objects
     """
-    if DBSCAN is None:
-        logging.warning("DBSCAN clustering unavailable: scikit-learn not installed.")
-        return [[issue] for issue in issues if issue.latitude is not None and issue.longitude is not None]
+    # Lazy import to avoid loading heavy libraries on startup
+    try:
+        from sklearn.cluster import DBSCAN
+        import numpy as np
+    except ImportError:
+        # Fallback or log error if dependencies are missing (e.g. in minimal environments)
+        # For now, we assume they are installed but lazy loaded
+        raise ImportError("scikit-learn and numpy are required for spatial clustering. Please install them.")
 
     # Filter issues with valid coordinates
     valid_issues = [

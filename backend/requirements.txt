@@ -21,7 +21,7 @@ firebase-admin
 a2wsgi
 # Spatial deduplication dependencies
 scikit-learn
-numpy
+numpy<2.0.0
 pytest
 python-jose[cryptography]
 passlib[bcrypt]
