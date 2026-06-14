@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-@router.get("/api/grievances", response_model=List[GrievanceSummaryResponse])
+@router.get("/grievances", response_model=List[GrievanceSummaryResponse])
 def get_grievances(
     status: Optional[str] = Query(None, description="Filter by status"),
     category: Optional[str] = Query(None, description="Filter by category"),
@@ -86,7 +86,7 @@ def get_grievances(
         logger.error(f"Error getting grievances: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to retrieve grievances")
 
-@router.get("/api/grievances/{grievance_id}", response_model=GrievanceSummaryResponse)
+@router.get("/grievances/{grievance_id}", response_model=GrievanceSummaryResponse)
 def get_grievance(grievance_id: int, db: Session = Depends(get_db)):
     """Get detailed grievance information with escalation history"""
     try:
@@ -135,14 +135,26 @@ def get_grievance(grievance_id: int, db: Session = Depends(get_db)):
         logger.error(f"Error getting grievance {grievance_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to retrieve grievance")
 
-@router.get("/api/escalation-stats", response_model=EscalationStatsResponse)
+@router.get("/escalation-stats", response_model=EscalationStatsResponse)
 def get_escalation_stats(db: Session = Depends(get_db)):
-    """Get escalation statistics"""
+    """
+    Get escalation statistics.
+    Optimized: Uses a single GROUP BY query instead of 4 separate count queries.
+    """
     try:
-        total_grievances = db.query(func.count(Grievance.id)).scalar()
-        escalated_grievances = db.query(func.count(Grievance.id)).filter(Grievance.status == "escalated").scalar()
-        active_grievances = db.query(func.count(Grievance.id)).filter(Grievance.status.in_(["open", "in_progress"])).scalar()
-        resolved_grievances = db.query(func.count(Grievance.id)).filter(Grievance.status == "resolved").scalar()
+        # Perform aggregation in a single query for performance
+        status_counts = db.query(
+            Grievance.status,
+            func.count(Grievance.id)
+        ).group_by(Grievance.status).all()
+
+        # Process results into a dictionary for easy lookup
+        counts_dict = {status.value if hasattr(status, 'value') else status: count for status, count in status_counts}
+
+        total_grievances = sum(counts_dict.values())
+        escalated_grievances = counts_dict.get("escalated", 0)
+        active_grievances = counts_dict.get("open", 0) + counts_dict.get("in_progress", 0)
+        resolved_grievances = counts_dict.get("resolved", 0)
 
         escalation_rate = (escalated_grievances / total_grievances * 100) if total_grievances > 0 else 0
 
@@ -158,7 +170,7 @@ def get_escalation_stats(db: Session = Depends(get_db)):
         logger.error(f"Error getting escalation stats: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to retrieve escalation statistics")
 
-@router.post("/api/grievances/{grievance_id}/escalate")
+@router.post("/grievances/{grievance_id}/escalate")
 def manual_escalate_grievance(
     grievance_id: int,
     request: Request,
@@ -207,7 +219,7 @@ def _load_responsibility_map():
     with open(file_path, "r") as f:
         return json.load(f)
 
-@router.get("/api/responsibility-map", response_model=ResponsibilityMapResponse)
+@router.get("/responsibility-map", response_model=ResponsibilityMapResponse)
 def get_responsibility_map():
     """Get responsibility mapping data for civic authorities"""
     try:
@@ -225,7 +237,7 @@ def get_responsibility_map():
 # COMMUNITY CONFIRMATION ENDPOINTS (Issue #289)
 # ============================================================================
 
-@router.post("/api/grievances/{grievance_id}/follow", response_model=FollowGrievanceResponse)
+@router.post("/grievances/{grievance_id}/follow", response_model=FollowGrievanceResponse)
 def follow_grievance(
     grievance_id: int,
     request: FollowGrievanceRequest,
@@ -274,7 +286,7 @@ def follow_grievance(
         raise HTTPException(status_code=500, detail="Failed to follow grievance")
 
 
-@router.delete("/api/grievances/{grievance_id}/follow")
+@router.delete("/grievances/{grievance_id}/follow")
 def unfollow_grievance(
     grievance_id: int,
     user_email: str = Query(..., description="Email of user to unfollow"),
@@ -302,7 +314,7 @@ def unfollow_grievance(
         raise HTTPException(status_code=500, detail="Failed to unfollow grievance")
 
 
-@router.post("/api/grievances/{grievance_id}/request-closure", response_model=RequestClosureResponse)
+@router.post("/grievances/{grievance_id}/request-closure", response_model=RequestClosureResponse)
 def request_grievance_closure(
     grievance_id: int,
     request_data: RequestClosureRequest,
@@ -336,7 +348,7 @@ def request_grievance_closure(
         raise HTTPException(status_code=500, detail="Failed to request closure")
 
 
-@router.post("/api/grievances/{grievance_id}/confirm-closure", response_model=ConfirmClosureResponse)
+@router.post("/grievances/{grievance_id}/confirm-closure", response_model=ConfirmClosureResponse)
 def confirm_grievance_closure(
     grievance_id: int,
     confirmation: ConfirmClosureRequest,
@@ -375,7 +387,7 @@ def confirm_grievance_closure(
         raise HTTPException(status_code=500, detail="Failed to confirm closure")
 
 
-@router.get("/api/grievances/{grievance_id}/closure-status", response_model=ClosureStatusResponse)
+@router.get("/grievances/{grievance_id}/closure-status", response_model=ClosureStatusResponse)
 def get_closure_status(
     grievance_id: int,
     db: Session = Depends(get_db)
@@ -390,15 +402,15 @@ def get_closure_status(
             GrievanceFollower.grievance_id == grievance_id
         ).scalar()
         
-        confirmations_count = db.query(func.count(ClosureConfirmation.id)).filter(
-            ClosureConfirmation.grievance_id == grievance_id,
-            ClosureConfirmation.confirmation_type == "confirmed"
-        ).scalar()
+        # Get all confirmation counts in a single query instead of multiple round-trips
+        counts = db.query(
+            ClosureConfirmation.confirmation_type,
+            func.count(ClosureConfirmation.id)
+        ).filter(ClosureConfirmation.grievance_id == grievance_id).group_by(ClosureConfirmation.confirmation_type).all()
         
-        disputes_count = db.query(func.count(ClosureConfirmation.id)).filter(
-            ClosureConfirmation.grievance_id == grievance_id,
-            ClosureConfirmation.confirmation_type == "disputed"
-        ).scalar()
+        counts_dict = {ctype: count for ctype, count in counts}
+        confirmations_count = counts_dict.get("confirmed", 0)
+        disputes_count = counts_dict.get("disputed", 0)
         
         required_confirmations = max(1, int(total_followers * ClosureService.CONFIRMATION_THRESHOLD))
         

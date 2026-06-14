@@ -4,7 +4,7 @@ import { apiClient } from './client';
 const createDetectorApi = (endpoint) => async (data) => {
     // If data is a FormData object (checking if it has append method is a heuristic)
     if (data instanceof FormData) {
-         return await apiClient.postForm(endpoint, data);
+        return await apiClient.postForm(endpoint, data);
     }
     // If data contains an image property that is a base64 string,
     // the current backend implementation for infrastructure/vandalism/etc expects BYTES.
@@ -53,13 +53,10 @@ export const detectorsApi = {
   severity: createDetectorApi('/api/detect-severity'),
   waste: createDetectorApi('/api/detect-waste'),
   civicEye: createDetectorApi('/api/detect-civic-eye'),
-  waterLeak: createDetectorApi('/api/detect-water-leak'),
-  crowd: createDetectorApi('/api/detect-crowd'),
-  accessibility: createDetectorApi('/api/detect-accessibility'),
-  trafficSign: createDetectorApi('/api/detect-traffic-sign'),
-  abandonedVehicle: createDetectorApi('/api/detect-abandoned-vehicle'),
-  graffiti: createDetectorApi('/api/detect-graffiti'),
   transcribe: async (formData) => {
       return await apiClient.postForm('/api/transcribe-audio', formData);
+  },
+  textCategory: async (text) => {
+      return await apiClient.post('/api/detect-category-text', { text });
   },
 };

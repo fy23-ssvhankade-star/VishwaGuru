@@ -7,7 +7,7 @@ const AuthContext = createContext(null);
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [token, setToken] = useState(localStorage.getItem('token'));
-    const [loading, setLoading] = useState(!!localStorage.getItem('token'));
+    const [loading, setLoading] = useState(true);
 
     const logout = () => {
         setToken(null);
@@ -16,18 +16,30 @@ export const AuthProvider = ({ children }) => {
     };
 
     useEffect(() => {
+        const handleLogout = () => logout();
+        window.addEventListener('auth:logout', handleLogout);
+        return () => window.removeEventListener('auth:logout', handleLogout);
+    }, []);
+
+    useEffect(() => {
         if (token) {
             // Set default header
             apiClient.setToken(token);
-            // Fetch user details
-            authApi.me()
-                .then(userData => setUser(userData))
-                .catch(() => {
-                    logout();
-                })
-                .finally(() => setLoading(false));
+
+            // Only fetch user if not already set (prevents double fetch on login)
+            if (!user) {
+                authApi.me()
+                    .then(userData => setUser(userData))
+                    .catch(() => {
+                        logout();
+                    })
+                    .finally(() => setLoading(false));
+            } else {
+                setLoading(false);
+            }
         } else {
             apiClient.removeToken();
+            setLoading(false);
         }
     }, [token]);
 
@@ -45,7 +57,7 @@ export const AuthProvider = ({ children }) => {
             const userData = await authApi.me();
             setUser(userData);
             return userData;
-        } catch {
+        } catch (e) {
             return null;
         }
     };
@@ -61,5 +73,4 @@ export const AuthProvider = ({ children }) => {
     );
 };
 
-// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => useContext(AuthContext);

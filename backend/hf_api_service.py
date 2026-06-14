@@ -15,6 +15,9 @@ headers = {"Authorization": f"Bearer {token}"} if token else {}
 # Zero-Shot Image Classification Model
 CLIP_API_URL = "https://router.huggingface.co/models/openai/clip-vit-base-patch32"
 
+# Zero-Shot Text Classification Model
+ZERO_SHOT_API_URL = "https://router.huggingface.co/models/facebook/bart-large-mnli"
+
 # Image Captioning Model
 CAPTION_API_URL = "https://router.huggingface.co/models/Salesforce/blip-image-captioning-large"
 
@@ -31,6 +34,7 @@ DEPTH_API_URL = "https://router.huggingface.co/models/Intel/dpt-hybrid-midas"
 AUDIO_CLASS_API_URL = "https://router.huggingface.co/models/MIT/ast-finetuned-audioset-10-10-0.4593"
 
 # Speech-to-Text Model (Whisper)
+FACIAL_EMOTION_API_URL = "https://router.huggingface.co/models/dima806/facial_emotions_image_detection"
 WHISPER_API_URL = "https://router.huggingface.co/models/openai/whisper-large-v3-turbo"
 
 async def _make_request(client, url, payload):
@@ -44,13 +48,10 @@ async def _make_request(client, url, payload):
         logger.error(f"HF API Request Exception: {e}")
         return []
 
-def _prepare_image_bytes(image: Union[Image.Image, bytes, io.BytesIO]) -> bytes:
+def _prepare_image_bytes(image: Union[Image.Image, bytes]) -> bytes:
     if isinstance(image, bytes):
         return image
-    if isinstance(image, io.BytesIO):
-        return image.getvalue()
     img_byte_arr = io.BytesIO()
-    # Use JPEG as default if format is missing (e.g. for newly created images)
     fmt = image.format if image.format else 'JPEG'
     image.save(img_byte_arr, format=fmt)
     return img_byte_arr.getvalue()
@@ -144,81 +145,6 @@ async def detect_crowd_density_clip(image: Union[Image.Image, bytes], client: ht
     # We want to detect high density
     targets = ["dense crowd", "dangerous overcrowding"]
     return await _detect_clip_generic(image, labels, targets, client)
-
-async def detect_vandalism_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
-    labels = ["graffiti", "broken glass", "vandalized wall", "destroyed property", "clean wall", "intact property"]
-    targets = ["graffiti", "broken glass", "vandalized wall", "destroyed property"]
-    return await _detect_clip_generic(image, labels, targets, client)
-
-async def detect_infrastructure_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
-    labels = ["pothole", "broken road", "cracked pavement", "damaged bridge", "collapsed structure", "good road", "intact structure"]
-    targets = ["pothole", "broken road", "cracked pavement", "damaged bridge", "collapsed structure"]
-    return await _detect_clip_generic(image, labels, targets, client)
-
-async def detect_flooding_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
-    labels = ["flooded street", "waterlogging", "heavy rain water", "submerged road", "dry street"]
-    targets = ["flooded street", "waterlogging", "heavy rain water", "submerged road"]
-    return await _detect_clip_generic(image, labels, targets, client)
-
-async def detect_garbage_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
-    labels = ["garbage pile", "trash overflow", "scattered waste", "dumpster full", "clean street"]
-    targets = ["garbage pile", "trash overflow", "scattered waste", "dumpster full"]
-    return await _detect_clip_generic(image, labels, targets, client)
-
-async def detect_all_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
-    """
-    Optimized detection: Runs a single CLIP call with all labels.
-    """
-    # Define categories and their target labels
-    categories = {
-        "vandalism": ["graffiti", "broken glass", "vandalized wall", "destroyed property"],
-        "infrastructure": ["pothole", "broken road", "cracked pavement", "damaged bridge", "collapsed structure"],
-        "flooding": ["flooded street", "waterlogging", "heavy rain water", "submerged road"],
-        "garbage": ["garbage pile", "trash overflow", "scattered waste", "dumpster full"],
-        "fire": ["fire", "smoke", "flames", "burning"]
-    }
-
-    # Helper to check for negative/neutral labels
-    neutral_labels = ["clean wall", "intact property", "good road", "intact structure", "dry street", "clean street", "normal scene", "safe"]
-
-    # Flatten labels
-    all_target_labels = []
-    for targets in categories.values():
-        all_target_labels.extend(targets)
-
-    all_labels = all_target_labels + neutral_labels
-
-    try:
-        img_bytes = _prepare_image_bytes(image)
-        results = await query_hf_api(img_bytes, all_labels, client=client)
-
-        if not isinstance(results, list):
-             return {k: [] for k in categories.keys()}
-
-        # Group results by category
-        final_results = {k: [] for k in categories.keys()}
-
-        for res in results:
-            if not isinstance(res, dict): continue
-
-            label = res.get('label')
-            score = res.get('score', 0)
-
-            if score > 0.4: # Threshold
-                for cat, targets in categories.items():
-                    if label in targets:
-                        final_results[cat].append({
-                             "label": label,
-                             "confidence": score,
-                             "box": []
-                        })
-                        # A label belongs to one category (mostly), but if duplicates exist, it's fine.
-
-        return final_results
-
-    except Exception as e:
-        logger.error(f"HF Comprehensive Detection Error: {e}")
-        return {k: [] for k in categories.keys()}
 
 async def detect_audio_event(audio_bytes: bytes, client: httpx.AsyncClient = None):
     """
@@ -535,10 +461,45 @@ async def detect_abandoned_vehicle_clip(image: Union[Image.Image, bytes], client
     targets = ["abandoned car", "rusted vehicle", "car with flat tires", "wrecked car"]
     return await _detect_clip_generic(image, labels, targets, client)
 
-async def detect_playground_damage_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
+async def detect_category_text(text: str, client: httpx.AsyncClient = None):
     """
-    Detects playground damage and safety issues.
+    Classifies text into categories using Zero-Shot Classification.
     """
-    labels = ["damaged playground equipment", "broken swing", "unsafe slide", "littered playground", "safe playground", "children playing"]
-    targets = ["damaged playground equipment", "broken swing", "unsafe slide", "littered playground"]
-    return await _detect_clip_generic(image, labels, targets, client)
+    if not text: return {"category": "unknown", "confidence": 0}
+
+    labels = ["road issue", "water supply", "garbage", "streetlight", "infrastructure", "drainage", "safety"]
+
+    payload = {
+        "inputs": text,
+        "parameters": {"candidate_labels": labels}
+    }
+
+    if client:
+        result = await _make_request(client, ZERO_SHOT_API_URL, payload)
+    else:
+        async with httpx.AsyncClient() as new_client:
+            result = await _make_request(new_client, ZERO_SHOT_API_URL, payload)
+
+    # Result format: {'labels': ['road issue', ...], 'scores': [0.9, ...]}
+    if isinstance(result, dict) and 'labels' in result and 'scores' in result:
+        top_label = result['labels'][0]
+        top_score = result['scores'][0]
+
+        # Map to internal categories
+        category_map = {
+            "road issue": "road",
+            "water supply": "water",
+            "garbage": "garbage",
+            "streetlight": "streetlight",
+            "infrastructure": "college_infra",
+            "drainage": "water",
+            "safety": "women_safety"
+        }
+
+        return {
+            "category": category_map.get(top_label, "road"),
+            "confidence": top_score,
+            "original_label": top_label
+        }
+
+    return {"category": "unknown", "confidence": 0}

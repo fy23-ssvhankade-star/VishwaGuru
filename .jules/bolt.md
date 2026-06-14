@@ -30,10 +30,30 @@
 **Learning:** Loading full SQLAlchemy model instances for list views or spatial checks is significantly slower and more memory-intensive than selecting only required columns, especially when tables contain large JSON or Text fields.
 **Action:** Use `db.query(Model.col1, Model.col2)` for read-heavy list endpoints and spatial candidate searches. Note that projected results are immutable `Row` objects, so use `db.query(Model).filter(...).update()` for atomic modifications.
 
-## 2026-02-15 - React Component Definition & Navigation Props
-**Learning:** Lazy loading components in React (`React.lazy`) creates a dependency on the parent component's scope. If the parent references undefined layout components inline, the app may crash silently or throw confusing errors. Additionally, hardcoding navigation paths (like `navigate('/')`) inside reusable components limits their reuse in different contexts.
-**Action:** Explicitly define or import all layout components before lazy loading routes. Pass navigation handlers (like `onBack`) as props to child components to decouple them from specific routing logic.
+## 2026-02-07 - Transaction Consolidation for Performance
+**Learning:** Performing multiple `db.commit()` calls in a single endpoint handler increases latency due to multiple round-trips and disk I/O. Using `db.flush()` allows intermediate results (like atomic increments) to be available for queries in the same transaction without the cost of a full commit.
+**Action:** Consolidate multiple database updates into a single transaction. Use `db.flush()` when you need to query the database for values updated via `update()` before the final commit.
 
-## 2026-02-28 - Netlify Build & Lockfile Conflicts
-**Learning:** Checking in `package-lock.json` generated on one OS/Node version can cause `npm install` failures or build errors on Netlify/CI environments due to platform-specific optional dependencies or integrity checksum mismatches. Additionally, aggressive linting rules (like `no-unused-vars` erroring on JSX imports) can block builds if CI treats warnings as errors.
-**Action:** If experiencing persistent CI build failures related to dependencies, try removing `package-lock.json` to force a clean install. Ensure linting rules are set to `warn` for non-critical stylistic checks in CI environments.
+## 2026-02-08 - Return Type Consistency in Utilities
+**Learning:** Inconsistent return types in shared utility functions (like `process_uploaded_image`) can cause runtime crashes across multiple modules, especially when some expect tuples and others expect single values. This can lead to deployment failures that are hard to debug without full integration logs.
+**Action:** Always maintain strict return type consistency for core utilities. Use type hints and verify all call sites when changing a function's signature. Ensure that performance-oriented optimizations (like returning multiple processed formats) are applied uniformly.
+
+## 2026-02-10 - Serialization Caching vs Object Caching
+**Learning:** Caching raw Python objects (like SQLAlchemy models or Pydantic instances) in a high-traffic API still incurs significant overhead because FastAPI/Pydantic must re-validate and re-serialize the data on every request.
+**Action:** Serialize data to a JSON string BEFORE caching. On cache hits, return a raw `fastapi.Response` with `media_type="application/json"`. This bypasses the validation layer and is measurably faster (2-3x).
+
+## 2026-02-10 - Group-By for Multi-Count Statistics
+**Learning:** Executing multiple `count()` queries with different filters (e.g., for different statuses) causes redundant database scans and network round-trips.
+**Action:** Use a single SQL `GROUP BY` query to fetch counts for all categories/statuses at once, then process the results in Python.
+
+## 2026-02-11 - O(1) Blockchain Verification
+**Learning:** Verifying the integrity of a blockchain-style chain by querying the database for the previous record's hash on every check is inefficient and adds unnecessary latency.
+**Action:** Store the `previous_integrity_hash` directly in the record during creation. This enables O(1) single-record integrity checks without additional database lookups. Use a thread-safe cache to keep the most recent hash in memory to further optimize the creation path.
+
+## 2026-02-11 - Multi-Metric Aggregate Queries
+**Learning:** Executing multiple separate `count()` queries to gather system statistics results in multiple database round-trips and redundant table scans.
+**Action:** Use a single SQLAlchemy query with `func.count()` and `func.sum(case(...))` to calculate all metrics in one go. This reduces network overhead and allows the database to perform calculations in a single pass.
+
+## 2025-02-13 - [Substring pre-filtering for regex optimization]
+**Learning:** In hot paths (like `PriorityEngine._calculate_urgency`), executing pre-compiled regular expressions (`re.search`) for simple keyword extraction or grouping (e.g., `\b(word1|word2)\b`) is significantly slower than simple Python substring checks (`in text`). The regex engine execution overhead in Python adds up in high-iteration loops like priority scoring.
+**Action:** Always consider pre-extracting literal keywords from simple regex patterns and executing a quick `any(k in text for k in keywords)` pre-filter. Only invoke `regex.search` if the pre-filter passes, avoiding the expensive regex operation on texts that obviously do not match.

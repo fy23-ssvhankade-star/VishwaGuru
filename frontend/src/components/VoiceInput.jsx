@@ -1,11 +1,18 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Loader2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Mic, MicOff } from 'lucide-react';
 
 const VoiceInput = ({ onTranscript, language = 'en' }) => {
   const [isListening, setIsListening] = useState(false);
-  const recognitionRef = useRef(null);
+  const [recognition, setRecognition] = useState(null);
   const [error, setError] = useState(null);
-  const [supported] = useState(!!(window.SpeechRecognition || window.webkitSpeechRecognition));
+  const [isSupported, setIsSupported] = useState(true);
+
+  // Check support once on mount
+  useEffect(() => {
+     if (!window.SpeechRecognition && !window.webkitSpeechRecognition) {
+        setIsSupported(false);
+     }
+  }, []);
 
   const getLanguageCode = (lang) => {
     const langMap = {
@@ -17,9 +24,13 @@ const VoiceInput = ({ onTranscript, language = 'en' }) => {
   };
 
   useEffect(() => {
-    if (!supported) return;
+    if (!isSupported) return;
 
+    // Check if browser supports SpeechRecognition
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) return;
+
     const recognitionInstance = new SpeechRecognition();
     recognitionInstance.continuous = false;
     recognitionInstance.interimResults = false;
@@ -44,31 +55,27 @@ const VoiceInput = ({ onTranscript, language = 'en' }) => {
       setIsListening(false);
     };
 
-    recognitionRef.current = recognitionInstance;
+    setRecognition(recognitionInstance);
 
     return () => {
       if (recognitionInstance) {
         recognitionInstance.stop();
       }
     };
-  }, [language, onTranscript]);
+  }, [language, onTranscript, isSupported]);
 
   const toggleListening = () => {
-    if (!recognitionRef.current) return;
+    if (!recognition) return;
 
     if (isListening) {
-      recognitionRef.current.stop();
+      recognition.stop();
     } else {
-      recognitionRef.current.start();
+      recognition.start();
     }
   };
 
-  if (!supported) {
-    return (
-      <div className="text-red-500 text-sm mt-1">
-        Speech recognition not supported
-      </div>
-    );
+  if (!isSupported) {
+      return null; // Or render a disabled state
   }
 
   if (error) {

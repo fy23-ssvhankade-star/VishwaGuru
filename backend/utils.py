@@ -1,3 +1,4 @@
+from __future__ import annotations
 from fastapi import UploadFile, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
@@ -7,20 +8,21 @@ import os
 import shutil
 import logging
 import io
+import secrets
+import string
 from typing import Optional
 
+from backend.cache import user_upload_cache
+from backend.models import Issue
+from backend.schemas import DetectionResponse
+
+# Handle python-magic gracefully
+HAS_MAGIC = False
 try:
     import magic
     HAS_MAGIC = True
 except ImportError:
     HAS_MAGIC = False
-    logger.warning("python-magic not available (libmagic missing?). Falling back to basic validation.")
-
-from backend.cache import user_upload_cache
-from backend.models import Issue
-from backend.schemas import DetectionResponse
-from backend.pothole_detection import validate_image_for_processing
-from passlib.context import CryptContext
 
 logger = logging.getLogger(__name__)
 
@@ -76,75 +78,72 @@ def _validate_uploaded_file_sync(file: UploadFile) -> Optional[Image.Image]:
             detail=f"File too large. Maximum size allowed is {MAX_FILE_SIZE // (1024*1024)}MB"
         )
 
-    # Check MIME type from content using python-magic (if available)
-    try:
-        if HAS_MAGIC:
+    # Check MIME type from content using python-magic if available
+    if HAS_MAGIC:
+        try:
             # Read first 1024 bytes for MIME detection
             file_content = file.file.read(1024)
             file.file.seek(0)  # Reset file pointer
 
-            try:
-                detected_mime = magic.from_buffer(file_content, mime=True)
-                if detected_mime not in ALLOWED_MIME_TYPES:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Invalid file type. Only image files are allowed. Detected: {detected_mime}"
-                    )
-            except Exception as e:
-                logger.warning(f"Magic validation failed (skipping): {e}")
-                file.file.seek(0)
+            detected_mime = magic.from_buffer(file_content, mime=True)
 
-        # Additional content validation: Try to open with PIL to ensure it's a valid image
-        try:
-            img = Image.open(file.file)
-            original_format = img.format  # Capture format before operations
-            # Optimization: Skip img.verify() to avoid full file read.
-            # Corrupt files will fail during resize or subsequent processing.
+            if detected_mime not in ALLOWED_MIME_TYPES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid file type. Only image files are allowed. Detected: {detected_mime}"
+                )
+        except Exception as e:
+            logger.error(f"Magic validation failed: {e}")
+            # Fallback to PIL if magic fails unexpectedly
+            pass
 
-            # Resize large images for better performance
-            if img.width > 1024 or img.height > 1024:
-                # Calculate new size maintaining aspect ratio
-                ratio = min(1024 / img.width, 1024 / img.height)
-                new_width = int(img.width * ratio)
-                new_height = int(img.height * ratio)
+    # Additional content validation: Try to open with PIL to ensure it's a valid image
+    try:
+        img = Image.open(file.file)
+        # Optimization: Skip img.verify() to avoid full file read.
+        # Corrupt files will fail during resize or subsequent processing.
 
-                # Use BILINEAR for faster resizing (LANCZOS is too slow for upload path)
-                img = img.resize((new_width, new_height), Image.Resampling.BILINEAR)
+        # Check format if magic wasn't available
+        if not HAS_MAGIC:
+            fmt = img.format.lower() if img.format else ""
+            valid_formats = ['jpeg', 'jpg', 'png', 'gif', 'webp', 'bmp', 'tiff']
+            if fmt not in valid_formats:
+                 raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid image format: {fmt}"
+                )
 
-                # Save resized image back to file
-                output = io.BytesIO()
+        # Resize large images for better performance
+        if img.width > 1024 or img.height > 1024:
+            # Calculate new size maintaining aspect ratio
+            ratio = min(1024 / img.width, 1024 / img.height)
+            new_width = int(img.width * ratio)
+            new_height = int(img.height * ratio)
 
-                # Determine save format (default to PNG for RGBA to avoid JPEG error)
-                save_format = original_format or ('PNG' if img.mode == 'RGBA' else 'JPEG')
+            # Use BILINEAR for faster resizing (LANCZOS is too slow for upload path)
+            img = img.resize((new_width, new_height), Image.Resampling.BILINEAR)
 
-                img.save(output, format=save_format, quality=85)
-                output.seek(0)
+            # Save resized image back to file
+            output = io.BytesIO()
+            img.save(output, format=img.format or 'JPEG', quality=85)
+            output.seek(0)
 
-                # Replace file content
-                file.file = output
-                file.size = output.tell()
-                output.seek(0)
+            # Replace file content
+            file.file = output
+            file.size = output.tell()
+            output.seek(0)
 
-            # Return the image object (resized or original)
-            # Ensure file pointer is at start for any subsequent reads from file.file
-            file.file.seek(0)
+        # Return the image object (resized or original)
+        # Ensure file pointer is at start for any subsequent reads from file.file
+        file.file.seek(0)
 
-            return img
+        return img
 
-        except Exception as pil_error:
-            logger.error(f"PIL validation failed for {file.filename}: {pil_error}")
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid image file. The file appears to be corrupted or not a valid image."
-            )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error validating file {file.filename}: {e}")
+    except Exception as pil_error:
+        logger.error(f"PIL validation failed for {file.filename}: {pil_error}")
         raise HTTPException(
             status_code=400,
-            detail="Unable to validate file content. Please ensure it's a valid image file."
+            detail="Invalid image file. The file appears to be corrupted or not a valid image."
         )
 
 async def validate_uploaded_file(file: UploadFile) -> Optional[Image.Image]:
@@ -154,10 +153,10 @@ async def validate_uploaded_file(file: UploadFile) -> Optional[Image.Image]:
     """
     return await run_in_threadpool(_validate_uploaded_file_sync, file)
 
-def process_uploaded_image_sync(file: UploadFile) -> tuple[Image.Image, io.BytesIO]:
+def process_uploaded_image_sync(file: UploadFile) -> tuple[Image.Image, bytes]:
     """
     Synchronously validate, resize, and strip EXIF from uploaded image.
-    Returns the processed PIL image and image data as BytesIO.
+    Returns a tuple of (PIL Image, image bytes).
     """
     # Check file size
     file.file.seek(0, 2)
@@ -170,80 +169,84 @@ def process_uploaded_image_sync(file: UploadFile) -> tuple[Image.Image, io.Bytes
             detail=f"File too large. Maximum size allowed is {MAX_FILE_SIZE // (1024*1024)}MB"
         )
 
-    # Check MIME type
-    try:
-        if HAS_MAGIC:
+    # Check MIME type if magic is available
+    if HAS_MAGIC:
+        try:
             file_content = file.file.read(1024)
             file.file.seek(0)
-            try:
-                detected_mime = magic.from_buffer(file_content, mime=True)
-                if detected_mime not in ALLOWED_MIME_TYPES:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Invalid file type. Only image files are allowed. Detected: {detected_mime}"
-                    )
-            except Exception:
-                file.file.seek(0)
+            detected_mime = magic.from_buffer(file_content, mime=True)
 
-        try:
-            img = Image.open(file.file)
-            original_format = img.format  # Capture format before operations
+            if detected_mime not in ALLOWED_MIME_TYPES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid file type. Only image files are allowed. Detected: {detected_mime}"
+                )
+        except Exception as e:
+            logger.error(f"Magic check failed: {e}")
+            pass
 
-            # Resize if needed
-            if img.width > 1024 or img.height > 1024:
-                ratio = min(1024 / img.width, 1024 / img.height)
-                new_width = int(img.width * ratio)
-                new_height = int(img.height * ratio)
-                img = img.resize((new_width, new_height), Image.Resampling.BILINEAR)
+    try:
+        img = Image.open(file.file)
+        original_format = img.format
 
-            # Strip EXIF
-            # Optimization: Clear info dictionary instead of creating new image and pasting (avoids full copy)
-            if hasattr(img, 'info'):
-                img.info.clear()
+        # Resize if needed
+        if img.width > 1024 or img.height > 1024:
+            ratio = min(1024 / img.width, 1024 / img.height)
+            new_width = int(img.width * ratio)
+            new_height = int(img.height * ratio)
+            img = img.resize((new_width, new_height), Image.Resampling.BILINEAR)
 
-            # Save to bytes
-            output = io.BytesIO()
+        # Strip EXIF
+        img_no_exif = Image.new(img.mode, img.size)
+        img_no_exif.paste(img)
 
-            # Preserve format or default to JPEG, handling RGBA edge case
-            save_format = original_format or ('PNG' if img.mode == 'RGBA' else 'JPEG')
+        # Save to BytesIO
+        output = io.BytesIO()
+        # Preserve format or default to JPEG (handling mode compatibility)
+        # JPEG doesn't support RGBA, so use PNG for RGBA if format not specified
+        if original_format:
+            fmt = original_format
+        else:
+            fmt = 'PNG' if img.mode == 'RGBA' else 'JPEG'
 
-            img.save(output, format=save_format, quality=85)
-            output.seek(0)
+        img_no_exif.save(output, format=fmt, quality=85)
+        img_bytes = output.getvalue()
 
-            return img_no_exif, output
+        return img_no_exif, img_bytes
 
-        except Exception as pil_error:
-            logger.error(f"PIL processing failed: {pil_error}")
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid image file."
-            )
+    except Exception as pil_error:
+        logger.error(f"PIL processing failed: {pil_error}")
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid image file."
+        )
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error processing file: {e}")
-        raise HTTPException(status_code=400, detail="Unable to process file.")
-
-async def process_uploaded_image(file: UploadFile) -> tuple[Image.Image, io.BytesIO]:
+async def process_uploaded_image(file: UploadFile) -> tuple[Image.Image, bytes]:
     return await run_in_threadpool(process_uploaded_image_sync, file)
 
 def save_processed_image(image_bytes: bytes, path: str):
-    """Save processed bytes to disk."""
-    with open(path, "wb") as buffer:
-        buffer.write(image_bytes)
+    """
+    Save processed image bytes to disk.
+    Optimized: Direct write instead of stream copy.
+    """
+    with open(path, "wb") as f:
+        f.write(image_bytes)
 
 async def process_and_detect(image: UploadFile, detection_func) -> DetectionResponse:
     """
     Helper to process uploaded image and run detection.
-    Uses the optimized single-pass image processing pipeline.
+    Uses the optimized image processing pipeline.
     """
-    # Optimized: Use process_uploaded_image which resizes and strips EXIF in one go
-    pil_image, _ = await process_uploaded_image(image)
+    # Validate uploaded file
+    pil_image = await validate_uploaded_file(image)
 
     # Validate image for processing (check integrity)
     try:
-        await run_in_threadpool(validate_image_for_processing, pil_image)
+        if pil_image is None:
+            pil_image = await run_in_threadpool(Image.open, image.file)
+
+        # Basic PIL check is done in validate_uploaded_file
+        # Additional heavy model-specific validation removed to prevent circular imports
     except HTTPException:
         raise  # Re-raise HTTP exceptions from validation
     except Exception as e:
@@ -293,10 +296,31 @@ def save_issue_db(db: Session, issue: Issue):
 
 # --- Password Hashing Utils ---
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+import bcrypt as _bcrypt
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    return _bcrypt.checkpw(
+        plain_password.encode("utf-8"),
+        hashed_password.encode("utf-8")
+    )
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    return _bcrypt.hashpw(
+        password.encode("utf-8"),
+        _bcrypt.gensalt()
+    ).decode("utf-8")
+
+
+
+def generate_reference_id() -> str:
+    """
+    Generate a unique reference ID for voice submissions.
+    Format: VOICE-YYYYMMDD-HHMMSS-XXXX (random suffix)
+    """
+    import random
+    import string
+    from datetime import datetime
+    
+    timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+    random_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
+    return f"VOICE-{timestamp}-{random_suffix}"

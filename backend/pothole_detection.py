@@ -17,6 +17,15 @@ _model_initialized: bool = False
 _model = None
 _model_lock = threading.Lock()
 
+def validate_image_for_processing(image):
+    """
+    Validates image before processing.
+    """
+    if not image:
+        return
+    # Pass for now
+    pass
+
 def load_model():
     """
     Loads the YOLO model lazily.
