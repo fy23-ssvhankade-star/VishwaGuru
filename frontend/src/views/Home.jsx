@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertTriangle, MapPin, Search, Activity, Camera, Trash2, ThumbsUp, Brush,
   Droplets, Zap, Truck, Flame, Dog, XCircle, Lightbulb, TreeDeciduous, Bug,
@@ -104,6 +104,7 @@ const Home = ({ setView, fetchResponsibilityMap, recentIssues, handleUpvote, loa
         { id: 'crowd', label: t('home.issues.crowd'), icon: <Users size={24} />, color: 'text-red-500', bg: 'bg-red-50' },
         { id: 'water-leak', label: t('home.issues.waterLeak'), icon: <Waves size={24} />, color: 'text-blue-500', bg: 'bg-blue-50' },
         { id: 'waste', label: t('home.issues.waste'), icon: <Recycle size={24} />, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+        { id: 'construction-safety', label: t('home.issues.constructionSafety'), icon: <AlertTriangle size={24} />, color: 'text-yellow-500', bg: 'bg-yellow-50' },
       ]
     },
     {
@@ -119,6 +120,7 @@ const Home = ({ setView, fetchResponsibilityMap, recentIssues, handleUpvote, loa
       title: t('home.categories.management'),
       icon: <Monitor size={20} className="text-gray-600" />,
       items: [
+        { id: 'public-facilities', label: t('home.issues.publicFacilities'), icon: <Building size={24} />, color: 'text-blue-600', bg: 'bg-blue-50' },
         { id: 'safety-check', label: t('home.issues.civicEye'), icon: <Eye size={24} />, color: 'text-blue-600', bg: 'bg-blue-50' },
         { id: 'my-reports', label: t('home.issues.myReports'), icon: <CheckCircle size={24} />, color: 'text-teal-600', bg: 'bg-teal-50' },
         { id: 'grievance', label: t('home.issues.grievanceManagement'), icon: <AlertTriangle size={24} />, color: 'text-orange-600', bg: 'bg-orange-50' },

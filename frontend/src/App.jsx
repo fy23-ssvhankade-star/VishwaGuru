@@ -38,9 +38,13 @@ const SmartScanner = React.lazy(() => import('./SmartScanner'));
 const GrievanceAnalysis = React.lazy(() => import('./views/GrievanceAnalysis'));
 const NoiseDetector = React.lazy(() => import('./NoiseDetector'));
 const CivicEyeDetector = React.lazy(() => import('./CivicEyeDetector'));
-const PublicTransportDetector = React.lazy(() => import('./PublicTransportDetector'));
-const CleanlinessDetector = React.lazy(() => import('./CleanlinessDetector'));
-const PlaygroundDetector = React.lazy(() => import('./PlaygroundDetector'));
+const TrafficSignDetector = React.lazy(() => import('./TrafficSignDetector'));
+const AbandonedVehicleDetector = React.lazy(() => import('./AbandonedVehicleDetector'));
+const PublicFacilitiesDetector = React.lazy(() => import('./PublicFacilitiesDetector'));
+const ConstructionSafetyDetector = React.lazy(() => import('./ConstructionSafetyDetector'));
+const WaterLeakDetector = React.lazy(() => import('./WaterLeakDetector'));
+const CrowdDetector = React.lazy(() => import('./CrowdDetector'));
+const WasteDetector = React.lazy(() => import('./WasteDetector'));
 const MyReportsView = React.lazy(() => import('./views/MyReportsView'));
 const AirQualityDetector = React.lazy(() => import('./AirQualityDetector'));
 const PlaygroundDetector = React.lazy(() => import('./PlaygroundDetector'));
@@ -71,14 +75,9 @@ function AppContent() {
 
   // Safe navigation helper
   const navigateToView = useCallback((view) => {
-    const validViews = [
-      'home', 'map', 'report', 'action', 'mh-rep', 'pothole', 'garbage', 'vandalism', 'flood',
-      'infrastructure', 'parking', 'streetlight', 'fire', 'animal', 'blocked', 'tree', 'pest',
-      'smart-scan', 'grievance-analysis', 'noise', 'safety-check', 'my-reports', 'grievance',
-      'login', 'signup', 'air-quality', 'playground', 'public-transport', 'cleanliness'
-    ];
+    const validViews = ['home', 'map', 'report', 'action', 'mh-rep', 'pothole', 'garbage', 'vandalism', 'flood', 'infrastructure', 'parking', 'streetlight', 'fire', 'animal', 'blocked', 'tree', 'pest', 'smart-scan', 'grievance-analysis', 'noise', 'safety-check', 'my-reports', 'login', 'signup', 'traffic-sign', 'abandoned-vehicle', 'public-facilities', 'construction-safety', 'water-leak', 'crowd', 'waste'];
     if (validViews.includes(view)) {
-      navigate(view === 'home' ? '/' : `/${view}`);
+      navigate(view === 'home' ? '/home' : `/${view}`);
     } else {
       console.warn(`Attempted to navigate to invalid view: ${view}`);
       navigate('/');
@@ -225,69 +224,51 @@ function AppContent() {
                 }
               />
 
-              <Route
-                path="/"
-                element={
-                  <ProtectedRoute>
-                    <Home
-                      setView={navigateToView}
-                      fetchResponsibilityMap={fetchResponsibilityMap}
-                      recentIssues={recentIssues}
-                      handleUpvote={handleUpvote}
-                      loadMoreIssues={loadMoreIssues}
-                      hasMore={hasMore}
-                      loadingMore={loadingMore}
-                      stats={stats}
-                    />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/home"
-                element={
-                  <ProtectedRoute>
-                    <Home
-                      setView={navigateToView}
-                      fetchResponsibilityMap={fetchResponsibilityMap}
-                      recentIssues={recentIssues}
-                      handleUpvote={handleUpvote}
-                      loadMoreIssues={loadMoreIssues}
-                      hasMore={hasMore}
-                      loadingMore={loadingMore}
-                      stats={stats}
-                    />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/map"
-                element={
-                  <ProtectedRoute>
-                    <MapView
-                      responsibilityMap={responsibilityMap}
-                      setView={navigateToView}
-                    />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/report"
-                element={
-                  <ReportForm
-                    setView={navigateToView}
-                    setLoading={setLoading}
-                    setError={setError}
-                    setActionPlan={setActionPlan}
-                    loading={loading}
-                  />
-                }
-              />
-              <Route
-                path="/action"
-                element={
-                  <ActionView
-                    actionPlan={actionPlan}
-                    setActionPlan={setActionPlan}
+        <Suspense fallback={
+          <div className="flex justify-center my-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+          </div>
+        }>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Login initialIsLogin={false} />} />
+            <Route
+              path="/admin/dashboard"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <AdminDashboard />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/"
+              element={
+                <Home
+                  setView={navigateToView}
+                  fetchResponsibilityMap={fetchResponsibilityMap}
+                  recentIssues={recentIssues}
+                  handleUpvote={handleUpvote}
+                />
+              }
+            />
+            <Route
+              path="/home"
+              element={
+                <Home
+                  setView={navigateToView}
+                  fetchResponsibilityMap={fetchResponsibilityMap}
+                  recentIssues={recentIssues}
+                  handleUpvote={handleUpvote}
+                />
+              }
+            />
+            <Route
+              path="/map"
+              element={
+                <ProtectedRoute>
+                  <MapView
+                    responsibilityMap={responsibilityMap}
                     setView={navigateToView}
                   />
                 }
@@ -360,16 +341,106 @@ function AppContent() {
                 <ProtectedRoute>
                   <MyReportsView />
                 </ProtectedRoute>
-              } />
-              <Route path="/grievance" element={
-                <ProtectedRoute>
-                  <GrievanceView />
-                </ProtectedRoute>
-              } />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Suspense>
-        </main>
+              }
+            />
+            <Route
+              path="/report"
+              element={
+                <ReportForm
+                  setView={navigateToView}
+                  setLoading={setLoading}
+                  setError={setError}
+                  setActionPlan={setActionPlan}
+                  loading={loading}
+                />
+              }
+            />
+            <Route
+              path="/action"
+              element={
+                <ActionView
+                  actionPlan={actionPlan}
+                  setActionPlan={setActionPlan}
+                  setView={navigateToView}
+                />
+              }
+            />
+            <Route
+              path="/mh-rep"
+              element={
+                <MaharashtraRepView
+                  setView={navigateToView}
+                  setLoading={setLoading}
+                  setError={setError}
+                  setMaharashtraRepInfo={setMaharashtraRepInfo}
+                  maharashtraRepInfo={maharashtraRepInfo}
+                  loading={loading}
+                />
+              }
+            />
+            <Route path="/verify/:id" element={<VerifyView />} />
+            <Route path="/pothole" element={<PotholeDetector onBack={() => navigate('/')} />} />
+            <Route path="/garbage" element={<GarbageDetector onBack={() => navigate('/')} />} />
+            <Route
+              path="/vandalism"
+              element={
+                <div className="flex flex-col h-full">
+                  <button onClick={() => navigate('/')} className="self-start text-blue-600 mb-2">
+                    &larr; {t('common.back')}
+                  </button>
+                  <VandalismDetector />
+                </div>
+              }
+            />
+            <Route
+              path="/flood"
+              element={
+                <div className="flex flex-col h-full">
+                  <button onClick={() => navigate('/')} className="self-start text-blue-600 mb-2">
+                    &larr; {t('common.back')}
+                  </button>
+                  <FloodDetector />
+                </div>
+              }
+            />
+            <Route
+              path="/infrastructure"
+              element={<InfrastructureDetector onBack={() => navigate('/')} />}
+            />
+            <Route path="/parking" element={<IllegalParkingDetector onBack={() => navigate('/')} />} />
+            <Route path="/streetlight" element={<StreetLightDetector onBack={() => navigate('/')} />} />
+            <Route path="/fire" element={<FireDetector onBack={() => navigate('/')} />} />
+            <Route path="/animal" element={<StrayAnimalDetector onBack={() => navigate('/')} />} />
+            <Route path="/blocked" element={<BlockedRoadDetector onBack={() => navigate('/')} />} />
+            <Route path="/tree" element={<TreeDetector onBack={() => navigate('/')} />} />
+            <Route path="/pest" element={<PestDetector onBack={() => navigate('/')} />} />
+            <Route path="/smart-scan" element={<SmartScanner onBack={() => navigate('/')} />} />
+            <Route path="/grievance-analysis" element={<GrievanceAnalysis onBack={() => navigate('/')} />} />
+            <Route path="/noise" element={<NoiseDetector onBack={() => navigate('/')} />} />
+            <Route path="/traffic-sign" element={<TrafficSignDetector onBack={() => navigate('/')} />} />
+            <Route path="/abandoned-vehicle" element={<AbandonedVehicleDetector onBack={() => navigate('/')} />} />
+            <Route path="/public-facilities" element={<PublicFacilitiesDetector onBack={() => navigate('/')} />} />
+            <Route path="/construction-safety" element={<ConstructionSafetyDetector onBack={() => navigate('/')} />} />
+            <Route path="/water-leak" element={<WaterLeakDetector onBack={() => navigate('/')} />} />
+            <Route path="/crowd" element={<CrowdDetector onBack={() => navigate('/')} />} />
+            <Route path="/waste" element={<WasteDetector onBack={() => navigate('/')} />} />
+            <Route path="/safety-check" element={
+              <div className="flex flex-col h-full p-4">
+                <button onClick={() => navigate('/')} className="self-start text-blue-600 mb-2 font-bold">
+                  &larr; {t('common.back')}
+                </button>
+                <CivicEyeDetector onBack={() => navigate('/')} />
+              </div>
+            } />
+            <Route path="/my-reports" element={
+              <ProtectedRoute>
+                <MyReportsView />
+              </ProtectedRoute>
+            } />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
+
       </div>
     </div>
   );
