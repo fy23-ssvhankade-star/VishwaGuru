@@ -11,11 +11,9 @@ class PriorityEngine:
     """
 
     def __init__(self):
-        # We no longer hardcode values here.
-        # They are fetched dynamically from AdaptiveWeights on each analysis.
-        # ⚡ Bolt Optimization: Cache compiled urgency regexes to avoid re-compiling every analysis
-        self._compiled_urgency_patterns = []
-        self._last_urgency_patterns = None
+        # Optimization: Cache for pre-compiled regex patterns
+        self._regex_cache = []
+        self._last_reload_count = -1
 
     def analyze(self, text: str, image_labels: Optional[List[str]] = None) -> Dict[str, Any]:
         """
@@ -118,20 +116,18 @@ class PriorityEngine:
         urgency = severity_score
         reasons = []
 
+        # Optimization: Pre-compile and cache regex patterns
+        # get_urgency_patterns() triggers the throttled reload check in AdaptiveWeights
         urgency_patterns = adaptive_weights.get_urgency_patterns()
 
-        # ⚡ Bolt Optimization: Cache compiled regular expressions
-        # Use object identity or direct equality check to see if AdaptiveWeights updated patterns
-        if self._last_urgency_patterns is None or self._last_urgency_patterns != urgency_patterns:
-            self._compiled_urgency_patterns = [
-                (re.compile(pattern), weight, pattern)
-                for pattern, weight in urgency_patterns
-            ]
-            self._last_urgency_patterns = urgency_patterns
+        # Only re-compile if AdaptiveWeights has reloaded the configuration
+        if self._last_reload_count != adaptive_weights._reload_count:
+            self._regex_cache = [(re.compile(p), w, p) for p, w in urgency_patterns]
+            self._last_reload_count = adaptive_weights._reload_count
 
         # Apply regex modifiers
-        for compiled_pattern, weight, pattern_str in self._compiled_urgency_patterns:
-            if compiled_pattern.search(text):
+        for pattern_re, weight, pattern_str in self._regex_cache:
+            if pattern_re.search(text):
                 urgency += weight
                 reasons.append(f"Urgency increased by context matching pattern: '{pattern_str}'")
 
