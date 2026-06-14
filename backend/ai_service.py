@@ -1,21 +1,23 @@
 import json
 import os
-import warnings
+import google.generativeai as genai
 from typing import Optional, Callable, Any
+import warnings
 from functools import lru_cache
+from typing import Optional
 import logging
+
+import google.generativeai as genai
+from async_lru import alru_cache
 import asyncio
-import time
-
-# Suppress deprecation warnings from google.generativeai
-# We use a context manager to ensure we only suppress warnings for this specific import
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
-    import google.generativeai as genai
-
-from backend.exceptions import AIServiceException
+import logging
 
 # Configure logger
+logger = logging.getLogger(__name__)
+
+# Suppress deprecation warnings from google.generativeai
+warnings.filterwarnings("ignore", category=FutureWarning, module="google.generativeai")
+
 logger = logging.getLogger(__name__)
 
 # Configure Gemini
@@ -67,11 +69,7 @@ async def retry_with_exponential_backoff(
             if attempt == max_retries:
                 # Last attempt failed, re-raise the exception
                 logger.error(f"Function {func.__name__} failed after {max_retries + 1} attempts: {e}")
-                raise AIServiceException(
-                    f"AI service operation failed after {max_retries + 1} attempts",
-                    service="Gemini",
-                    details={"function": func.__name__, "error": str(e)}
-                ) from e
+                raise e
 
             # Calculate delay with exponential backoff
             delay = min(base_delay * (backoff_factor ** attempt), max_delay)
@@ -108,7 +106,7 @@ def build_x_post(issue_description: str, category: str) -> str:
     return f"{base_message} #CivicIssue #VishwaGuru"
 
 
-async def generate_action_plan(issue_description: str, category: str, language: str = 'en', image_path: Optional[str] = None) -> dict:
+async def generate_action_plan(issue_description: str, category: str, image_path: Optional[str] = None) -> dict:
     """
     Generates an action plan (WhatsApp message, Email draft) using Gemini with retry logic.
     """
@@ -132,7 +130,7 @@ async def generate_action_plan(issue_description: str, category: str, language: 
         Category: {category}
         Description: {issue_description}
 
-        Please generate the following messages in {language} language:
+        Please generate:
         1. A concise WhatsApp message (max 200 chars) that can be sent to authorities.
         2. A formal but firm email subject.
         3. A formal email body (max 150 words) addressed to the relevant authority (e.g., Municipal Commissioner, Police, etc. based on category).
@@ -166,37 +164,15 @@ async def generate_action_plan(issue_description: str, category: str, language: 
 
     try:
         return await retry_with_exponential_backoff(_generate_with_gemini, max_retries=3)
-    except AIServiceException:
-        # Already properly wrapped, re-raise
-        raise
     except Exception as e:
         logger.error(f"Gemini action plan generation failed after retries: {e}")
-        raise AIServiceException(
-            "Failed to generate action plan",
-            service="Gemini",
-            details={"error": str(e)}
-        ) from e
+        return fallback_response
 
-# Manual cache for chat
-_chat_cache = {}
-CHAT_CACHE_TTL = 3600 # 1 hour
-MAX_CHAT_CACHE_SIZE = 100
-
+@alru_cache(maxsize=100)
 async def chat_with_civic_assistant(query: str) -> str:
     """
     Chat with the civic assistant using Gemini with retry logic.
     """
-    # Check cache
-    cache_key = f"chat_{hash(query)}"
-    current_time = time.time()
-
-    if cache_key in _chat_cache:
-        result, timestamp = _chat_cache[cache_key]
-        if current_time - timestamp < CHAT_CACHE_TTL:
-            return result
-        else:
-            del _chat_cache[cache_key]
-
     async def _chat_with_gemini() -> str:
         """Inner function to chat with Gemini"""
         model = genai.GenerativeModel('gemini-1.5-flash')
@@ -214,25 +190,7 @@ async def chat_with_civic_assistant(query: str) -> str:
         return response.text.strip()
 
     try:
-        result = await retry_with_exponential_backoff(_chat_with_gemini, max_retries=2)
-
-        # Update cache
-        if len(_chat_cache) > MAX_CHAT_CACHE_SIZE:
-            # Prune oldest 20%
-            keys_to_remove = list(_chat_cache.keys())[:int(MAX_CHAT_CACHE_SIZE * 0.2)]
-            for k in keys_to_remove:
-                del _chat_cache[k]
-
-        _chat_cache[cache_key] = (result, current_time)
-        return result
-
-    except AIServiceException:
-        # Already properly wrapped, re-raise
-        raise
+        return await retry_with_exponential_backoff(_chat_with_gemini, max_retries=2)
     except Exception as e:
         logger.error(f"Gemini chat failed after retries: {e}")
-        raise AIServiceException(
-            "Failed to process chat request",
-            service="Gemini",
-            details={"error": str(e)}
-        ) from e
+        return "I encountered an error processing your request. Please try again later."

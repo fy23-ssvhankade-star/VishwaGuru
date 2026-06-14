@@ -1,13 +1,5 @@
 # VishwaGuru Deployment Architecture
 
-## Architecture Diagrams Status
-
-📋 **ASCII Diagrams Available Below** - Text-based architecture diagrams showing system components and data flow
-
-⚠️ **Visual Diagrams Missing** - PNG/SVG architecture diagrams are not yet created. Consider adding visual diagrams for better understanding.
-
----
-
 ```
                                  ┌─────────────────────────────────┐
                                  │         User's Browser          │
@@ -130,41 +122,4 @@ FRONTEND (Netlify):
   Base:   frontend/
 
 ═══════════════════════════════════════════════════════════════════════════
-
-## Future Architecture Diagrams
-
-The following visual diagrams should be created to complement the ASCII diagrams:
-
-### 1. System Architecture Diagram
-- High-level overview of all components
-- Data flow between services
-- External service integrations (Gemini AI, Telegram, etc.)
-
-### 2. Database Schema Diagram
-- Entity relationships
-- Table structures
-- Key constraints and relationships
-
-### 3. API Flow Diagrams
-- Request/response flows for key endpoints
-- Error handling paths
-- Authentication flows (when implemented)
-
-### 4. Deployment Topology
-- Cloud service relationships
-- Network configuration
-- Security boundaries
-
-### 5. Component Interaction Diagram
-- Detailed service interactions
-- Message queues and async processing
-- Caching layers
-
-**Recommended Tools:** Draw.io, Lucidchart, or Excalidraw for creating visual diagrams.
-
----
-
-**Last Updated**: January 2026
-**ASCII Diagrams**: ✅ Available
-**Visual Diagrams**: ❌ Missing (planned for future)
 ```

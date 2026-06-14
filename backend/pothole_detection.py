@@ -1,10 +1,10 @@
 import logging
 import threading
 from typing import Optional, Any
-
-from backend.exceptions import ModelLoadException, DetectionException
+from fastapi import HTTPException
 
 # Configure logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Thread-safe singleton pattern for model loading
@@ -13,18 +13,6 @@ _model: Optional[Any] = None
 _model_lock: threading.Lock = threading.Lock()
 _model_loading_error: Optional[Exception] = None
 _model_initialized: bool = False
-
-_model = None
-_model_lock = threading.Lock()
-
-def validate_image_for_processing(image):
-    """
-    Validates image before processing.
-    """
-    if not image:
-        return
-    # Pass for now
-    pass
 
 def load_model():
     """
@@ -55,7 +43,7 @@ def load_model():
         return model
     except Exception as e:
         logger.error(f"Failed to load model: {e}")
-        raise ModelLoadException("keremberke/yolov8n-pothole-segmentation", details={"error": str(e)}) from e
+        raise e
 
 
 def get_model():
@@ -105,17 +93,8 @@ def get_model():
             _model_loading_error = e
             _model_initialized = True  # Mark as initialized (even though it failed)
             logger.error(f"Model initialization failed: {e}")
-            raise ModelLoadException("keremberke/yolov8n-pothole-segmentation", details={"error": str(e)}) from e
+            raise
 
-
-def validate_image_for_processing(image):
-    """
-    Validates if the image is suitable for processing.
-    """
-    if image is None:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=400, detail="No image provided for processing")
-    return True
 
 def reset_model():
     """
@@ -137,14 +116,6 @@ def reset_model():
         _model_initialized = False
         _model_loading_error = None
         logger.info("Model singleton state has been reset.")
-
-    if _model is None:
-        with _model_lock:
-            if _model is None:  # Double check inside lock
-                try:
-                    _model = load_model()
-                except Exception:
-                    pass
     return _model
 
 def detect_potholes(image_source):
@@ -156,9 +127,6 @@ def detect_potholes(image_source):
 
     Returns:
         List of detections. Each detection is a dict with 'box', 'confidence', 'label'.
-
-    Raises:
-        DetectionException: If pothole detection fails
     """
     try:
         model = get_model()
@@ -189,5 +157,17 @@ def detect_potholes(image_source):
 
         return detections
     except Exception as e:
-        logger.error(f"Pothole detection failed: {e}")
-        raise DetectionException("Failed to detect potholes in image", "pothole", details={"error": str(e)}) from e
+        logger.error(f"Error in detect_potholes: {e}")
+        raise e
+
+def validate_image_for_processing(image):
+    """
+    Validates that an image can be processed by PIL/OpenCV.
+    """
+    if image is None:
+        raise HTTPException(status_code=400, detail="No image provided")
+
+    if image.width < 10 or image.height < 10:
+        raise HTTPException(status_code=400, detail="Image too small")
+
+    return True

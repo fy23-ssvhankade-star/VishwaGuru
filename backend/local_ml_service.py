@@ -10,9 +10,8 @@ from PIL import Image
 import threading
 from fastapi.concurrency import run_in_threadpool
 
-from backend.exceptions import DetectionException
-
 # Configure logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Model cache for lazy loading
@@ -130,7 +129,7 @@ async def detect_vandalism_local(image: Image.Image, client=None):
         
     except Exception as e:
         logger.error(f"Local Vandalism Detection Error: {e}")
-        raise DetectionException("Failed to detect vandalism", "vandalism", details={"error": str(e)}) from e
+        return []
 
 
 async def detect_infrastructure_local(image: Image.Image, client=None):
@@ -189,7 +188,7 @@ async def detect_infrastructure_local(image: Image.Image, client=None):
         
     except Exception as e:
         logger.error(f"Local Infrastructure Detection Error: {e}")
-        raise DetectionException("Failed to detect infrastructure damage", "infrastructure", details={"error": str(e)}) from e
+        return []
 
 
 async def detect_flooding_local(image: Image.Image, client=None):
@@ -247,12 +246,4 @@ async def detect_flooding_local(image: Image.Image, client=None):
         
     except Exception as e:
         logger.error(f"Local Flooding Detection Error: {e}")
-        raise DetectionException("Failed to detect flooding", "flooding", details={"error": str(e)}) from e
-
-async def get_detection_status():
-    """Get status of local detection model."""
-    model = get_general_model()
-    return {
-        "model_loaded": model is not None,
-        "backend": "local_yolo"
-    }
+        return []

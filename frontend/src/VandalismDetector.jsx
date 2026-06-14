@@ -1,6 +1,5 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import Webcam from 'react-webcam';
-import { detectorsApi } from './api/detectors';
 
 const VandalismDetector = () => {
   const webcamRef = useRef(null);
@@ -34,11 +33,20 @@ const VandalismDetector = () => {
         formData.append('image', file);
 
         // Call Backend API
-        const data = await detectorsApi.vandalism(formData);
+        const response = await fetch('/api/detect-vandalism', {
+            method: 'POST',
+            body: formData,
+        });
 
-        setDetections(data.detections);
-        if (data.detections.length === 0) {
-            alert("No vandalism detected.");
+        if (response.ok) {
+            const data = await response.json();
+            setDetections(data.detections);
+            if (data.detections.length === 0) {
+                alert("No vandalism detected.");
+            }
+        } else {
+            console.error("Detection failed");
+            alert("Detection failed. Please try again.");
         }
     } catch (error) {
         console.error("Error:", error);
@@ -65,7 +73,7 @@ const VandalismDetector = () => {
                 ref={webcamRef}
                 screenshotFormat="image/jpeg"
                 className="w-full h-full object-cover"
-                onUserMediaError={() => setCameraError("Could not access camera. Please check permissions.")}
+                onUserMediaError={(err) => setCameraError("Could not access camera. Please check permissions.")}
               />
             ) : (
               <div className="relative">

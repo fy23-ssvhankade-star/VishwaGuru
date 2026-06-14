@@ -1,18 +1,17 @@
 fastapi
 uvicorn
-python-dotenv
 sqlalchemy
 python-telegram-bot
 google-generativeai
 python-multipart
 psycopg2-binary
+async-lru
 ultralyticsplus==0.0.28
 ultralytics
 opencv-python-headless
 huggingface-hub
 httpx
 python-magic
-pywebpush
 # Local ML dependencies (Issue #76)
 torch
 transformers
@@ -20,8 +19,3 @@ Pillow
 firebase-functions
 firebase-admin
 a2wsgi
-# Spatial deduplication dependencies
-scikit-learn
-numpy
-pytest
-pydantic>=2.0.0

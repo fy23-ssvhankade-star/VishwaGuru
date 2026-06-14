@@ -1,7 +1,8 @@
 import React, { useRef, useState, useCallback } from 'react';
 import Webcam from 'react-webcam';
 import { Camera, X, AlertTriangle, CheckCircle, Droplets } from 'lucide-react';
-import { detectorsApi } from './api/detectors';
+
+const API_URL = import.meta.env.VITE_API_URL || '';
 
 const FloodDetector = () => {
   const webcamRef = useRef(null);
@@ -30,7 +31,16 @@ const FloodDetector = () => {
       const formData = new FormData();
       formData.append('image', file);
 
-      const data = await detectorsApi.flooding(formData);
+      const response = await fetch(`${API_URL}/api/detect-flooding`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Detection failed');
+      }
+
+      const data = await response.json();
       setResult(data.detections);
     } catch (err) {
       console.error(err);
