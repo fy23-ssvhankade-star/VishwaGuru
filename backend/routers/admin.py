@@ -1,9 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import func, case
 from typing import List
 
-from sqlalchemy import func, case
 from backend.database import get_db
 from backend.models import User, UserRole
 from backend.schemas import UserResponse
@@ -20,34 +18,18 @@ def get_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     users = db.query(User).offset(skip).limit(limit).all()
     return users
 
+from sqlalchemy import func, case
+
 @router.get("/stats")
 def get_system_stats(db: Session = Depends(get_db)):
-    """
-    Get system statistics.
-    Optimized: Uses a single database query with aggregations to avoid multiple aggregate round-trips.
-    """
-    stats = db.query(
-        func.count(User.id).label("total_users"),
-        func.sum(case((User.role == UserRole.ADMIN, 1), else_=0)).label("admin_count"),
-        func.sum(case((User.is_active.is_(True), 1), else_=0)).label("active_users")
-    ).first()
-
-    return {
-        "total_users": stats.total_users or 0,
-        "admin_count": stats.admin_count or 0,
-        "active_users": stats.active_users or 0,
-    Get system-wide user statistics.
-    Optimized: Uses a single aggregate query to calculate multiple metrics simultaneously,
-    reducing database round-trips and scan overhead.
-    """
-    stats = db.query(
-        func.count(User.id).label("total"),
-        func.sum(case((User.role == UserRole.ADMIN, 1), else_=0)).label("admins"),
-        func.sum(case((User.is_active.is_(True), 1), else_=0)).label("active")
+    result = db.query(
+        func.count(User.id).label('total_users'),
+        func.sum(case((User.role == UserRole.ADMIN, 1), else_=0)).label('admin_count'),
+        func.sum(case((User.is_active == True, 1), else_=0)).label('active_users')
     ).first()
     
     return {
-        "total_users": stats.total or 0,
-        "admin_count": int(stats.admins or 0),
-        "active_users": int(stats.active or 0),
+        "total_users": result.total_users or 0,
+        "admin_count": result.admin_count or 0,
+        "active_users": result.active_users or 0,
     }

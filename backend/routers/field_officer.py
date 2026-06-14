@@ -403,13 +403,13 @@ def get_issue_visit_history(
 @router.get("/api/field-officer/visit-stats", response_model=VisitStatsResponse)
 def get_visit_statistics(db: Session = Depends(get_db)):
     """
-    Get aggregate statistics for all field officer visits.
-    Optimized: Uses a single aggregate query to calculate multiple metrics simultaneously,
-    avoiding N+1 aggregate query bottlenecks and reducing database round-trips.
+    Get aggregate statistics for all field officer visits using optimized SQL queries
+    
+    Returns metrics like total visits, verification status, geo-fence compliance, etc.
     """
     try:
-        # Use single SQL query for multiple aggregates to minimize round trips
-        stats = db.query(
+        # Use SQL aggregates instead of loading all visits into memory
+        result = db.query(
             func.count(FieldOfficerVisit.id).label('total_visits'),
             func.sum(case((FieldOfficerVisit.verified_at.isnot(None), 1), else_=0)).label('verified_visits'),
             func.sum(case((FieldOfficerVisit.within_geofence == True, 1), else_=0)).label('within_geofence_count'),
@@ -418,12 +418,13 @@ def get_visit_statistics(db: Session = Depends(get_db)):
             func.avg(FieldOfficerVisit.distance_from_site).label('average_distance')
         ).first()
 
-        total_visits = stats.total_visits or 0
-        verified_visits = int(stats.verified_visits or 0)
-        within_geofence_count = int(stats.within_geofence_count or 0)
-        outside_geofence_count = int(stats.outside_geofence_count or 0)
-        unique_officers = stats.unique_officers or 0
-        average_distance = stats.average_distance
+        total_visits = result.total_visits or 0
+        verified_visits = result.verified_visits or 0
+        within_geofence_count = result.within_geofence_count or 0
+        outside_geofence_count = result.outside_geofence_count or 0
+        unique_officers = result.unique_officers or 0
+        
+        average_distance = result.average_distance
         
         # Round to 2 decimals if not None
         if average_distance is not None:
