@@ -197,9 +197,9 @@ def process_uploaded_image_sync(file: UploadFile) -> tuple[Image.Image, bytes]:
             img = img.resize((new_width, new_height), Image.Resampling.BILINEAR)
 
         # Strip EXIF
-        # Optimization: Clear EXIF in-place instead of creating a new image (O(1) vs O(N))
-        if 'exif' in img.info:
-            del img.info['exif']
+        # Optimization: Clear info dictionary in-place instead of creating new image and copying pixels
+        img.info.clear()
+        img_no_exif = img
 
         # Save to BytesIO
         output = io.BytesIO()
@@ -269,14 +269,15 @@ def save_file_blocking(file_obj, path, image: Optional[Image.Image] = None):
     try:
         # Try to open as image with PIL
         if image:
-             img = image
+             # Create a copy to avoid modifying the original image object in-place (side effect)
+             img = image.copy()
         else:
              img = Image.open(file_obj)
 
-        # Strip EXIF data by clearing metadata in-place (O(1) vs O(N) copy)
-        if 'exif' in img.info:
-            del img.info['exif']
-
+        # Strip EXIF data by clearing metadata in-place
+        # Optimization: O(1) metadata clear vs O(N) pixel copy
+        img.info.clear()
+        img_no_exif = img
         # Save without EXIF
         # Use original format if available, otherwise default to JPEG if mode is RGB, PNG if RGBA
         fmt = img.format or ('PNG' if img.mode == 'RGBA' else 'JPEG')
