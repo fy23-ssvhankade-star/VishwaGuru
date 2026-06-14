@@ -15,7 +15,7 @@ from backend.database import get_db
 from backend.models import Issue, PushSubscription
 from backend.schemas import (
     IssueCreateWithDeduplicationResponse, IssueCategory, NearbyIssueResponse,
-    DeduplicationCheckResponse, IssueSummaryResponse, VoteResponse,
+    DeduplicationCheckResponse, IssueSummaryResponse, IssueResponse, VoteResponse,
     IssueStatusUpdateRequest, IssueStatusUpdateResponse, PushSubscriptionRequest,
     PushSubscriptionResponse, BlockchainVerificationResponse
 )
@@ -201,7 +201,7 @@ async def create_issue(
                 latitude=latitude,
                 longitude=longitude,
                 location=location,
-                action_plan=initial_action_plan,
+                action_plan=None,
                 integrity_hash=integrity_hash,
                 previous_integrity_hash=prev_hash
             )
@@ -628,25 +628,26 @@ async def verify_blockchain_integrity(issue_id: int, db: Session = Depends(get_d
     # We store the previous_integrity_hash directly to avoid an extra query.
     current_issue = await run_in_threadpool(
         lambda: db.query(
-            Issue.description,
-            Issue.category,
-            Issue.latitude,
-            Issue.longitude,
-            Issue.integrity_hash,
-            Issue.previous_integrity_hash
+            Issue.id, Issue.description, Issue.category, Issue.integrity_hash, Issue.previous_integrity_hash
         ).filter(Issue.id == issue_id).first()
     )
 
     if not current_issue:
         raise HTTPException(status_code=404, detail="Issue not found")
 
-    # Recompute hash using stored previous hash and geographic context
-    # Chaining logic: hash(description|category|lat|lon|prev_hash)
-    lat_str = f"{current_issue.latitude:.7f}" if current_issue.latitude is not None else "0.0000000"
-    lon_str = f"{current_issue.longitude:.7f}" if current_issue.longitude is not None else "0.0000000"
-    prev_hash = current_issue.previous_integrity_hash or ""
+    # Chaining logic: hash(description|category|prev_hash)
+    # Optimized: Use stored previous_integrity_hash if available for O(1) verification
+    # Fallback to query if it's missing (for legacy records)
+    prev_hash = current_issue.previous_integrity_hash
 
-    hash_content = f"{current_issue.description}|{current_issue.category}|{lat_str}|{lon_str}|{prev_hash}"
+    if prev_hash is None:
+        prev_issue_hash = await run_in_threadpool(
+            lambda: db.query(Issue.integrity_hash).filter(Issue.id < issue_id).order_by(Issue.id.desc()).first()
+        )
+        prev_hash = prev_issue_hash[0] if prev_issue_hash and prev_issue_hash[0] else ""
+
+    # Recompute hash based on current data and previous hash
+    hash_content = f"{current_issue.description}|{current_issue.category}|{prev_hash}"
     computed_hash = hashlib.sha256(hash_content.encode()).hexdigest()
 
     is_valid = (computed_hash == current_issue.integrity_hash)
@@ -712,3 +713,44 @@ def get_recent_issues(
     # Thread-safe cache update
     recent_issues_cache.set(data, cache_key)
     return data
+
+@router.get("/api/issues/{issue_id}", response_model=IssueResponse)
+async def get_issue(issue_id: int, db: Session = Depends(get_db)):
+    """
+    Get a single issue by ID.
+    Optimized: Uses column projection to avoid loading full model instance.
+    """
+    # Performance Boost: Fetch only needed columns
+    row = await run_in_threadpool(
+        lambda: db.query(
+            Issue.id,
+            Issue.category,
+            Issue.description,
+            Issue.created_at,
+            Issue.image_path,
+            Issue.status,
+            Issue.upvotes,
+            Issue.location,
+            Issue.latitude,
+            Issue.longitude,
+            Issue.action_plan
+        ).filter(Issue.id == issue_id).first()
+    )
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Issue not found")
+
+    # Convert to dictionary for faster serialization
+    return {
+        "id": row.id,
+        "category": row.category,
+        "description": row.description,
+        "created_at": row.created_at,
+        "image_path": row.image_path,
+        "status": row.status,
+        "upvotes": row.upvotes if row.upvotes is not None else 0,
+        "location": row.location,
+        "latitude": row.latitude,
+        "longitude": row.longitude,
+        "action_plan": row.action_plan
+    }

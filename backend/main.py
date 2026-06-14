@@ -123,21 +123,15 @@ is_production = os.environ.get("ENVIRONMENT", "").lower() == "production"
 
 if not frontend_url:
     if is_production:
-        logger.warning(
-            "FRONTEND_URL environment variable is not set in production! "
-            "CORS requests may fail. Set it to your frontend URL (e.g., https://your-app.netlify.app)."
-        )
-        # Default to empty or keep as None, but don't crash.
-        # If we set it to something, allowed_origins will include it.
-        # If we set it to None, allowed_origins logic below needs to handle it.
-        frontend_url = ""
+        logger.warning("FRONTEND_URL environment variable is not set in production. Defaulting to '*' for broad compatibility during initial deployment.")
+        frontend_url = "*"
     else:
         logger.warning("FRONTEND_URL not set. Defaulting to http://localhost:5173 for development.")
         frontend_url = "http://localhost:5173"
 
-if frontend_url and not (frontend_url.startswith("http://") or frontend_url.startswith("https://")):
-    logger.warning(
-        f"FRONTEND_URL must be a valid HTTP/HTTPS URL. Got: {frontend_url}. Ignoring it."
+if frontend_url != "*" and not (frontend_url.startswith("http://") or frontend_url.startswith("https://")):
+    raise ValueError(
+        f"FRONTEND_URL must be a valid HTTP/HTTPS URL or '*'. Got: {frontend_url}"
     )
     frontend_url = ""
 
@@ -163,7 +157,7 @@ if not is_production:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_credentials=True,
+    allow_credentials=True if frontend_url != "*" else False,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )

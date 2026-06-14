@@ -1,7 +1,7 @@
 import sys
 import os
 from pathlib import Path
-from sqlalchemy import text, inspect
+from sqlalchemy import text
 import logging
 
 # Add project root to path
@@ -80,8 +80,20 @@ def migrate_db():
                 if not index_exists("issues", "ix_issues_created_at"):
                     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_issues_created_at ON issues (created_at)"))
 
-                if not index_exists("issues", "ix_issues_status"):
-                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_issues_status ON issues (status)"))
+            # Add previous_integrity_hash column for O(1) blockchain verification
+            try:
+                conn.execute(text("ALTER TABLE issues ADD COLUMN previous_integrity_hash VARCHAR"))
+                print("Migrated database: Added previous_integrity_hash column.")
+            except Exception:
+                pass
+
+            # Add index on user_email
+            try:
+                conn.execute(text("CREATE INDEX ix_issues_user_email ON issues (user_email)"))
+                logger.info("Migrated database: Added index on user_email column.")
+            except Exception:
+                # Index likely already exists
+                pass
 
                 # Remove redundant individual indexes if they exist (covered by composite index)
                 try:
@@ -98,14 +110,19 @@ def migrate_db():
                 if not index_exists("issues", "ix_issues_status_lat_lon"):
                     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_issues_status_lat_lon ON issues (status, latitude, longitude)"))
 
-                if not index_exists("issues", "ix_issues_user_email"):
-                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_issues_user_email ON issues (user_email)"))
+            # Add index on latitude (grievances)
+            try:
+                conn.execute(text("CREATE INDEX ix_grievances_latitude ON grievances (latitude)"))
+                logger.info("Migrated database: Added index on latitude column for grievances.")
+            except Exception:
+                pass
 
-            # Grievances Table Migrations
-            if inspector.has_table("grievances"):
-                if not column_exists("grievances", "latitude"):
-                    conn.execute(text("ALTER TABLE grievances ADD COLUMN latitude FLOAT"))
-                    logger.info("Added latitude column to grievances")
+            # Add index on longitude (grievances)
+            try:
+                conn.execute(text("CREATE INDEX ix_grievances_longitude ON grievances (longitude)"))
+                logger.info("Migrated database: Added index on longitude column for grievances.")
+            except Exception:
+                pass
 
                 if not column_exists("grievances", "longitude"):
                     conn.execute(text("ALTER TABLE grievances ADD COLUMN longitude FLOAT"))
@@ -144,9 +161,7 @@ def migrate_db():
             logger.info("Database migration check completed successfully.")
 
     except Exception as e:
-        logger.error(f"Database migration error: {e}", exc_info=True)
-        # Re-raise to alert deployment failure if migration is critical
-        # raise e
+        logger.error(f"Database migration error: {e}")
 
 if __name__ == "__main__":
     init_db()

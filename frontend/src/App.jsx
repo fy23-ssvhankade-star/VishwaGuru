@@ -78,7 +78,7 @@ function AppContent() {
   const navigateToView = useCallback((view) => {
     const validViews = ['home', 'map', 'report', 'action', 'mh-rep', 'pothole', 'garbage', 'vandalism', 'flood', 'infrastructure', 'parking', 'streetlight', 'fire', 'animal', 'blocked', 'tree', 'pest', 'smart-scan', 'grievance-analysis', 'noise', 'safety-check', 'my-reports', 'login', 'signup', 'traffic-sign', 'abandoned-vehicle', 'public-facilities', 'construction-safety', 'water-leak', 'crowd', 'waste'];
     if (validViews.includes(view)) {
-      navigate(view === 'home' ? '/home' : `/${view}`);
+      navigate(`/${view}`);
     } else {
       console.warn(`Attempted to navigate to invalid view: ${view}`);
       navigate('/');
