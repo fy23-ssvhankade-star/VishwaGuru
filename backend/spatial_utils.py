@@ -2,12 +2,11 @@
 Spatial utilities for geospatial operations and deduplication.
 """
 import math
-import logging
 from typing import List, Tuple, Optional
+from sklearn.cluster import DBSCAN
+import numpy as np
 
 from backend.models import Issue
-
-logger = logging.getLogger(__name__)
 
 
 def get_bounding_box(lat: float, lon: float, radius_meters: float) -> Tuple[float, float, float, float]:
@@ -36,30 +35,6 @@ def get_bounding_box(lat: float, lon: float, radius_meters: float) -> Tuple[floa
     return min_lat, max_lat, min_lon, max_lon
 
 
-def equirectangular_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """
-    Calculate the distance between two points using the Equirectangular approximation.
-    Much faster than Haversine, but less accurate for large distances.
-    Suitable for small distances (< 1000km).
-
-    Returns distance in meters.
-    """
-    R = 6371000.0  # Earth's radius in meters
-
-    # Convert to radians
-    lat1_rad = math.radians(lat1)
-    lat2_rad = math.radians(lat2)
-
-    # Calculate longitude difference and normalize to [-pi, pi]
-    dlon_rad = math.radians(lon2 - lon1)
-    dlon_rad = (dlon_rad + math.pi) % (2 * math.pi) - math.pi
-
-    x = dlon_rad * math.cos((lat1_rad + lat2_rad) / 2)
-    y = lat2_rad - lat1_rad
-
-    return R * math.sqrt(x*x + y*y)
-
-
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """
     Calculate the great circle distance between two points
@@ -79,20 +54,6 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
     return R * c
-
-
-def equirectangular_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """
-    Calculate the distance between two points using the Equirectangular approximation.
-    This is much faster than Haversine and accurate enough for small distances (< 10km).
-
-    Returns distance in meters.
-    """
-    R = 6371000.0
-    # Convert difference to radians directly
-    x = math.radians(lon2 - lon1) * math.cos(math.radians((lat1 + lat2) / 2))
-    y = math.radians(lat2 - lat1)
-    return R * math.sqrt(x*x + y*y)
 
 
 def find_nearby_issues(
@@ -115,15 +76,11 @@ def find_nearby_issues(
     """
     nearby_issues = []
 
-    # Use optimized calculation for small radii
-    use_fast_calc = radius_meters < 1000.0
-
     for issue in issues:
         if issue.latitude is None or issue.longitude is None:
             continue
 
-        # Use Equirectangular approximation for faster filtering
-        distance = equirectangular_distance(
+        distance = haversine_distance(
             target_lat, target_lon,
             issue.latitude, issue.longitude
         )
@@ -140,7 +97,6 @@ def find_nearby_issues(
 def cluster_issues_dbscan(issues: List[Issue], eps_meters: float = 30.0) -> List[List[Issue]]:
     """
     Cluster issues using DBSCAN algorithm based on spatial proximity.
-    Optimized: Lazy-imports scikit-learn to reduce startup overhead and build dependencies.
 
     Args:
         issues: List of Issue objects with latitude/longitude
@@ -150,13 +106,6 @@ def cluster_issues_dbscan(issues: List[Issue], eps_meters: float = 30.0) -> List
     Returns:
         List of clusters, where each cluster is a list of Issue objects
     """
-    try:
-        from sklearn.cluster import DBSCAN
-        import numpy as np
-    except ImportError:
-        logger.warning("scikit-learn not installed. Spatial clustering disabled.")
-        return [[issue] for issue in issues] # Return each issue as its own cluster
-
     # Filter issues with valid coordinates
     valid_issues = [
         issue for issue in issues
@@ -171,12 +120,13 @@ def cluster_issues_dbscan(issues: List[Issue], eps_meters: float = 30.0) -> List
         [issue.latitude, issue.longitude] for issue in valid_issues
     ])
 
-    # Convert eps from meters to radians for DBSCAN with haversine metric
-    # Earth's radius in meters is approximately 6,371,000
-    eps_radians = eps_meters / 6371000.0
+    # Convert eps from meters to degrees (approximate)
+    # 1 degree latitude ≈ 111,000 meters
+    # 1 degree longitude ≈ 111,000 * cos(latitude) meters
+    eps_degrees = eps_meters / 111000  # Rough approximation
 
-    # Perform DBSCAN clustering using haversine metric which expects radians
-    db = DBSCAN(eps=eps_radians, min_samples=1, metric='haversine').fit(
+    # Perform DBSCAN clustering
+    db = DBSCAN(eps=eps_degrees, min_samples=1, metric='haversine').fit(
         np.radians(coordinates)
     )
 

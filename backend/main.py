@@ -27,12 +27,7 @@ from backend.bot import start_bot_thread, stop_bot_thread
 from backend.init_db import migrate_db
 from backend.maharashtra_locator import load_maharashtra_pincode_data, load_maharashtra_mla_data
 from backend.exceptions import EXCEPTION_HANDLERS
-from backend.routers.issues import router as issues_router
-from backend.routers.detection import router as detection_router
-from backend.routers.grievances import router as grievances_router
-from backend.routers.utility import router as utility_router
-from backend.routers.auth import router as auth_router
-from backend.routers.admin import router as admin_router
+from backend.routers import issues, detection, grievances, utility, auth, admin
 from backend.grievance_service import GrievanceService
 import backend.dependencies
 
@@ -127,26 +122,20 @@ is_production = os.environ.get("ENVIRONMENT", "").lower() == "production"
 
 if not frontend_url:
     if is_production:
-        logger.warning(
-            "FRONTEND_URL environment variable is MISSING in production. "
-            "Defaulting to wildcard '*' for CORS to allow startup. "
-            "PLEASE SET THIS IN RENDER DASHBOARD."
+        raise ValueError(
+            "FRONTEND_URL environment variable is required for security in production. "
+            "Set it to your frontend URL (e.g., https://your-app.netlify.app)."
         )
-        frontend_url = "*" # Allow all origins temporarily to fix deployment
     else:
         logger.warning("FRONTEND_URL not set. Defaulting to http://localhost:5173 for development.")
         frontend_url = "http://localhost:5173"
 
-if frontend_url != "*" and not (frontend_url.startswith("http://") or frontend_url.startswith("https://")):
-    logger.warning(
-        f"FRONTEND_URL format invalid: {frontend_url}. Expected HTTP/HTTPS URL. Using '*' as fallback."
+if not (frontend_url.startswith("http://") or frontend_url.startswith("https://")):
+    raise ValueError(
+        f"FRONTEND_URL must be a valid HTTP/HTTPS URL. Got: {frontend_url}"
     )
-    frontend_url = "*"
 
-if frontend_url == "*":
-    allowed_origins = ["*"]
-else:
-    allowed_origins = [frontend_url]
+allowed_origins = [frontend_url]
 
 if not is_production:
     dev_origins = [
@@ -169,12 +158,12 @@ app.add_middleware(
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
 # Include Modular Routers
-app.include_router(issues_router, tags=["Issues"])
-app.include_router(detection_router, tags=["Detection"])
-app.include_router(grievances_router, tags=["Grievances"])
-app.include_router(utility_router, tags=["Utility"])
-app.include_router(auth_router, tags=["Authentication"])
-app.include_router(admin_router)
+app.include_router(issues.router, tags=["Issues"])
+app.include_router(detection.router, tags=["Detection"])
+app.include_router(grievances.router, tags=["Grievances"])
+app.include_router(utility.router, tags=["Utility"])
+app.include_router(auth.router, tags=["Authentication"])
+app.include_router(admin.router)
 
 @app.get("/health")
 def health():

@@ -6,8 +6,6 @@ google-generativeai
 python-multipart
 psycopg2-binary
 async-lru
-scikit-learn
-numpy
 ultralyticsplus==0.0.28
 ultralytics
 opencv-python-headless
@@ -19,7 +17,12 @@ pywebpush
 torch
 transformers
 Pillow
+firebase-functions
+firebase-admin
+a2wsgi
+# Spatial deduplication dependencies
+scikit-learn
+numpy
 pytest
 python-jose[cryptography]
 passlib[bcrypt]
-pytest-asyncio

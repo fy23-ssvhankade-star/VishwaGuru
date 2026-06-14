@@ -16,15 +16,7 @@ if str(repo_root) not in sys.path:
 
 def validate_environment():
     """Validate required environment variables"""
-    # In production (Render/Netlify), missing env vars should warn but not crash,
-    # to allow health checks to pass and logs to be visible.
-
     required_vars = ["GEMINI_API_KEY", "TELEGRAM_BOT_TOKEN", "FRONTEND_URL"]
-
-    # In production, SECRET_KEY is also required for auth
-    if os.getenv("ENVIRONMENT", "production").lower() == "production":
-        required_vars.append("SECRET_KEY")
-
     missing_vars = []
 
     for var in required_vars:
@@ -32,22 +24,12 @@ def validate_environment():
             missing_vars.append(var)
 
     if missing_vars:
-        print("⚠️  WARNING: Missing required environment variables:")
+        print("❌ Missing required environment variables:")
         for var in missing_vars:
             print(f"   - {var}")
-        print("   The application will start, but features relying on these variables will fail.")
-        print("   Please set them in your deployment environment settings.")
-
-        # Set dummy values to prevent immediate crashes during import/init
-        if "GEMINI_API_KEY" in missing_vars:
-            os.environ["GEMINI_API_KEY"] = "dummy_key_for_startup"
-        if "TELEGRAM_BOT_TOKEN" in missing_vars:
-            os.environ["TELEGRAM_BOT_TOKEN"] = "dummy_token_for_startup"
-        if "FRONTEND_URL" in missing_vars:
-            os.environ["FRONTEND_URL"] = "http://localhost:5173" # Default fallback
-
-    else:
-        print("✅ Environment validation passed")
+        print("\nPlease set these variables or create a .env file.")
+        print("See backend/.env.example for reference.")
+        return False
 
     # Set defaults for optional variables
     if not os.getenv("DATABASE_URL"):
@@ -65,6 +47,7 @@ def validate_environment():
     else:
         print("✅ HF_TOKEN found")
 
+    print("✅ Environment validation passed")
     return True
 
 def create_data_directory():
@@ -77,7 +60,8 @@ def main():
     """Main startup function"""
     print("🚀 Starting VishwaGuru Backend")
 
-    validate_environment()
+    if not validate_environment():
+        sys.exit(1)
 
     create_data_directory()
 

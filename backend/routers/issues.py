@@ -189,33 +189,14 @@ async def create_issue(
                 longitude=longitude,
                 location=location,
                 action_plan=None,
-                integrity_hash=integrity_hash,
-                status="open"
+                integrity_hash=integrity_hash
             )
 
             # Offload blocking DB operations to threadpool
             await run_in_threadpool(save_issue_db, db, new_issue)
         else:
-            # Found duplicate - create issue but mark as duplicate and link to parent
-            # This ensures we track the report for analytics but don't show it in the main feed
-            new_issue = Issue(
-                reference_id=str(uuid.uuid4()),
-                description=description,
-                category=category,
-                image_path=image_path,
-                source="web",
-                user_email=user_email,
-                latitude=latitude,
-                longitude=longitude,
-                location=location,
-                action_plan=None,
-                status="duplicate",
-                parent_issue_id=linked_issue_id
-            )
-
-            # Save duplicate issue to DB
-            await run_in_threadpool(save_issue_db, db, new_issue)
-
+            # Don't create new issue, just return deduplication info
+            new_issue = None
     except Exception as e:
         # Clean up uploaded file if DB save failed
         if image_path and os.path.exists(image_path):
@@ -227,8 +208,8 @@ async def create_issue(
         logger.error(f"Database error while creating issue: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to save issue to database")
 
-    # Add background task for AI generation only if new issue was created AND is not a duplicate
-    if new_issue and new_issue.status != "duplicate":
+    # Add background task for AI generation only if new issue was created
+    if new_issue:
         background_tasks.add_task(process_action_plan_background, new_issue.id, description, category, language, image_path)
 
         # Create grievance for escalation management
@@ -249,7 +230,7 @@ async def create_issue(
         )
 
     # Return response with deduplication information
-    if new_issue and new_issue.status != "duplicate":
+    if new_issue:
         return IssueCreateWithDeduplicationResponse(
             id=new_issue.id,
             message="Issue reported successfully. Action plan will be generated shortly.",
@@ -258,7 +239,6 @@ async def create_issue(
             linked_issue_id=linked_issue_id
         )
     else:
-        # For duplicates, we return id=None so the frontend handles it as a "linked" report
         return IssueCreateWithDeduplicationResponse(
             id=None,
             message="Similar issue found nearby. Your report has been linked to the existing issue to increase its priority.",

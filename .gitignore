@@ -17,9 +17,7 @@ venv/
 # Data
 # =====================
 data/*.db
-**/data/*.db
 data/uploads/
-**/data/uploads/
 
 # =====================
 # Node / Frontend
