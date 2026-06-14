@@ -607,7 +607,7 @@ def get_user_issues(
             "id": row.id,
             "category": row.category,
             "description": short_desc,
-            "created_at": row.created_at,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
             "image_path": row.image_path,
             "status": row.status,
             "upvotes": row.upvotes if row.upvotes is not None else 0,
@@ -616,7 +616,7 @@ def get_user_issues(
             "longitude": row.longitude
         })
 
-    return data
+    return JSONResponse(content=data)
 
 @router.get("/api/issues/{issue_id}/blockchain-verify", response_model=BlockchainVerificationResponse)
 async def verify_blockchain_integrity(issue_id: int, db: Session = Depends(get_db)):
@@ -716,45 +716,4 @@ def get_recent_issues(
 
     # Thread-safe cache update
     recent_issues_cache.set(data, cache_key)
-    return data
-
-@router.get("/api/issues/{issue_id}", response_model=IssueResponse)
-async def get_issue(issue_id: int, db: Session = Depends(get_db)):
-    """
-    Get a single issue by ID.
-    Optimized: Uses column projection to avoid loading full model instance.
-    """
-    # Performance Boost: Fetch only needed columns
-    row = await run_in_threadpool(
-        lambda: db.query(
-            Issue.id,
-            Issue.category,
-            Issue.description,
-            Issue.created_at,
-            Issue.image_path,
-            Issue.status,
-            Issue.upvotes,
-            Issue.location,
-            Issue.latitude,
-            Issue.longitude,
-            Issue.action_plan
-        ).filter(Issue.id == issue_id).first()
-    )
-
-    if not row:
-        raise HTTPException(status_code=404, detail="Issue not found")
-
-    # Convert to dictionary for faster serialization
-    return {
-        "id": row.id,
-        "category": row.category,
-        "description": row.description,
-        "created_at": row.created_at,
-        "image_path": row.image_path,
-        "status": row.status,
-        "upvotes": row.upvotes if row.upvotes is not None else 0,
-        "location": row.location,
-        "latitude": row.latitude,
-        "longitude": row.longitude,
-        "action_plan": row.action_plan
-    }
+    return JSONResponse(content=data)
