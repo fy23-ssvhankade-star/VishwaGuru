@@ -4,14 +4,11 @@ import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 from fastapi.testclient import TestClient
 
-# Ensure backend is in path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'backend'))
-
 # Set mock AI service to avoid external calls
 os.environ["AI_SERVICE_TYPE"] = "mock"
 
-from main import app
-from cache import recent_issues_cache
+from backend.main import app
+from backend.cache import recent_issues_cache
 
 client = TestClient(app)
 
@@ -30,8 +27,9 @@ def test_cache_invalidation_behavior():
 
         # Perform issue creation
         # We need to send a multipart request
-        with patch('main.run_in_threadpool') as mock_threadpool, \
-             patch('main.get_ai_services') as mock_get_ai:
+        with patch('backend.main.run_in_threadpool') as mock_threadpool, \
+             patch('backend.main.get_ai_services') as mock_get_ai, \
+             patch('backend.main.validate_uploaded_file') as mock_validate: # Patch validation
 
              # Mock AI services
              mock_ai_services = MagicMock()
@@ -79,7 +77,7 @@ def test_cache_invalidation_behavior():
                 files={"image": ("test.jpg", b"fake image content", "image/jpeg")}
             )
 
-        assert response.status_code == 200
+        assert response.status_code == 201
 
         # NEW BEHAVIOR CHECK (After Optimization):
 

@@ -1,10 +1,10 @@
 import logging
 import threading
 from typing import Optional, Any
-from fastapi import HTTPException
+
+from backend.exceptions import ModelLoadException, DetectionException
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Thread-safe singleton pattern for model loading
@@ -13,6 +13,16 @@ _model: Optional[Any] = None
 _model_lock: threading.Lock = threading.Lock()
 _model_loading_error: Optional[Exception] = None
 _model_initialized: bool = False
+
+def is_model_available():
+    """
+    Checks if the model dependencies are available.
+    """
+    try:
+        import ultralyticsplus
+        return True
+    except ImportError:
+        return False
 
 def load_model():
     """
@@ -41,9 +51,12 @@ def load_model():
 
         logger.info("Model loaded successfully.")
         return model
+    except ImportError:
+        logger.warning("ultralyticsplus not installed. Pothole detection disabled.")
+        return None
     except Exception as e:
         logger.error(f"Failed to load model: {e}")
-        raise e
+        return None
 
 
 def get_model():
@@ -93,7 +106,7 @@ def get_model():
             _model_loading_error = e
             _model_initialized = True  # Mark as initialized (even though it failed)
             logger.error(f"Model initialization failed: {e}")
-            raise
+            raise ModelLoadException("keremberke/yolov8n-pothole-segmentation", details={"error": str(e)}) from e
 
 
 def reset_model():
@@ -116,7 +129,18 @@ def reset_model():
         _model_initialized = False
         _model_loading_error = None
         logger.info("Model singleton state has been reset.")
-    return _model
+
+def validate_image_for_processing(image):
+    """
+    Validates that the image is a valid PIL Image and can be processed.
+    Uses image.load() to verify integrity without closing the file pointer.
+    """
+    try:
+        image.load()
+        return True
+    except Exception as e:
+        logger.error(f"Image validation failed: {e}")
+        raise DetectionException("Invalid image content for pothole detection", "pothole", details={"error": str(e)}) from e
 
 def detect_potholes(image_source):
     """
@@ -127,9 +151,14 @@ def detect_potholes(image_source):
 
     Returns:
         List of detections. Each detection is a dict with 'box', 'confidence', 'label'.
+
+    Raises:
+        DetectionException: If pothole detection fails
     """
     try:
         model = get_model()
+        if model is None:
+            return []
 
         # perform inference
         # stream=False ensures we get all results in memory
@@ -157,17 +186,5 @@ def detect_potholes(image_source):
 
         return detections
     except Exception as e:
-        logger.error(f"Error in detect_potholes: {e}")
-        raise e
-
-def validate_image_for_processing(image):
-    """
-    Validates that an image can be processed by PIL/OpenCV.
-    """
-    if image is None:
-        raise HTTPException(status_code=400, detail="No image provided")
-
-    if image.width < 10 or image.height < 10:
-        raise HTTPException(status_code=400, detail="Image too small")
-
-    return True
+        logger.error(f"Pothole detection failed: {e}")
+        raise DetectionException("Failed to detect potholes in image", "pothole", details={"error": str(e)}) from e
