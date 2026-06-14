@@ -70,7 +70,7 @@ async def create_issue(
             image_path = os.path.join(upload_dir, filename)
 
             # Process image (validate, resize, strip EXIF)
-            _, processed_bytes = await process_uploaded_image(image)
+            _, processed_image = await process_uploaded_image(image)
 
             # Save processed image to disk
             await run_in_threadpool(save_processed_image, processed_bytes, image_path)

@@ -154,10 +154,10 @@ async def validate_uploaded_file(file: UploadFile) -> Optional[Image.Image]:
     """
     return await run_in_threadpool(_validate_uploaded_file_sync, file)
 
-def process_uploaded_image_sync(file: UploadFile):
+def process_uploaded_image_sync(file: UploadFile) -> tuple[Image.Image, io.BytesIO]:
     """
     Synchronously validate, resize, and strip EXIF from uploaded image.
-    Returns a tuple of (PIL.Image.Image, bytes).
+    Returns the processed PIL image and image data as BytesIO.
     """
     # Check file size
     file.file.seek(0, 2)
@@ -210,7 +210,7 @@ def process_uploaded_image_sync(file: UploadFile):
             img.save(output, format=save_format, quality=85)
             output.seek(0)
 
-            return img_no_exif, image_bytes
+            return img_no_exif, output
 
         except Exception as pil_error:
             logger.error(f"PIL processing failed: {pil_error}")
@@ -225,11 +225,7 @@ def process_uploaded_image_sync(file: UploadFile):
         logger.error(f"Error processing file: {e}")
         raise HTTPException(status_code=400, detail="Unable to process file.")
 
-async def process_uploaded_image(file: UploadFile):
-    """
-    Asynchronously validate, resize, and strip EXIF from uploaded image.
-    Returns a tuple of (PIL.Image.Image, bytes).
-    """
+async def process_uploaded_image(file: UploadFile) -> tuple[Image.Image, io.BytesIO]:
     return await run_in_threadpool(process_uploaded_image_sync, file)
 
 def save_processed_image(image_bytes: bytes, path: str):
