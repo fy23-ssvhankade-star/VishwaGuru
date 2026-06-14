@@ -20,10 +20,9 @@ def test_read_main(client):
 @patch("backend.main.magic.from_buffer")
 @patch("backend.main.detect_vandalism_local", new_callable=AsyncMock)
 @patch("backend.main.run_in_threadpool")
-@patch("backend.main.Image.open")
-def test_detect_vandalism(mock_image_open, mock_run, mock_detect_vandalism, mock_magic, client):
-    # Mock magic to return image/jpeg
-    mock_magic.return_value = "image/jpeg"
+@patch("PIL.Image.open")
+def test_detect_vandalism(mock_image_open, mock_run, mock_detect):
+    # Mock authentication
 
     # Mock Image.open to return a valid object (mock)
     mock_image = MagicMock()
@@ -45,7 +44,7 @@ def test_detect_vandalism(mock_image_open, mock_run, mock_detect_vandalism, mock
 
     response = client.post(
         "/api/detect-vandalism",
-        files={"image": ("test.jpg", image_content, "image/jpeg")}
+        files={"file": ("test.jpg", image_content, "image/jpeg")}
     )
 
     assert response.status_code == 200
