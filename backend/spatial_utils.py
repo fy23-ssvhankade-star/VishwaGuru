@@ -2,8 +2,12 @@
 Spatial utilities for geospatial operations and deduplication.
 """
 import math
+import logging
 from typing import List, Tuple, Optional
-from sklearn.cluster import DBSCAN
+try:
+    from sklearn.cluster import DBSCAN
+except ImportError:
+    DBSCAN = None
 import numpy as np
 
 from backend.models import Issue
@@ -106,6 +110,10 @@ def cluster_issues_dbscan(issues: List[Issue], eps_meters: float = 30.0) -> List
     Returns:
         List of clusters, where each cluster is a list of Issue objects
     """
+    if DBSCAN is None:
+        logging.warning("DBSCAN clustering unavailable: scikit-learn not installed.")
+        return [[issue] for issue in issues if issue.latitude is not None and issue.longitude is not None]
+
     # Filter issues with valid coordinates
     valid_issues = [
         issue for issue in issues

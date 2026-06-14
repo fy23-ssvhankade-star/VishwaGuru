@@ -37,3 +37,11 @@
 ## 2026-02-08 - Return Type Consistency in Utilities
 **Learning:** Inconsistent return types in shared utility functions (like `process_uploaded_image`) can cause runtime crashes across multiple modules, especially when some expect tuples and others expect single values. This can lead to deployment failures that are hard to debug without full integration logs.
 **Action:** Always maintain strict return type consistency for core utilities. Use type hints and verify all call sites when changing a function's signature. Ensure that performance-oriented optimizations (like returning multiple processed formats) are applied uniformly.
+
+## 2026-02-14 - SQLAlchemy 2.0 Case Syntax
+**Learning:** In SQLAlchemy 2.0+, the `case()` function expects positional arguments for "whens" if they are a sequence of items, rather than a single list. Using a list results in an `ArgumentError`.
+**Action:** Use `case((condition, value), else_=default)` for single conditions or `case((cond1, val1), (cond2, val2), else_=default)` for multiple, instead of passing a list of tuples.
+
+## 2026-02-14 - Render Health Check & Strict Validation
+**Learning:** Strict environment variable validation during the FastAPI startup/import phase can cause Render deployments to fail with "Port scan timeout" because the app crashes before it can bind to the port. This prevents accessing logs and identifying the missing variables.
+**Action:** Relax non-critical environment validation in startup scripts to allow the app to start and report health. Log missing variables as errors/warnings instead of raising exceptions, allowing the user to diagnose via application logs.
