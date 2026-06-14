@@ -13,8 +13,8 @@ fi
 echo "Building Frontend..."
 # Optimization: Use --no-audit and --no-fund to save time and memory on Render
 cd frontend
-npm install --no-audit --no-fund
-# Use CI=false to prevent build failure on non-critical lint warnings
+npm install
+# CI=false prevents build failures from non-critical warnings
 CI=false npm run build
 cd ..
 

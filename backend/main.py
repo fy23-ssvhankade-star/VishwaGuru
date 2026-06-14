@@ -79,10 +79,13 @@ async def lifespan(app: FastAPI):
     # Startup: Database setup (Blocking but necessary for app consistency)
     try:
         logger.info("Starting database initialization...")
-        await run_in_threadpool(Base.metadata.create_all, bind=engine)
+        # Use a timeout for DB operations during startup to prevent hanging
+        await asyncio.wait_for(run_in_threadpool(Base.metadata.create_all, bind=engine), timeout=10)
         logger.info("Base.metadata.create_all completed.")
-        await run_in_threadpool(migrate_db)
+        await asyncio.wait_for(run_in_threadpool(migrate_db), timeout=20)
         logger.info("migrate_db completed. Database initialized successfully.")
+    except asyncio.TimeoutError:
+        logger.error("Database initialization timed out!")
     except Exception as e:
         logger.error(f"Database initialization failed: {e}", exc_info=True)
         # We continue to allow health checks even if DB has issues (for debugging)
@@ -135,14 +138,10 @@ allowed_origins = []
 
 if not frontend_url:
     if is_production:
-        logger.error(
-            "FRONTEND_URL environment variable is MISSING in production! "
-            "CORS will reject all requests from browsers. Please configure FRONTEND_URL."
-        )
-        # Security: Do NOT allow * in production. Fail secure by allowing nothing.
-        # We don't raise ValueError to prevent crash loops (app availability), but feature will be broken.
-        allowed_origins = []
-        frontend_url = ""
+        # To prevent Render deployment crashes, default to a wildcard regex if missing
+        # Log a warning instead of raising an error
+        logger.warning("FRONTEND_URL environment variable is missing in production. Defaulting to allow all origins (regex) for availability.")
+        frontend_url = r"https://.*\.netlify\.app"
     else:
         logger.warning("FRONTEND_URL not set. Defaulting to http://localhost:5173 for development.")
         frontend_url = "http://localhost:5173"
@@ -154,7 +153,15 @@ if frontend_url and (frontend_url.startswith("http://") or frontend_url.startswi
 elif frontend_url and "*" not in allowed_origins:
      logger.warning(f"Invalid FRONTEND_URL format: {frontend_url}. Ignored for CORS.")
 
-if not is_production and "*" not in allowed_origins:
+allowed_origins = []
+allowed_origin_regex = None
+
+if is_production and frontend_url == r"https://.*\.netlify\.app":
+    allowed_origin_regex = frontend_url
+else:
+    allowed_origins = [frontend_url]
+
+if not is_production:
     dev_origins = [
         "http://localhost:3000",
         "http://localhost:5173",
@@ -171,6 +178,7 @@ if not is_production and "*" not in allowed_origins:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    allow_origin_regex=allowed_origin_regex,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],

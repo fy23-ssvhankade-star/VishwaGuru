@@ -308,22 +308,15 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     )
 
 def get_password_hash(password: str) -> str:
-    return _bcrypt.hashpw(
-        password.encode("utf-8"),
-        _bcrypt.gensalt()
-    ).decode("utf-8")
-
-
+    return pwd_context.hash(password)
 
 def generate_reference_id() -> str:
     """
-    Generate a unique reference ID for voice submissions.
-    Format: VOICE-YYYYMMDD-HHMMSS-XXXX (random suffix)
+    Generate a secure, random reference identifier in the format XXXX-XXXX-XXXX.
+    Uses secrets module for cryptographically strong random numbers.
     """
-    import random
-    import string
-    from datetime import datetime
-    
-    timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
-    random_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
-    return f"VOICE-{timestamp}-{random_suffix}"
+    alphabet = string.ascii_uppercase + string.digits
+    def get_part(k=4):
+        return ''.join(secrets.choice(alphabet) for _ in range(k))
+
+    return f"{get_part()}-{get_part()}-{get_part()}"
