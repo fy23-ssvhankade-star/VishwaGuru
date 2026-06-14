@@ -71,8 +71,7 @@ async def test_detect_traffic_sign_damaged(client):
 
     img_bytes = create_test_image()
 
-    with patch('backend.routers.detection._cached_detect_traffic_sign', new_callable=AsyncMock) as mock_detect:
-        mock_detect.return_value = [{"label": "damaged traffic sign", "score": 0.95}]
+    with patch('backend.utils.validate_uploaded_file'):
         response = client.post(
             "/api/detect-traffic-sign",
             files={"image": ("sign.jpg", img_bytes, "image/jpeg")}
@@ -98,8 +97,7 @@ async def test_detect_traffic_sign_clear(client):
 
     img_bytes = create_test_image()
 
-    with patch('backend.routers.detection._cached_detect_traffic_sign', new_callable=AsyncMock) as mock_detect:
-        mock_detect.return_value = []
+    with patch('backend.utils.validate_uploaded_file'):
         response = client.post(
             "/api/detect-traffic-sign",
             files={"image": ("sign.jpg", img_bytes, "image/jpeg")}
@@ -123,8 +121,7 @@ async def test_detect_abandoned_vehicle_found(client):
 
     img_bytes = create_test_image()
 
-    with patch('backend.routers.detection._cached_detect_abandoned_vehicle', new_callable=AsyncMock) as mock_detect:
-        mock_detect.return_value = [{"label": "abandoned car", "score": 0.92}]
+    with patch('backend.utils.validate_uploaded_file'):
         response = client.post(
             "/api/detect-abandoned-vehicle",
             files={"image": ("car.jpg", img_bytes, "image/jpeg")}
