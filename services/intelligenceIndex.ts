@@ -1,78 +1,98 @@
-import { Issue, DailySnapshot } from './types';
 import * as fs from 'fs';
 import * as path from 'path';
 
+export interface DailySnapshot {
+    date: string;
+    civicIntelligenceIndex: number;
+    delta: number;
+    topEmergingConcern: string | null;
+    highestSeverityRegion: string | null;
+    topKeywords: string[];
+}
+
 export class IntelligenceIndex {
-  private snapshotsDir: string;
+    private snapshotsDir: string;
 
-  constructor(snapshotsDir: string = path.join(__dirname, '../data/dailySnapshots')) {
-    this.snapshotsDir = snapshotsDir;
-    if (!fs.existsSync(this.snapshotsDir)) {
-      fs.mkdirSync(this.snapshotsDir, { recursive: true });
+    constructor() {
+        this.snapshotsDir = process.env.SNAPSHOTS_DIR || path.resolve(__dirname, '../data/dailySnapshots');
+        if (!fs.existsSync(this.snapshotsDir)) {
+            fs.mkdirSync(this.snapshotsDir, { recursive: true });
+        }
     }
-  }
 
-  public generateIndex(
-    issues: Issue[],
-    topKeywords: string[],
-    spikes: Array<{ category: string; increasePercentage: number }>,
-    highestSeverityRegion?: { latitude: number; longitude: number; count: number }
-  ): DailySnapshot {
-    let indexScore = 50.0; // Baseline
+    calculateIndexScore(categorySpikes: Record<string, number>, topKeywordsCount: number): number {
+        // Base score: 50
+        // More spikes = lower intelligence (system overwhelmed)
+        // Less spikes / more resolved = higher intelligence
 
-    // Logic for index calculation
-    // - High number of resolved issues -> higher index
-    // - High number of spikes -> lower index
-    // - Reward system for keywords and clustering detection (active platform)
+        let score = 50.0;
+        let spikePenalty = 0;
 
-    const resolvedCount = issues.filter(i => i.status === 'resolved').length;
-    const activeCount = issues.length - resolvedCount;
+        for (const spikeValue of Object.values(categorySpikes)) {
+            spikePenalty += (spikeValue / 100) * 2; // E.g., 50% spike -> -1, 200% spike -> -4
+        }
 
-    // A higher resolution rate boosts the score, large spikes penalize it
-    const resolutionRatio = issues.length > 0 ? (resolvedCount / issues.length) * 10 : 0;
+        score -= Math.min(20, spikePenalty);
 
-    indexScore += resolutionRatio; // Boost for resolutions
-    indexScore -= spikes.length * 1.5; // Penalty for sudden unhandled spikes
-    indexScore += topKeywords.length * 0.5; // Small reward for rich descriptions
+        // Add minimal reward for maintaining low active spikes
+        if (spikePenalty === 0 && topKeywordsCount > 0) {
+            score += 2;
+        }
 
-    // Normalize score to 0-100
-    indexScore = Math.max(0, Math.min(100, indexScore));
-
-    const todayDate = new Date().toISOString().split('T')[0];
-    const previousScore = this.getPreviousIndexScore(todayDate);
-    const delta = parseFloat((indexScore - previousScore).toFixed(1));
-
-    const snapshot: DailySnapshot = {
-      date: todayDate,
-      indexScore: parseFloat(indexScore.toFixed(1)),
-      delta,
-      topKeywords,
-      emergingConcerns: spikes.slice(0, 3), // Keep top 3 spikes as emerging concerns
-      highestSeverityRegion
-    };
-
-    return snapshot;
-  }
-
-  public saveSnapshot(snapshot: DailySnapshot): void {
-    const filePath = path.join(this.snapshotsDir, `${snapshot.date}.json`);
-    fs.writeFileSync(filePath, JSON.stringify(snapshot, null, 2), 'utf-8');
-  }
-
-  private getPreviousIndexScore(todayDate: string): number {
-    const files = fs.readdirSync(this.snapshotsDir)
-      .filter(f => f.endsWith('.json') && f !== `${todayDate}.json`)
-      .sort((a, b) => b.localeCompare(a)); // Sort descending
-
-    if (files.length > 0) {
-      const prevData = fs.readFileSync(path.join(this.snapshotsDir, files[0]), 'utf-8');
-      try {
-         const parsed = JSON.parse(prevData) as DailySnapshot;
-         return parsed.indexScore || 50.0;
-      } catch(e) {
-          return 50.0;
-      }
+        // Cap score
+        return Math.max(0, Math.min(100, Number(score.toFixed(1))));
     }
-    return 50.0; // Default baseline if no previous day
-  }
+
+    generateSnapshot(
+        categorySpikes: Record<string, number>,
+        topKeywords: string[],
+        highestSeverityRegion: string | null
+    ): DailySnapshot {
+        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+
+        let topEmergingConcern: string | null = null;
+        let maxSpike = 0;
+        for (const [category, spike] of Object.entries(categorySpikes)) {
+            if (spike > maxSpike) {
+                maxSpike = spike;
+                topEmergingConcern = category;
+            }
+        }
+
+        const score = this.calculateIndexScore(categorySpikes, topKeywords.length);
+
+        // Find yesterday's snapshot to calculate delta
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayFile = path.join(this.snapshotsDir, `${yesterday.toISOString().split('T')[0]}.json`);
+
+        let delta = 0;
+        if (fs.existsSync(yesterdayFile)) {
+            try {
+                const pastData: DailySnapshot = JSON.parse(fs.readFileSync(yesterdayFile, 'utf8'));
+                delta = Number((score - pastData.civicIntelligenceIndex).toFixed(1));
+            } catch (err) {
+                console.error("Failed to parse yesterday's snapshot", err);
+            }
+        } else {
+            // First time running, just default to positive base
+            delta = Number((score - 50.0).toFixed(1));
+        }
+
+        const snapshot: DailySnapshot = {
+            date: today,
+            civicIntelligenceIndex: score,
+            delta,
+            topEmergingConcern,
+            highestSeverityRegion,
+            topKeywords
+        };
+
+        return snapshot;
+    }
+
+    saveSnapshot(snapshot: DailySnapshot) {
+        const filePath = path.join(this.snapshotsDir, `${snapshot.date}.json`);
+        fs.writeFileSync(filePath, JSON.stringify(snapshot, null, 2));
+    }
 }
