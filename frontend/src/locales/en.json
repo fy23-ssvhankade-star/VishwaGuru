@@ -39,15 +39,9 @@
       "crowd": "Crowd",
       "waterLeak": "Water Leak",
       "waste": "Waste Sorter",
-      "publicFacilities": "Public Facilities",
-      "constructionSafety": "Construction Safety",
       "civicEye": "Civic Eye",
       "myReports": "My Reports",
-      "analyzeGrievance": "Analyze Grievance",
-      "airQuality": "Air Quality",
-      "playground": "Playground",
-      "publicTransport": "Public Transport",
-      "cleanliness": "Cleanliness"
+      "analyzeGrievance": "Analyze Grievance"
     },
     "tools": {
       "whoIsResponsible": "Who is Responsible?",

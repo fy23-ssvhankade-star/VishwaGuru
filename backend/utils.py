@@ -21,8 +21,7 @@ HAS_MAGIC = False
 try:
     import magic
     HAS_MAGIC = True
-except (ImportError, OSError):
-    # OSError can happen if libmagic system library is missing even if python-magic is installed
+except ImportError:
     HAS_MAGIC = False
 
 logger = logging.getLogger(__name__)
@@ -198,9 +197,8 @@ def process_uploaded_image_sync(file: UploadFile) -> tuple[Image.Image, bytes]:
             img = img.resize((new_width, new_height), Image.Resampling.BILINEAR)
 
         # Strip EXIF
-        # Optimization: Clear info dictionary in-place instead of creating new image and copying pixels
-        img.info.clear()
-        img_no_exif = img
+        img_no_exif = Image.new(img.mode, img.size)
+        img_no_exif.paste(img)
 
         # Save to BytesIO
         output = io.BytesIO()
@@ -211,10 +209,10 @@ def process_uploaded_image_sync(file: UploadFile) -> tuple[Image.Image, bytes]:
         else:
             fmt = 'PNG' if img.mode == 'RGBA' else 'JPEG'
 
-        img.save(output, format=fmt, quality=85)
+        img_no_exif.save(output, format=fmt, quality=85)
         img_bytes = output.getvalue()
 
-        return img, img_bytes
+        return img_no_exif, img_bytes
 
     except Exception as pil_error:
         logger.error(f"PIL processing failed: {pil_error}")

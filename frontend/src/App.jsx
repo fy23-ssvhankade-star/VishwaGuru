@@ -60,9 +60,10 @@ import AdminDashboard from './views/AdminDashboard';
 
 // Create a wrapper component to handle state management
 function AppContent() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, loading: authLoading } = useAuth();
+  const { isDarkMode } = useDarkMode();
   const [responsibilityMap, setResponsibilityMap] = useState(null);
   const [stats, setStats] = useState({ total_issues: 0, resolved_issues: 0, pending_issues: 0 });
   const [actionPlan, setActionPlan] = useState(null);
@@ -188,17 +189,11 @@ function AppContent() {
 
   // Otherwise render the main app layout
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-gray-50 via-blue-50/30 to-gray-100 dark:from-gray-950 dark:via-blue-950/30 dark:to-gray-900 text-gray-900 dark:text-gray-100 font-sans transition-colors duration-300 bg-fixed">
-      {/* Animated background elements - Optimized for performance */}
-      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
-        <div
-          className="absolute top-1/4 left-1/4 w-72 h-72 bg-orange-300/10 dark:bg-orange-300/5 rounded-full blur-3xl animate-pulse-slow transition-colors duration-300"
-          style={{ willChange: 'opacity' }}
-        ></div>
-        <div
-          className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-300/10 dark:bg-blue-300/5 rounded-full blur-3xl animate-pulse-slow animation-delay-1000 transition-colors duration-300"
-          style={{ willChange: 'opacity' }}
-        ></div>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50/30 to-gray-100 dark:from-gray-950 dark:via-blue-950/30 dark:to-gray-900 text-gray-900 dark:text-gray-100 font-sans overflow-hidden transition-colors duration-300">
+      {/* Animated background elements */}
+      <div className="fixed inset-0 z-0 pointer-events-none">
+        <div className="absolute top-1/4 left-1/4 w-72 h-72 bg-orange-300/10 dark:bg-orange-300/5 rounded-full blur-3xl animate-pulse-slow transition-colors duration-300"></div>
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-300/10 dark:bg-blue-300/5 rounded-full blur-3xl animate-pulse-slow animation-delay-1000 transition-colors duration-300"></div>
       </div>
 
       <FloatingButtonsManager setView={navigateToView} />
@@ -206,23 +201,6 @@ function AppContent() {
       <div className="relative z-10 flex flex-col w-full">
         <AppHeader />
 
-        <main className="flex-grow">
-          <Suspense fallback={
-            <div className="flex justify-center my-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
-            </div>
-          }>
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route path="/signup" element={<Login initialIsLogin={false} />} />
-              <Route
-                path="/admin/dashboard"
-                element={
-                  <ProtectedRoute allowedRoles={['admin']}>
-                    <AdminDashboard />
-                  </ProtectedRoute>
-                }
-              />
 
         <Suspense fallback={
           <div className="flex justify-center my-8">

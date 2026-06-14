@@ -7,9 +7,11 @@ python-multipart
 psycopg2-binary
 async-lru
 httpx
-python-magic
 pywebpush
 Pillow
+firebase-functions
+firebase-admin
+a2wsgi
 python-jose[cryptography]
 passlib[bcrypt]
 bcrypt<4.0.0
