@@ -106,7 +106,7 @@ async def create_issue(
             min_lat, max_lat, min_lon, max_lon = get_bounding_box(latitude, longitude, 50.0)
 
             # Performance Boost: Use column projection to avoid loading full model instances
-            # Fix: Added category filter to prevent false positives across different categories (Issue #DEDUP-001)
+            # Optimization: Limit to 100 to prevent loading too many issues in dense areas
             open_issues = await run_in_threadpool(
                 lambda: db.query(
                     Issue.id,
@@ -124,7 +124,7 @@ async def create_issue(
                     Issue.latitude <= max_lat,
                     Issue.longitude >= min_lon,
                     Issue.longitude <= max_lon
-                ).order_by(Issue.created_at.desc()).limit(100).all()
+                ).limit(100).all()
             )
 
             nearby_issues_with_distance = find_nearby_issues(
@@ -336,6 +336,7 @@ def get_nearby_issues(
         min_lat, max_lat, min_lon, max_lon = get_bounding_box(latitude, longitude, radius)
 
         # Performance Boost: Use column projection to avoid loading full model instances
+        # Optimization: Limit to 100 to prevent loading too many issues in dense areas
         open_issues = db.query(
             Issue.id,
             Issue.description,
@@ -351,7 +352,7 @@ def get_nearby_issues(
             Issue.latitude <= max_lat,
             Issue.longitude >= min_lon,
             Issue.longitude <= max_lon
-        ).order_by(Issue.created_at.desc()).limit(100).all()
+        ).limit(100).all()
 
         nearby_issues_with_distance = find_nearby_issues(
             open_issues, latitude, longitude, radius_meters=radius
