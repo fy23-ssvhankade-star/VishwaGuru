@@ -34,6 +34,12 @@ const SmartScanner = React.lazy(() => import('./SmartScanner'));
 const GrievanceAnalysis = React.lazy(() => import('./views/GrievanceAnalysis'));
 const NoiseDetector = React.lazy(() => import('./NoiseDetector'));
 const CivicEyeDetector = React.lazy(() => import('./CivicEyeDetector'));
+const WasteDetector = React.lazy(() => import('./WasteDetector'));
+const WaterLeakDetector = React.lazy(() => import('./WaterLeakDetector'));
+const CrowdDetector = React.lazy(() => import('./CrowdDetector'));
+const AccessibilityDetector = React.lazy(() => import('./AccessibilityDetector'));
+const TrafficSignDetector = React.lazy(() => import('./TrafficSignDetector'));
+const AbandonedVehicleDetector = React.lazy(() => import('./AbandonedVehicleDetector'));
 const MyReportsView = React.lazy(() => import('./views/MyReportsView'));
 
 
@@ -42,6 +48,9 @@ import { AuthProvider } from './contexts/AuthContext';
 import Login from './views/Login';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminDashboard from './views/AdminDashboard';
+import AppHeader from './components/AppHeader';
+import FloatingButtonsManager from './components/FloatingButtonsManager';
+import LoadingSpinner from './components/LoadingSpinner';
 
 // Create a wrapper component to handle state management
 function AppContent() {
@@ -61,12 +70,12 @@ function AppContent() {
 
   // Safe navigation helper
   const navigateToView = useCallback((view) => {
-    const validViews = ['home', 'map', 'report', 'action', 'mh-rep', 'pothole', 'garbage', 'vandalism', 'flood', 'infrastructure', 'parking', 'streetlight', 'fire', 'animal', 'blocked', 'tree', 'pest', 'smart-scan', 'grievance-analysis', 'noise', 'safety-check', 'my-reports', 'login', 'signup'];
+    const validViews = ['home', 'map', 'report', 'action', 'mh-rep', 'pothole', 'garbage', 'vandalism', 'flood', 'infrastructure', 'parking', 'streetlight', 'fire', 'animal', 'blocked', 'tree', 'pest', 'smart-scan', 'grievance-analysis', 'noise', 'safety-check', 'my-reports', 'waste', 'water-leak', 'crowd', 'accessibility', 'traffic-sign', 'abandoned-vehicle', 'login', 'signup'];
     if (validViews.includes(view)) {
-      navigate(view === 'home' ? '/' : `/${view}`);
+      navigate(view === 'home' ? '/home' : `/${view}`);
     } else {
       console.warn(`Attempted to navigate to invalid view: ${view}`);
-      navigate('/');
+      navigate('/home');
     }
   }, [navigate]);
 
@@ -193,7 +202,7 @@ function AppContent() {
             />
 
             <Route
-              path="/"
+              path="/home"
               element={
                 <Home
                   setView={navigateToView}
@@ -290,6 +299,12 @@ function AppContent() {
             <Route path="/smart-scan" element={<SmartScanner onBack={() => navigate('/')} />} />
             <Route path="/grievance-analysis" element={<GrievanceAnalysis onBack={() => navigate('/')} />} />
             <Route path="/noise" element={<NoiseDetector onBack={() => navigate('/')} />} />
+            <Route path="/waste" element={<WasteDetector onBack={() => navigate('/')} />} />
+            <Route path="/water-leak" element={<WaterLeakDetector onBack={() => navigate('/')} />} />
+            <Route path="/crowd" element={<CrowdDetector onBack={() => navigate('/')} />} />
+            <Route path="/accessibility" element={<AccessibilityDetector onBack={() => navigate('/')} />} />
+            <Route path="/traffic-sign" element={<TrafficSignDetector onBack={() => navigate('/')} />} />
+            <Route path="/abandoned-vehicle" element={<AbandonedVehicleDetector onBack={() => navigate('/')} />} />
             <Route path="/safety-check" element={
               <div className="flex flex-col h-full p-4">
                 <button onClick={() => navigate('/')} className="self-start text-blue-600 mb-2 font-bold">
