@@ -1,0 +1,57 @@
+name: Automated CI/CD Pipeline
+
+on:
+  schedule:
+    # Trigger at 2 AM UTC daily
+    - cron: '0 2 * * *'
+  # Allow manual triggering
+  workflow_dispatch:
+
+jobs:
+  auto-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository with full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Required for full git history and local syncs
+
+      - name: Setup Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests python-dotenv
+
+      - name: Execute VishwaGuru Pipeline (PR Review, Merge, Test, Deploy)
+        env:
+          # Use GITHUB_TOKEN provided by GitHub Actions for API calls
+          GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+          LOCAL_REPO_PATH: ${{ github.workspace }}
+          DEPLOYMENT_PORT: 8000
+        run: |
+          python vishwaguru_pipeline.py
+
+      - name: Upload Pipeline Logs and Report
+        if: always() # Ensure logs are uploaded even if pipeline fails
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-execution-logs
+          path: |
+            pipeline_execution.log
+            pipeline_report.json
+            
+      - name: Send Slack Notification on Failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          payload: |
+            {
+              "text": "🚨 *VishwaGuru Auto-Deploy Pipeline Failed!*\nCheck the logs for security violations or test failures: <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Pipeline Run>"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }} # Requires configuring SLACK_WEBHOOK_URL in repository secrets
