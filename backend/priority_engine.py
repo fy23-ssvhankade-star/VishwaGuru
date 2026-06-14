@@ -13,9 +13,7 @@ class PriorityEngine:
     def __init__(self):
         # We no longer hardcode values here.
         # They are fetched dynamically from AdaptiveWeights on each analysis.
-        # Cache compiled regular expressions to avoid recompiling every analysis
-        self._compiled_urgency_patterns: List[tuple] = []
-        self._last_weights_update_time: float = 0.0
+        pass
 
     def analyze(self, text: str, image_labels: Optional[List[str]] = None) -> Dict[str, Any]:
         """
@@ -118,23 +116,13 @@ class PriorityEngine:
         urgency = severity_score
         reasons = []
 
-        # ⚡ Bolt Optimization: Cache compiled regular expressions for urgency patterns.
-        # Instead of calling re.search(pattern, text) on raw strings every time,
-        # we precompile them and reuse the compiled regex objects.
-        # This skips Python's internal LRU regex caching overhead, boosting performance by ~50% in hot paths.
-        current_weights_time = adaptive_weights.last_loaded_time
-
-        if not self._compiled_urgency_patterns or self._last_weights_update_time < current_weights_time:
-            urgency_patterns = adaptive_weights.get_urgency_patterns()
-            self._compiled_urgency_patterns = [(re.compile(pattern), weight) for pattern, weight in urgency_patterns]
-            # Capture the exact time *after* reloading to prevent race conditions or off-by-one tick updates
-            self._last_weights_update_time = adaptive_weights.last_loaded_time
+        urgency_patterns = adaptive_weights.get_urgency_patterns()
 
         # Apply regex modifiers
-        for compiled_pattern, weight in self._compiled_urgency_patterns:
-            if compiled_pattern.search(text):
+        for pattern, weight in urgency_patterns:
+            if re.search(pattern, text):
                 urgency += weight
-                reasons.append(f"Urgency increased by context matching pattern: '{compiled_pattern.pattern}'")
+                reasons.append(f"Urgency increased by context matching pattern: '{pattern}'")
 
         # Cap at 100
         urgency = min(100, urgency)
