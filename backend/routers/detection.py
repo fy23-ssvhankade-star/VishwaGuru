@@ -468,8 +468,8 @@ async def detect_abandoned_vehicle_endpoint(image: UploadFile = File(...)):
 
 @router.post("/detect-emotion")
 async def detect_emotion_endpoint(
-    request: Request,
-    image: UploadFile = File(...)
+    image: UploadFile = File(...),
+    client = backend.dependencies.Depends(get_http_client)
 ):
     """
     Analyze facial emotions in the image using Hugging Face inference.

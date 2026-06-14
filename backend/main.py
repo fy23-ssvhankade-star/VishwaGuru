@@ -3,6 +3,15 @@ import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
+# Fix for googletrans compatibility with newer httpcore (Issue #290)
+# This monkeypatch must happen before any imports of googletrans or httpx
+try:
+    import httpcore
+    if not hasattr(httpcore, "SyncHTTPTransport"):
+        httpcore.SyncHTTPTransport = object
+except ImportError:
+    pass
+
 load_dotenv()
 
 # Add project root to sys.path to ensure 'backend.*' imports work
@@ -85,9 +94,10 @@ async def lifespan(app: FastAPI):
         logger.info("Starting database initialization...")
         await run_in_threadpool(Base.metadata.create_all, bind=engine)
         logger.info("Base.metadata.create_all completed.")
-        # Temporarily disabled - comment out to debug startup issues
-        # await run_in_threadpool(migrate_db)
-        logger.info("Database initialized successfully (migrations skipped for local dev).")
+
+        # Run migrations to ensure schema is up-to-date (Issue #290)
+        await run_in_threadpool(migrate_db)
+        logger.info("Database initialized and migrations applied successfully.")
     except Exception as e:
         logger.error(f"Database initialization failed: {e}", exc_info=True)
         # We continue to allow health checks even if DB has issues (for debugging)

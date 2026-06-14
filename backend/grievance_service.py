@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, joinedload
 from datetime import datetime, timezone, timedelta
 
 from backend.models import Grievance, Jurisdiction, GrievanceStatus, SeverityLevel, Issue
+from backend.cache import grievance_last_hash_cache
 from backend.database import SessionLocal
 from backend.routing_service import RoutingService
 from backend.sla_config_service import SLAConfigService
@@ -86,32 +87,16 @@ class GrievanceService:
             # Generate unique ID
             unique_id = str(uuid.uuid4())[:8].upper()
 
-            # Blockchain integrity logic
-            # We cache both the last grievance ID and its integrity hash, and validate
-            # the cache against the current DB state to avoid chaining to stale hashes
-            cached_prev_hash = grievance_last_hash_cache.get("last_hash")
-            cached_last_id = grievance_last_hash_cache.get("last_id")
-
-            # Always check the actual last grievance in the DB
-            last_grievance = db.query(Grievance.id, Grievance.integrity_hash).order_by(Grievance.id.desc()).first()
-            if last_grievance:
-                db_last_id, db_last_hash = last_grievance
-            else:
-                db_last_id, db_last_hash = None, ""
-
-            # If cache is missing or inconsistent with DB, refresh from DB
-            if (
-                cached_prev_hash is None
-                or cached_last_id != db_last_id
-                or cached_prev_hash != db_last_hash
-            ):
-                prev_hash = db_last_hash or ""
+            # Blockchain chaining logic (Issue #290 optimization)
+            # Performance Boost: Use thread-safe cache to eliminate DB query for last hash
+            prev_hash = grievance_last_hash_cache.get("last_hash")
+            if prev_hash is None:
+                # Cache miss: Fetch only the last hash from DB
+                prev_grievance = db.query(Grievance.integrity_hash).order_by(Grievance.id.desc()).first()
+                prev_hash = prev_grievance[0] if prev_grievance and prev_grievance[0] else ""
                 grievance_last_hash_cache.set(data=prev_hash, key="last_hash")
-                grievance_last_hash_cache.set(data=db_last_id, key="last_id")
-            else:
-                prev_hash = cached_prev_hash or ""
 
-            # Chaining: hash(unique_id|category|severity|prev_hash)
+            # SHA-256 chaining based on key grievance fields
             hash_content = f"{unique_id}|{grievance_data.get('category', 'general')}|{severity.value}|{prev_hash}"
             integrity_hash = hashlib.sha256(hash_content.encode()).hexdigest()
 
@@ -144,6 +129,10 @@ class GrievanceService:
 
             db.add(grievance)
             db.commit()
+
+            # Update cache for next grievance only AFTER successful commit (Issue #290 optimization)
+            grievance_last_hash_cache.set(data=integrity_hash, key="last_hash")
+
             db.refresh(grievance)
 
             # Update cache after successful commit

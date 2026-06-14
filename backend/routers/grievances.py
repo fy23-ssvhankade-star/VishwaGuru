@@ -16,8 +16,7 @@ from backend.schemas import (
     FollowGrievanceRequest, FollowGrievanceResponse,
     RequestClosureRequest, RequestClosureResponse,
     ConfirmClosureRequest, ConfirmClosureResponse,
-    ClosureStatusResponse,
-    BlockchainVerificationResponse
+    ClosureStatusResponse, GrievanceBlockchainVerificationResponse
 )
 from backend.grievance_service import GrievanceService
 from backend.closure_service import ClosureService
@@ -441,58 +440,50 @@ def get_closure_status(
         raise HTTPException(status_code=500, detail="Failed to get closure status")
 
 
-@router.get("/grievances/{grievance_id}/blockchain-verify", response_model=BlockchainVerificationResponse)
-def verify_grievance_blockchain(
-    grievance_id: int,
-    db: Session = Depends(get_db)
-):
+@router.get("/grievances/{grievance_id}/blockchain-verify", response_model=GrievanceBlockchainVerificationResponse)
+def verify_grievance_blockchain(grievance_id: int, db: Session = Depends(get_db)):
     """
     Verify the cryptographic integrity of a grievance using blockchain-style chaining.
     Optimized: Uses previous_integrity_hash column for O(1) verification.
     """
-    try:
-        grievance = db.query(
-            Grievance.unique_id,
-            Grievance.category,
-            Grievance.severity,
-            Grievance.integrity_hash,
-            Grievance.previous_integrity_hash
-        ).filter(Grievance.id == grievance_id).first()
+    # Fetch current grievance data including the link to previous hash
+    # Performance Boost: Use projected previous_integrity_hash to avoid N+1 or secondary lookups
+    grievance = db.query(
+        Grievance.id,
+        Grievance.unique_id,
+        Grievance.category,
+        Grievance.severity,
+        Grievance.integrity_hash,
+        Grievance.previous_integrity_hash
+    ).filter(Grievance.id == grievance_id).first()
 
-        if not grievance:
-            raise HTTPException(status_code=404, detail="Grievance not found")
+    if not grievance:
+        raise HTTPException(status_code=404, detail="Grievance not found")
 
-        # Determine previous hash (O(1) from stored column)
-        prev_hash = grievance.previous_integrity_hash or ""
+    # Determine previous hash (use stored link or fallback for legacy records)
+    prev_hash = grievance.previous_integrity_hash
 
-        # Recompute hash based on current data and previous hash
-        # Chaining logic: hash(unique_id|category|severity|prev_hash)
-        severity_value = grievance.severity.value if hasattr(grievance.severity, 'value') else grievance.severity
-        hash_content = f"{grievance.unique_id}|{grievance.category}|{severity_value}|{prev_hash}"
-        computed_hash = hashlib.sha256(hash_content.encode()).hexdigest()
+    if prev_hash is None:
+        # Fallback for legacy records created before O(1) optimization
+        prev_grievance_hash = db.query(Grievance.integrity_hash).filter(Grievance.id < grievance_id).order_by(Grievance.id.desc()).first()
+        prev_hash = prev_grievance_hash[0] if prev_grievance_hash and prev_grievance_hash[0] else ""
 
-        if grievance.integrity_hash is None:
-            # Legacy or unsealed grievance: no integrity hash stored, so we cannot verify tampering.
-            is_valid = False
-            message = (
-                "No integrity hash present for this grievance; cryptographic integrity cannot be verified."
-            )
-        else:
-            is_valid = (computed_hash == grievance.integrity_hash)
-            message = (
-                "Integrity verified. This grievance record is cryptographically sealed."
-                if is_valid
-                else "Integrity check failed! The grievance data does not match its cryptographic seal."
-            )
-        return BlockchainVerificationResponse(
-            is_valid=is_valid,
-            current_hash=grievance.integrity_hash,
-            computed_hash=computed_hash,
-            message=message
-        )
+    # Recompute hash based on current data and previous hash
+    # Chaining logic matches grievance_service.py: hash(unique_id|category|severity|prev_hash)
+    severity_value = grievance.severity.value if hasattr(grievance.severity, 'value') else str(grievance.severity)
+    hash_content = f"{grievance.unique_id}|{grievance.category}|{severity_value}|{prev_hash}"
+    computed_hash = hashlib.sha256(hash_content.encode()).hexdigest()
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error verifying grievance blockchain for {grievance_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to verify grievance integrity")
+    is_valid = (computed_hash == grievance.integrity_hash)
+
+    if is_valid:
+        message = "Integrity verified. This grievance is cryptographically sealed and has not been tampered with."
+    else:
+        message = "Integrity check failed! The grievance data does not match its cryptographic seal."
+
+    return GrievanceBlockchainVerificationResponse(
+        is_valid=is_valid,
+        current_hash=grievance.integrity_hash,
+        computed_hash=computed_hash,
+        message=message
+    )
