@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import Webcam from 'react-webcam';
 
-const PublicTransportDetector = ({ onBack }) => {
+const AirQualityDetector = ({ onBack }) => {
   const webcamRef = useRef(null);
   const [imgSrc, setImgSrc] = useState(null);
   const [detections, setDetections] = useState([]);
@@ -18,7 +18,7 @@ const PublicTransportDetector = ({ onBack }) => {
     setDetections([]);
   };
 
-  const detectTransport = async () => {
+  const detectAirQuality = async () => {
     if (!imgSrc) return;
     setLoading(true);
     setDetections([]);
@@ -31,7 +31,7 @@ const PublicTransportDetector = ({ onBack }) => {
         const formData = new FormData();
         formData.append('image', file);
 
-        const response = await fetch('/api/detect-public-transport', {
+        const response = await fetch('/api/detect-air-quality', {
             method: 'POST',
             body: formData,
         });
@@ -40,7 +40,7 @@ const PublicTransportDetector = ({ onBack }) => {
             const data = await response.json();
             setDetections(data.detections);
             if (data.detections.length === 0) {
-                alert("No infrastructure issues detected.");
+                alert("No specific air quality issues detected.");
             }
         } else {
             console.error("Detection failed");
@@ -61,8 +61,8 @@ const PublicTransportDetector = ({ onBack }) => {
           &larr; Back
         </button>
       )}
-      <h2 className="text-2xl font-bold mb-4 text-purple-800">Public Transport Issues</h2>
-      <p className="text-gray-600 mb-4 text-sm">Report damage to bus stops, benches, or stations.</p>
+      <h2 className="text-2xl font-bold mb-4 text-gray-800">Air Quality Monitor</h2>
+      <p className="text-gray-600 mb-4 text-sm">Detect smog, smoke, or pollution haze.</p>
 
       {cameraError ? (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative">
@@ -97,7 +97,7 @@ const PublicTransportDetector = ({ onBack }) => {
           <button
             onClick={capture}
             disabled={!!cameraError}
-            className={`bg-purple-600 text-white px-6 py-3 rounded-full font-semibold shadow-md hover:bg-purple-700 transition w-full ${cameraError ? 'opacity-50 cursor-not-allowed' : ''}`}
+            className={`bg-blue-600 text-white px-6 py-3 rounded-full font-semibold shadow-md hover:bg-blue-700 transition w-full ${cameraError ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             Capture Photo
           </button>
@@ -110,11 +110,11 @@ const PublicTransportDetector = ({ onBack }) => {
               Retake
             </button>
             <button
-              onClick={detectTransport}
+              onClick={detectAirQuality}
               disabled={loading}
               className={`bg-red-600 text-white px-6 py-3 rounded-full font-semibold shadow-md hover:bg-red-700 transition flex-1 flex items-center justify-center ${loading ? 'opacity-70 cursor-wait' : ''}`}
             >
-              {loading ? 'Analyzing...' : 'Report Issue'}
+              {loading ? 'Analyzing...' : 'Analyze Air'}
             </button>
           </>
         )}
@@ -123,4 +123,4 @@ const PublicTransportDetector = ({ onBack }) => {
   );
 };
 
-export default PublicTransportDetector;
+export default AirQualityDetector;

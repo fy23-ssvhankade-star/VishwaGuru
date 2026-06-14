@@ -42,6 +42,10 @@ const PublicTransportDetector = React.lazy(() => import('./PublicTransportDetect
 const CleanlinessDetector = React.lazy(() => import('./CleanlinessDetector'));
 const PlaygroundDetector = React.lazy(() => import('./PlaygroundDetector'));
 const MyReportsView = React.lazy(() => import('./views/MyReportsView'));
+const AirQualityDetector = React.lazy(() => import('./AirQualityDetector'));
+const PlaygroundDetector = React.lazy(() => import('./PlaygroundDetector'));
+const PublicTransportDetector = React.lazy(() => import('./PublicTransportDetector'));
+const CleanlinessDetector = React.lazy(() => import('./CleanlinessDetector'));
 
 
 // Auth Components
@@ -67,7 +71,12 @@ function AppContent() {
 
   // Safe navigation helper
   const navigateToView = useCallback((view) => {
-    const validViews = ['home', 'map', 'report', 'action', 'mh-rep', 'pothole', 'garbage', 'vandalism', 'flood', 'infrastructure', 'parking', 'streetlight', 'fire', 'animal', 'blocked', 'tree', 'pest', 'smart-scan', 'grievance-analysis', 'noise', 'safety-check', 'public-transport', 'cleanliness', 'playground', 'my-reports', 'grievance', 'login', 'signup'];
+    const validViews = [
+      'home', 'map', 'report', 'action', 'mh-rep', 'pothole', 'garbage', 'vandalism', 'flood',
+      'infrastructure', 'parking', 'streetlight', 'fire', 'animal', 'blocked', 'tree', 'pest',
+      'smart-scan', 'grievance-analysis', 'noise', 'safety-check', 'my-reports', 'grievance',
+      'login', 'signup', 'air-quality', 'playground', 'public-transport', 'cleanliness'
+    ];
     if (validViews.includes(view)) {
       navigate(view === 'home' ? '/' : `/${view}`);
     } else {
@@ -335,9 +344,10 @@ function AppContent() {
               <Route path="/smart-scan" element={<SmartScanner onBack={() => navigate('/')} />} />
               <Route path="/grievance-analysis" element={<GrievanceAnalysis onBack={() => navigate('/')} />} />
               <Route path="/noise" element={<NoiseDetector onBack={() => navigate('/')} />} />
+              <Route path="/air-quality" element={<AirQualityDetector onBack={() => navigate('/')} />} />
+              <Route path="/playground" element={<PlaygroundDetector onBack={() => navigate('/')} />} />
               <Route path="/public-transport" element={<PublicTransportDetector onBack={() => navigate('/')} />} />
               <Route path="/cleanliness" element={<CleanlinessDetector onBack={() => navigate('/')} />} />
-              <Route path="/playground" element={<PlaygroundDetector onBack={() => navigate('/')} />} />
               <Route path="/safety-check" element={
                 <div className="flex flex-col h-full p-4">
                   <button onClick={() => navigate('/')} className="self-start text-blue-600 mb-2 font-bold">

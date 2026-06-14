@@ -7,7 +7,7 @@ import {
   Droplets, Zap, Truck, Flame, Dog, XCircle, Lightbulb, TreeDeciduous, Bug,
   Scan, ChevronRight, LayoutGrid, Shield, Leaf, Building, CheckCircle, Trophy, Monitor,
   Volume2, Users, Waves, Accessibility, Siren, Recycle, Eye, ChevronUp, Signpost, Car,
-  Bus, Sparkles, ShieldCheck
+  Wind, Smile, Bus, Sparkles
 } from 'lucide-react';
 
 const CameraCheckModal = ({ onClose }) => {
@@ -84,12 +84,16 @@ const Home = ({ setView, fetchResponsibilityMap, recentIssues, handleUpvote, loa
         { id: 'streetlight', label: t('home.issues.darkStreet'), icon: <Lightbulb size={24} />, color: 'text-slate-600', bg: 'bg-slate-50' },
         { id: 'traffic-sign', label: t('home.issues.trafficSign'), icon: <Signpost size={24} />, color: 'text-yellow-600', bg: 'bg-yellow-50' },
         { id: 'abandoned-vehicle', label: t('home.issues.abandonedVehicle'), icon: <Car size={24} />, color: 'text-gray-600', bg: 'bg-gray-50' },
+        { id: 'public-transport', label: t('home.issues.publicTransport'), icon: <Bus size={24} />, color: 'text-blue-600', bg: 'bg-blue-50' },
       ]
     },
     {
       title: t('home.categories.environmentSafety'),
       icon: <Leaf size={20} className="text-green-600" />,
       items: [
+        { id: 'air-quality', label: t('home.issues.airQuality'), icon: <Wind size={24} />, color: 'text-sky-600', bg: 'bg-sky-50' },
+        { id: 'playground', label: t('home.issues.playground'), icon: <Smile size={24} />, color: 'text-pink-600', bg: 'bg-pink-50' },
+        { id: 'cleanliness', label: t('home.issues.cleanliness'), icon: <Sparkles size={24} />, color: 'text-emerald-600', bg: 'bg-emerald-50' },
         { id: 'garbage', label: t('home.issues.garbage'), icon: <Trash2 size={24} />, color: 'text-orange-600', bg: 'bg-orange-50' },
         { id: 'flood', label: t('home.issues.flood'), icon: <Droplets size={24} />, color: 'text-cyan-600', bg: 'bg-cyan-50' },
         { id: 'fire', label: t('home.issues.fireSmoke'), icon: <Flame size={24} />, color: 'text-red-600', bg: 'bg-red-50' },

@@ -457,26 +457,34 @@ async def detect_abandoned_vehicle_clip(image: Union[Image.Image, bytes], client
     targets = ["abandoned car", "rusted vehicle", "car with flat tires", "wrecked car"]
     return await _detect_clip_generic(image, labels, targets, client)
 
-async def detect_public_transport_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
+async def detect_air_quality_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
     """
-    Detects issues at public transport stops (bus/train).
+    Detects air quality conditions like smog or smoke.
     """
-    labels = ["damaged bus stop", "broken glass", "graffiti on shelter", "missing schedule", "clean bus stop", "safe waiting area"]
-    targets = ["damaged bus stop", "broken glass", "graffiti on shelter", "missing schedule"]
-    return await _detect_clip_generic(image, labels, targets, client)
-
-async def detect_cleanliness_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
-    """
-    Detects general cleanliness issues.
-    """
-    labels = ["garbage overflow", "littered street", "dirty wall", "spilled liquid", "clean area", "spotless"]
-    targets = ["garbage overflow", "littered street", "dirty wall", "spilled liquid"]
+    labels = ["smog", "clear sky", "heavy pollution", "smoke", "haze"]
+    targets = ["smog", "heavy pollution", "smoke", "haze"]
     return await _detect_clip_generic(image, labels, targets, client)
 
 async def detect_playground_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
     """
-    Detects playground safety issues.
+    Detects safety hazards in playgrounds.
     """
-    labels = ["rusted slide", "broken swing", "damaged equipment", "unsafe surface", "safe playground", "children playing"]
-    targets = ["rusted slide", "broken swing", "damaged equipment", "unsafe surface"]
+    labels = ["broken swing", "damaged slide", "safe playground", "rusted equipment", "littered playground"]
+    targets = ["broken swing", "damaged slide", "rusted equipment", "littered playground"]
+    return await _detect_clip_generic(image, labels, targets, client)
+
+async def detect_public_transport_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
+    """
+    Detects issues with public transport infrastructure.
+    """
+    labels = ["damaged bus stop", "graffiti on bus stop", "broken bench", "clean bus stop", "missing schedule", "damaged train station"]
+    targets = ["damaged bus stop", "graffiti on bus stop", "broken bench", "missing schedule", "damaged train station"]
+    return await _detect_clip_generic(image, labels, targets, client)
+
+async def detect_cleanliness_verification_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
+    """
+    Verifies cleanliness of a street or area.
+    """
+    labels = ["clean street", "dirty street", "litter", "garbage", "swept sidewalk", "trash overflow"]
+    targets = ["dirty street", "litter", "garbage", "trash overflow"]
     return await _detect_clip_generic(image, labels, targets, client)
