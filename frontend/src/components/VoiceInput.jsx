@@ -5,12 +5,11 @@ const VoiceInput = ({ onTranscript, language = 'en' }) => {
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef(null);
   const [error, setError] = useState(null);
-  // Initialize state based on window availability to avoid useEffect setState
+
+  // Use lazy initialization for support check
   const [isSupported] = useState(() => {
-      if (typeof window !== 'undefined') {
-          return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
-      }
-      return false;
+    if (typeof window === 'undefined') return false;
+    return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
   });
 
   const getLanguageCode = (lang) => {

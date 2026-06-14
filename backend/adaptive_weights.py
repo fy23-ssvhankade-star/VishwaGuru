@@ -12,7 +12,6 @@ class AdaptiveWeights:
     _instance = None
     _weights = None
     _last_loaded = 0
-    _last_checked = 0
 
     def __new__(cls):
         if cls._instance is None:
@@ -41,12 +40,8 @@ class AdaptiveWeights:
                 self._weights = {}
 
     def _check_reload(self):
-        # Throttle mtime checks to at most once every 5 seconds
-        # This prevents multiple disk I/O operations per request
-        current_time = time.time()
-        if current_time - self._last_checked > 5:
-            self._last_checked = current_time
-            self._load_weights()
+        # Optimization: Checking mtime is fast (stat call).
+        self._load_weights()
 
     def _save_weights(self):
         try:

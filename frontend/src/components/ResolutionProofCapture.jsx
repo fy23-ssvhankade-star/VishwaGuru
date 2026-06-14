@@ -96,14 +96,12 @@ const ResolutionProofCapture = ({ grievanceId, authorityEmail, onEvidenceSubmitt
         const c = 2 * Math.asin(Math.sqrt(a));
         const distance = R * c;
 
-        // Defer state update to avoid synchronous setState inside effect warning
-        setTimeout(() => {
-            setGeofenceStatus({
-                distance: Math.round(distance),
-                isInside: distance <= token.geofence_radius_meters,
-                radius: token.geofence_radius_meters,
-            });
-        }, 0);
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setGeofenceStatus({
+            distance: Math.round(distance),
+            isInside: distance <= token.geofence_radius_meters,
+            radius: token.geofence_radius_meters,
+        });
     }, [token, gpsPosition]);
 
     // SHA-256 hash of file

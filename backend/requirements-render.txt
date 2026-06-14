@@ -14,10 +14,9 @@ firebase-admin
 a2wsgi
 python-jose[cryptography]
 passlib[bcrypt]
-bcrypt
 async_lru
 SpeechRecognition
 pydub
-# Use deep-translator to avoid httpcore version conflicts with python-telegram-bot
-deep-translator
+googletrans==4.0.2
 langdetect
+indic-nlp-library

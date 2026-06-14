@@ -63,29 +63,17 @@ class CivicIntelligenceEngine:
             current_dist = trends.get('category_distribution', {})
 
             spikes = []
-            max_spike_increase = 0.0
-            top_spike_category = None
-
             for category, count in current_dist.items():
                 prev_count = previous_dist.get(category, 0)
-                increase = 0.0
-
-                if prev_count > 0:
+                # Spike definition: > 50% increase AND significant volume (> 5)
+                if prev_count > 0 and count > 5:
                     increase = (count - prev_count) / prev_count
-                    # Spike definition: > 50% increase AND significant volume (> 5)
-                    if count > 5 and increase > 0.5:
+                    if increase > 0.5:
                         spikes.append(category)
                 elif prev_count == 0 and count > 5:
-                     increase = float('inf') # Infinite increase
                      spikes.append(category) # New surge
 
-                # Track the highest spike for "Emerging Concern"
-                if increase > max_spike_increase:
-                    max_spike_increase = increase
-                    top_spike_category = category
-
             trends['spikes'] = spikes
-            trends['top_spike_category'] = top_spike_category
 
             # 3. Adaptive Weight Optimization (Severity)
             # Find manual severity upgrades in the last 24h
@@ -161,7 +149,7 @@ class CivicIntelligenceEngine:
                 })
 
             # 5. Civic Intelligence Index
-            index_data = self._calculate_index(db, issues_24h, trends, previous_snapshot)
+            index_data = self._calculate_index(db, issues_24h, trends)
 
             # 6. Snapshot
             snapshot = {
@@ -188,7 +176,7 @@ class CivicIntelligenceEngine:
         finally:
             db.close()
 
-    def _calculate_index(self, db: Session, issues_24h: List[Issue], trends: Dict[str, Any], previous_snapshot: Dict[str, Any]) -> Dict[str, Any]:
+    def _calculate_index(self, db: Session, issues_24h: List[Issue], trends: Dict[str, Any]) -> Dict[str, Any]:
         """
         Generates a daily 'Civic Intelligence Index' score.
         """
@@ -212,26 +200,12 @@ class CivicIntelligenceEngine:
 
         # Clamp 0-100
         score = max(0.0, min(100.0, score))
-        score = round(score, 1)
-
-        # Calculate Delta
-        previous_index_data = previous_snapshot.get('civic_index', {})
-        previous_score = previous_index_data.get('score')
-
-        score_delta = 0.0
-        if previous_score is not None:
-             score_delta = round(score - previous_score, 1)
 
         # Top emerging concern
-        # Prioritize identified spike, otherwise top volume
-        top_cat = trends.get('top_spike_category')
-
-        if not top_cat:
-            category_dist = trends.get('category_distribution', {})
-            if category_dist:
-                top_cat = max(category_dist, key=category_dist.get)
-            else:
-                top_cat = "None"
+        top_cat = "None"
+        category_dist = trends.get('category_distribution', {})
+        if category_dist:
+            top_cat = max(category_dist, key=category_dist.get)
 
         # Highest severity region (from clusters)
         highest_severity_region = "None"
@@ -244,8 +218,7 @@ class CivicIntelligenceEngine:
             highest_severity_region = f"Lat {top_cluster['latitude']:.4f}, Lon {top_cluster['longitude']:.4f}"
 
         return {
-            "score": score,
-            "score_delta": score_delta,
+            "score": round(score, 1),
             "new_issues_count": total_new,
             "resolved_issues_count": resolved_count,
             "top_emerging_concern": top_cat,

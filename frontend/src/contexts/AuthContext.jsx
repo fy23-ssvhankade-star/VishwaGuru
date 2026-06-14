@@ -28,19 +28,10 @@ export const AuthProvider = ({ children }) => {
                 .finally(() => setLoading(false));
         } else {
             apiClient.removeToken();
-            // Avoid setting state if already false, or use a ref if needed to track mounted status.
-            // However, this is inside useEffect, setting state is standard.
-            // The lint error might be due to unconditional set or dependency cycle?
-            // "Calling setState synchronously within an effect" usually means it's not wrapped in a condition or async?
-            // No, it usually happens if the effect runs immediately and sets state.
-            // Let's wrap in a check or setTimeout if strictly necessary, but standard auth flows often do this.
-            // Actually, let's just make sure we don't loop.
-            if (loading) {
-                // Defer state update to avoid "bad setState" warning/error
-                setTimeout(() => setLoading(false), 0);
-            }
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setLoading(false);
         }
-    }, [token, loading]);
+    }, [token]);
 
     const login = async (email, password) => {
         const data = await authApi.login(email, password);
