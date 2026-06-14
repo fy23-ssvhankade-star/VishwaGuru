@@ -149,10 +149,10 @@ async def validate_uploaded_file(file: UploadFile) -> Optional[Image.Image]:
     """
     return await run_in_threadpool(_validate_uploaded_file_sync, file)
 
-def process_uploaded_image_sync(file: UploadFile) -> io.BytesIO:
+def process_uploaded_image_sync(file: UploadFile):
     """
     Synchronously validate, resize, and strip EXIF from uploaded image.
-    Returns the processed image data as BytesIO.
+    Returns a tuple of (PIL.Image.Image, bytes).
     """
     # Check file size
     file.file.seek(0, 2)
@@ -194,14 +194,14 @@ def process_uploaded_image_sync(file: UploadFile) -> io.BytesIO:
             img_no_exif = Image.new(img.mode, img.size)
             img_no_exif.paste(img)
 
-            # Save to BytesIO
+            # Save to bytes
             output = io.BytesIO()
             # Preserve format or default to JPEG
             fmt = img.format or 'JPEG'
             img_no_exif.save(output, format=fmt, quality=85)
-            output.seek(0)
+            image_bytes = output.getvalue()
 
-            return output
+            return img_no_exif, image_bytes
 
         except Exception as pil_error:
             logger.error(f"PIL processing failed: {pil_error}")
@@ -216,28 +216,28 @@ def process_uploaded_image_sync(file: UploadFile) -> io.BytesIO:
         logger.error(f"Error processing file: {e}")
         raise HTTPException(status_code=400, detail="Unable to process file.")
 
-async def process_uploaded_image(file: UploadFile) -> io.BytesIO:
+async def process_uploaded_image(file: UploadFile):
+    """
+    Asynchronously validate, resize, and strip EXIF from uploaded image.
+    Returns a tuple of (PIL.Image.Image, bytes).
+    """
     return await run_in_threadpool(process_uploaded_image_sync, file)
 
-def save_processed_image(file_obj: io.BytesIO, path: str):
-    """Save processed BytesIO to disk."""
+def save_processed_image(image_bytes: bytes, path: str):
+    """Save processed bytes to disk."""
     with open(path, "wb") as buffer:
-        shutil.copyfileobj(file_obj, buffer)
+        buffer.write(image_bytes)
 
 async def process_and_detect(image: UploadFile, detection_func) -> DetectionResponse:
     """
     Helper to process uploaded image and run detection.
-    Uses the optimized image processing pipeline.
+    Uses the optimized single-pass image processing pipeline.
     """
-    # Validate uploaded file
-    pil_image = await validate_uploaded_file(image)
+    # Optimized: Use process_uploaded_image which resizes and strips EXIF in one go
+    pil_image, _ = await process_uploaded_image(image)
 
     # Validate image for processing (check integrity)
     try:
-        if pil_image is None:
-            pil_image = await run_in_threadpool(Image.open, image.file)
-
-        # Validate image for processing
         await run_in_threadpool(validate_image_for_processing, pil_image)
     except HTTPException:
         raise  # Re-raise HTTP exceptions from validation

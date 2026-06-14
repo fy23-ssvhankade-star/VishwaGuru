@@ -272,31 +272,9 @@ class ClosureStatusResponse(BaseModel):
     confirmation_deadline: Optional[datetime] = Field(None, description="Deadline for confirmations")
     days_remaining: Optional[int] = Field(None, description="Days until deadline")
 
-# Auth Schemas
-class UserBase(BaseModel):
-    email: str = Field(..., description="User email")
-    full_name: Optional[str] = Field(None, description="User full name")
-
-class UserCreate(UserBase):
-    password: str = Field(..., min_length=6, description="User password")
-
-class UserLogin(BaseModel):
-    email: str = Field(..., description="User email")
-    password: str = Field(..., description="User password")
-
-class UserResponse(UserBase):
-    id: int
-    role: UserRole
-    is_active: bool
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-    user: UserResponse
-
-class TokenData(BaseModel):
-    email: Optional[str] = None
-    role: Optional[str] = None
+class BlockchainVerifyResponse(BaseModel):
+    issue_id: int = Field(..., description="Issue ID")
+    is_valid: bool = Field(..., description="Whether the integrity seal is valid")
+    integrity_hash: str = Field(..., description="Current integrity hash")
+    calculated_hash: str = Field(..., description="Calculated hash for verification")
+    previous_hash: str = Field(..., description="Previous hash in the chain")

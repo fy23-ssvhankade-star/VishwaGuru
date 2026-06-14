@@ -44,10 +44,16 @@ async def _make_request(client, url, payload):
         logger.error(f"HF API Request Exception: {e}")
         return []
 
-def _prepare_image_bytes(image: Union[Image.Image, bytes]) -> bytes:
+def _prepare_image_bytes(image: Union[Image.Image, bytes, io.BytesIO]) -> bytes:
+    """Helper to ensure image is in bytes format for HF API."""
     if isinstance(image, bytes):
         return image
+    if isinstance(image, io.BytesIO):
+        return image.getvalue()
+
+    # It's a PIL Image
     img_byte_arr = io.BytesIO()
+    # Use JPEG as default if format is missing (e.g. for newly created images)
     fmt = image.format if image.format else 'JPEG'
     image.save(img_byte_arr, format=fmt)
     return img_byte_arr.getvalue()
