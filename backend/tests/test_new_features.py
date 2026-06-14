@@ -111,8 +111,8 @@ def test_transcribe_audio(client_with_mock_http):
 
     audio_content = b"fake audio content"
 
-    with patch('backend.voice_service.VoiceService.transcribe_audio', new_callable=MagicMock) as mock_transcribe:
-        mock_transcribe.return_value = {"text": "This is a test transcription.", "error": None, "language": "en", "language_name": "English", "confidence": 0.99}
+    with patch('backend.voice_service.VoiceService.process_voice_grievance') as mock_transcribe:
+        mock_transcribe.return_value = {'original_text': 'This is a test transcription.', 'translated_text': 'This is a test transcription.', 'source_language': 'en', 'source_language_name': 'English', 'confidence': 0.99, 'manual_correction_needed': False, 'error': None}
         response = client.post(
             "/api/voice/transcribe",
             files={"audio_file": ("test.wav", audio_content, "audio/wav")}

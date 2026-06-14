@@ -108,13 +108,10 @@ def generate_visit_hash(visit_data: dict) -> str:
         # Ensure microseconds are stripped for consistent comparison across DBs
         check_in_time = visit_data.get('check_in_time')
         if isinstance(check_in_time, datetime):
-            # Normalize to UTC and strip microseconds for consistency
+            # Normalize timestamp to UTC and remove microseconds for consistent hashing across databases
             if check_in_time.tzinfo is None:
                 check_in_time = check_in_time.replace(tzinfo=timezone.utc)
-            else:
-                check_in_time = check_in_time.astimezone(timezone.utc)
-
-            check_in_time_str = check_in_time.replace(microsecond=0).strftime('%Y-%m-%dT%H:%M:%S')
+            check_in_time_str = check_in_time.astimezone(timezone.utc).replace(microsecond=0).strftime('%Y-%m-%dT%H:%M:%S')
         else:
             check_in_time_str = str(check_in_time) if check_in_time else ""
         
