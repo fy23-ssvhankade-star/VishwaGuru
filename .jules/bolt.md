@@ -46,6 +46,6 @@
 **Learning:** Executing multiple `count()` queries with different filters (e.g., for different statuses) causes redundant database scans and network round-trips.
 **Action:** Use a single SQL `GROUP BY` query to fetch counts for all categories/statuses at once, then process the results in Python.
 
-## 2026-02-11 - File I/O in Hot Paths
-**Learning:** Checking file modification time (`os.path.getmtime`) in a property getter seems harmless ("just a stat call"), but when accessed multiple times per request (e.g., fetching 4 different config values sequentially), the redundant disk I/O compounds and introduces measurable synchronous latency.
-**Action:** Throttle filesystem checks in hot-reloading configurations. Even a small interval (e.g., 5 seconds) effectively eliminates redundant I/O during a single request's lifecycle without sacrificing the ability to hot-reload.
+## 2026-02-12 - O(1) LRU vs O(N) LFU in High-Concurrency Cache
+**Learning:** Using a simple dictionary with an access counter for eviction results in O(N) complexity for every `set` operation when the cache is full, as it must scan all keys to find the minimum. Under high concurrency and large cache sizes, this introduces significant latency and lock contention.
+**Action:** Use `collections.OrderedDict` to implement an O(1) LRU cache. `move_to_end()` on `get` and `popitem(last=False)` on `set` (when full) ensures constant time complexity for eviction, keeping the event loop responsive even under load.
