@@ -111,6 +111,10 @@ async def create_issue(
                     Issue.latitude <= max_lat,
                     Issue.longitude >= min_lon,
                     Issue.longitude <= max_lon
+                ).options(
+                    defer(Issue.action_plan),
+                    defer(Issue.image_path),
+                    defer(Issue.location)
                 ).all()
             )
 
@@ -306,6 +310,10 @@ def get_nearby_issues(
             Issue.latitude <= max_lat,
             Issue.longitude >= min_lon,
             Issue.longitude <= max_lon
+        ).options(
+            defer(Issue.action_plan),
+            defer(Issue.image_path),
+            defer(Issue.location)
         ).all()
 
         nearby_issues_with_distance = find_nearby_issues(
