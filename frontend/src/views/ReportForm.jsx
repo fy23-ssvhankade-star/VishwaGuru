@@ -645,7 +645,7 @@ const ReportForm = ({ setView, setLoading, setError, setActionPlan, loading }) =
                 </button>
               </div>
 
-              {showWebcam && createPortal(
+              {showWebcam && (
                 <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4">
                   <div className="relative w-full max-w-md bg-black rounded-3xl overflow-hidden border border-gray-800">
                     <Webcam
@@ -672,7 +672,7 @@ const ReportForm = ({ setView, setLoading, setError, setActionPlan, loading }) =
                       </button>
                     </div>
                   </div>
-                </div>, document.body
+                </div>
               )}
 
               {/* Image Preview & Analysis Hub */}

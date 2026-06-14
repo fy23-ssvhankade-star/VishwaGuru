@@ -1,3 +1,4 @@
+import httpx
 from fastapi import APIRouter, UploadFile, File, Request, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from PIL import Image
@@ -466,10 +467,10 @@ async def detect_abandoned_vehicle_endpoint(image: UploadFile = File(...)):
         logger.error(f"Abandoned vehicle detection error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
-@router.post("/detect-emotion")
+@router.post("/api/detect-emotion")
 async def detect_emotion_endpoint(
     image: UploadFile = File(...),
-    client = backend.dependencies.Depends(get_http_client)
+    client: httpx.AsyncClient = backend.dependencies.Depends(get_http_client)
 ):
     """
     Analyze facial emotions in the image using Hugging Face inference.
@@ -479,7 +480,6 @@ async def detect_emotion_endpoint(
         raise HTTPException(status_code=400, detail=img_data["error"])
 
     processed_bytes = await run_in_threadpool(process_uploaded_image, img_data["bytes"])
-    client = get_http_client(request)
     result = await detect_facial_emotion(processed_bytes, client)
 
     if "error" in result:

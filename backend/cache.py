@@ -52,9 +52,8 @@ class ThreadSafeCache:
         with self._lock:
             current_time = time.time()
             
-            # We don't need to aggressively clean up expired entries on every `set`
-            # since we have max_size eviction and `get` also checks for expiration.
-            # This speeds up hot-path cache population.
+            # Clean up expired entries before adding new one
+            self._cleanup_expired(current_time)
             
             # If cache is full, evict least recently used entry
             if len(self._data) >= self._max_size and key not in self._data:
