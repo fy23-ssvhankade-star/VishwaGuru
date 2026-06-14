@@ -679,9 +679,19 @@ async def verify_blockchain_integrity(issue_id: int, db: Session = Depends(get_d
     if not current_issue:
         raise HTTPException(status_code=404, detail="Issue not found")
 
-    # Recompute hash based on current data and the link to previous hash
-    # Chaining logic: hash(description|category|previous_integrity_hash)
-    prev_hash = current_issue.previous_integrity_hash or ""
+    # Fetch previous issue's integrity hash to verify the chain
+    if current_issue.previous_integrity_hash is not None:
+        # Optimized path: Use stored previous hash
+        prev_hash = current_issue.previous_integrity_hash
+    else:
+        # Legacy path: Fetch from DB
+        prev_issue_hash = await run_in_threadpool(
+            lambda: db.query(Issue.integrity_hash).filter(Issue.id < issue_id).order_by(Issue.id.desc()).first()
+        )
+        prev_hash = prev_issue_hash[0] if prev_issue_hash and prev_issue_hash[0] else ""
+
+    # Recompute hash based on current data and previous hash
+    # Chaining logic: hash(description|category|prev_hash)
     hash_content = f"{current_issue.description}|{current_issue.category}|{prev_hash}"
     computed_hash = hashlib.sha256(hash_content.encode()).hexdigest()
 
