@@ -3,8 +3,17 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.concurrency import run_in_threadpool
+from sqlalchemy.orm import Session
 from sqlalchemy import func
-from sqlalchemy.orm import Session, defer, joinedload
+from database import engine, get_db
+from models import Base, Issue
+from ai_service import generate_action_plan, chat_with_civic_assistant
+from maharashtra_locator import (
+    find_constituency_by_pincode,
+    find_mla_by_constituency,
+    load_maharashtra_pincode_data,
+    load_maharashtra_mla_data
+)
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 from functools import lru_cache
@@ -547,6 +556,9 @@ async def create_issue(
         # Offload blocking DB operations to threadpool
         await run_in_threadpool(save_issue_db, db, new_issue)
 
+        # Invalidate recent issues cache to ensure immediate feedback
+        RECENT_ISSUES_CACHE["timestamp"] = 0
+
         # Generate Action Plan (AI)
         action_plan = None
         try:
@@ -1052,22 +1064,35 @@ RECENT_ISSUES_CACHE = None
 RECENT_ISSUES_TIMESTAMP = 0
 CACHE_TTL = 60 # 60 seconds
 
+# Simple in-memory cache for recent issues
+RECENT_ISSUES_CACHE = {"data": [], "timestamp": 0}
+CACHE_TTL = 60  # seconds
+
 @app.get("/api/issues/recent")
 def get_recent_issues(db: Session = Depends(get_db)):
-    global RECENT_ISSUES_CACHE, RECENT_ISSUES_TIMESTAMP
+    now = time.time()
 
-    current_time = time.time()
-    if RECENT_ISSUES_CACHE and (current_time - RECENT_ISSUES_TIMESTAMP < CACHE_TTL):
-        return RECENT_ISSUES_CACHE
+    # Check cache
+    if now - RECENT_ISSUES_CACHE["timestamp"] < CACHE_TTL and RECENT_ISSUES_CACHE["data"]:
+        return RECENT_ISSUES_CACHE["data"]
 
-    # Fetch last 10 issues
-    issues = db.query(Issue).order_by(Issue.created_at.desc()).limit(10).all()
+    # Fetch last 10 issues with optimized query (selecting only needed columns)
+    issues = db.query(
+        Issue.id,
+        Issue.category,
+        Issue.created_at,
+        Issue.status,
+        Issue.upvotes,
+        Issue.image_path,
+        func.substr(Issue.description, 1, 100).label('description')
+    ).order_by(Issue.created_at.desc()).limit(10).all()
+
     # Sanitize data (no emails)
     result = [
         {
             "id": i.id,
             "category": i.category,
-            "description": i.description[:100] + "..." if len(i.description) > 100 else i.description,
+            "description": i.description + "..." if len(i.description) >= 100 else i.description,
             "created_at": i.created_at,
             "image_path": i.image_path,
             "status": i.status,
@@ -1076,8 +1101,9 @@ def get_recent_issues(db: Session = Depends(get_db)):
         for i in issues
     ]
 
-    RECENT_ISSUES_CACHE = result
-    RECENT_ISSUES_TIMESTAMP = current_time
+    # Update cache
+    RECENT_ISSUES_CACHE["data"] = result
+    RECENT_ISSUES_CACHE["timestamp"] = now
 
     return result
 
