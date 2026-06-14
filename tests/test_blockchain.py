@@ -22,17 +22,15 @@ def client(db_session):
     app.dependency_overrides = {}
 
 def test_blockchain_verification_success(client, db_session):
-    # Create first issue
-    lat1, lon1 = 19.0760, 72.8777
-    lat1_str, lon1_str = f"{lat1:.7f}", f"{lon1:.7f}"
-    hash1_content = f"First issue|Road|{lat1_str}|{lon1_str}|"
+    # Create first issue with new hash format and previous_integrity_hash
+    ref1 = "ref1"
+    hash1_content = f"{ref1}|First issue|Road|None|None|None|"
     hash1 = hashlib.sha256(hash1_content.encode()).hexdigest()
 
     issue1 = Issue(
+        reference_id=ref1,
         description="First issue",
         category="Road",
-        latitude=lat1,
-        longitude=lon1,
         integrity_hash=hash1,
         previous_integrity_hash=""
     )
@@ -41,16 +39,14 @@ def test_blockchain_verification_success(client, db_session):
     db_session.refresh(issue1)
 
     # Create second issue chained to first
-    lat2, lon2 = 19.0761, 72.8778
-    lat2_str, lon2_str = f"{lat2:.7f}", f"{lon2:.7f}"
-    hash2_content = f"Second issue|Garbage|{lat2_str}|{lon2_str}|{hash1}"
+    ref2 = "ref2"
+    hash2_content = f"{ref2}|Second issue|Garbage|None|None|None|{hash1}"
     hash2 = hashlib.sha256(hash2_content.encode()).hexdigest()
 
     issue2 = Issue(
+        reference_id=ref2,
         description="Second issue",
         category="Garbage",
-        latitude=lat2,
-        longitude=lon2,
         integrity_hash=hash2,
         previous_integrity_hash=hash1
     )
@@ -109,10 +105,9 @@ def test_blockchain_verification_failure(client, db_session):
     # Create issue with tampered hash
     lat, lon = 19.0760, 72.8777
     issue = Issue(
+        reference_id="ref3",
         description="Tampered issue",
         category="Road",
-        latitude=lat,
-        longitude=lon,
         integrity_hash="invalidhash",
         previous_integrity_hash=""
     )

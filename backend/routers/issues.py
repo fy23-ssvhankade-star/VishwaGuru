@@ -172,6 +172,9 @@ async def create_issue(
     try:
         # Save to DB only if no nearby issues found or deduplication failed
         if deduplication_info is None or not deduplication_info.has_nearby_issues:
+            # Generate unique reference ID
+            ref_id = str(uuid.uuid4())
+
             # Blockchain feature: calculate integrity hash for the report
             # Optimization: Fetch only the last hash to maintain the chain with minimal overhead
             prev_issue = await run_in_threadpool(
@@ -179,10 +182,9 @@ async def create_issue(
             )
             prev_hash = prev_issue[0] if prev_issue and prev_issue[0] else ""
 
-            # Explicit cryptographic link to previous report and geographic context
-            lat_str = f"{latitude:.7f}" if latitude is not None else "0.0000000"
-            lon_str = f"{longitude:.7f}" if longitude is not None else "0.0000000"
-            hash_content = f"{description}|{category}|{lat_str}|{lon_str}|{prev_hash}"
+            # Bolt: Improved integrity by including more fields in the hash
+            # Chaining logic: hash(ref_id|description|category|lat|lon|email|prev_hash)
+            hash_content = f"{ref_id}|{description}|{category}|{latitude}|{longitude}|{user_email}|{prev_hash}"
             integrity_hash = hashlib.sha256(hash_content.encode()).hexdigest()
 
             # RAG Retrieval (New)
@@ -192,7 +194,7 @@ async def create_issue(
                 initial_action_plan = {"relevant_government_rule": relevant_rule}
 
             new_issue = Issue(
-                reference_id=str(uuid.uuid4()),
+                reference_id=ref_id,
                 description=description,
                 category=category,
                 image_path=image_path,
@@ -203,7 +205,7 @@ async def create_issue(
                 location=location,
                 action_plan=None,
                 integrity_hash=integrity_hash,
-                previous_integrity_hash=prev_hash
+                previous_integrity_hash=prev_hash  # Bolt: Store predecessor hash for O(1) verification
             )
 
             # Offload blocking DB operations to threadpool
@@ -622,32 +624,47 @@ def get_user_issues(
 async def verify_blockchain_integrity(issue_id: int, db: Session = Depends(get_db)):
     """
     Verify the cryptographic integrity of a report using the blockchain-style chaining.
-    Optimized: O(1) retrieval of all data needed for link validation.
+    Optimized: Uses previous_integrity_hash for O(1) verification, avoiding redundant DB queries.
     """
-    # Performance Boost: O(1) retrieval of all data needed for link validation
-    # We store the previous_integrity_hash directly to avoid an extra query.
+    # Fetch current issue data
+    # Bolt: Fetch all fields needed for hash calculation in one go
     current_issue = await run_in_threadpool(
         lambda: db.query(
-            Issue.id, Issue.description, Issue.category, Issue.integrity_hash, Issue.previous_integrity_hash
+            Issue.id,
+            Issue.reference_id,
+            Issue.description,
+            Issue.category,
+            Issue.latitude,
+            Issue.longitude,
+            Issue.user_email,
+            Issue.integrity_hash,
+            Issue.previous_integrity_hash
         ).filter(Issue.id == issue_id).first()
     )
 
     if not current_issue:
         raise HTTPException(status_code=404, detail="Issue not found")
 
-    # Chaining logic: hash(description|category|prev_hash)
-    # Optimized: Use stored previous_integrity_hash if available for O(1) verification
-    # Fallback to query if it's missing (for legacy records)
-    prev_hash = current_issue.previous_integrity_hash
-
-    if prev_hash is None:
+    # Bolt: Use stored previous_integrity_hash for O(1) verification
+    # Fallback to subquery for legacy records where previous_integrity_hash is NULL
+    if current_issue.previous_integrity_hash is not None:
+        prev_hash = current_issue.previous_integrity_hash
+    else:
+        # Legacy fallback: Fetch previous issue's integrity hash via subquery
         prev_issue_hash = await run_in_threadpool(
             lambda: db.query(Issue.integrity_hash).filter(Issue.id < issue_id).order_by(Issue.id.desc()).first()
         )
         prev_hash = prev_issue_hash[0] if prev_issue_hash and prev_issue_hash[0] else ""
 
     # Recompute hash based on current data and previous hash
-    hash_content = f"{current_issue.description}|{current_issue.category}|{prev_hash}"
+    # Chaining logic must match create_issue
+    if current_issue.previous_integrity_hash is not None:
+        # New format: hash(ref_id|description|category|lat|lon|email|prev_hash)
+        hash_content = f"{current_issue.reference_id}|{current_issue.description}|{current_issue.category}|{current_issue.latitude}|{current_issue.longitude}|{current_issue.user_email}|{prev_hash}"
+    else:
+        # Legacy format: hash(description|category|prev_hash)
+        hash_content = f"{current_issue.description}|{current_issue.category}|{prev_hash}"
+
     computed_hash = hashlib.sha256(hash_content.encode()).hexdigest()
 
     is_valid = (computed_hash == current_issue.integrity_hash)
