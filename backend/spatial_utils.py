@@ -4,13 +4,18 @@ Spatial utilities for geospatial operations and deduplication.
 import math
 import logging
 from typing import List, Tuple, Optional
+import logging
+
 try:
     from sklearn.cluster import DBSCAN
+    import numpy as np
+    HAS_SKLEARN = True
 except ImportError:
-    DBSCAN = None
-import numpy as np
+    HAS_SKLEARN = False
 
 from backend.models import Issue
+
+logger = logging.getLogger(__name__)
 
 
 def get_bounding_box(lat: float, lon: float, radius_meters: float) -> Tuple[float, float, float, float]:
@@ -132,6 +137,10 @@ def cluster_issues_dbscan(issues: List[Issue], eps_meters: float = 30.0) -> List
     # 1 degree latitude ≈ 111,000 meters
     # 1 degree longitude ≈ 111,000 * cos(latitude) meters
     eps_degrees = eps_meters / 111000  # Rough approximation
+
+    if not HAS_SKLEARN:
+        logger.warning("Scikit-learn/Numpy not available. Skipping DBSCAN clustering.")
+        return [[issue] for issue in valid_issues]
 
     # Perform DBSCAN clustering
     db = DBSCAN(eps=eps_degrees, min_samples=1, metric='haversine').fit(
