@@ -1,7 +1,9 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text
+from sqlalchemy import Column, Integer, String, DateTime, Text, Enum, Float, ForeignKey, Index, TypeDecorator
+from sqlalchemy.orm import relationship
 from database import Base
 import datetime
 import enum
+import json
 
 class JSONEncodedDict(TypeDecorator):
     """Represents an immutable structure as a json-encoded string."""
@@ -122,4 +124,7 @@ class Issue(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow, index=True)
     user_email = Column(String, nullable=True, index=True)
     upvotes = Column(Integer, default=0, index=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    location = Column(String, nullable=True)
     action_plan = Column(Text, nullable=True)
