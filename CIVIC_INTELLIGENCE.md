@@ -1,57 +1,71 @@
 # 🧠 Daily Civic Intelligence Refinement Engine
 
-The Daily Civic Intelligence Refinement Engine is an autonomous, self-improving infrastructure layer of VishwaGuru. It is a standalone TypeScript process scheduled to run daily at 00:00.
+The Civic Intelligence Engine is a self-improving AI infrastructure that runs daily at midnight (UTC) to analyze civic issues, detect trends, and optimize system parameters automatically.
 
-## 🚀 Purpose
+## 🚀 Overview
 
-VishwaGuru is designed to continuously evolve without human intervention. By analyzing the civic issues reported by users every day, the platform intelligently adjusts its own behavior, prioritizing emerging problems and adapting spatial clustering tolerances.
+Every day at 00:00, the system:
+1.  **Analyzes** all civic issues submitted in the last 24 hours.
+2.  **Detects** new patterns, trending topics, and geographic clusters.
+3.  **Refines** severity scoring weights based on manual overrides (adaptive learning).
+4.  **Optimizes** duplicate detection thresholds based on clustering density.
+5.  **Generates** a "Civic Intelligence Index" score.
+6.  **Archives** a daily snapshot for transparency and auditability.
 
-## 🏗️ Components
+---
 
-The architecture relies on fully local Node.js services reading directly from the `issues` database and storing logic in local JSON files to avoid API overhead.
+## ⚙️ Core Components
 
-### 1. Trend Detection
-*   Analyzes all issues submitted in the last 24 hours.
-*   **Keyword Extraction:** Identifies top 5 most common keywords (excluding stop words).
-*   **Category Spikes:** Compares current category volume with the previous day's snapshot. A category is flagged as a "spike" if:
-    *   Volume > 5
-    *   Increase > 50% compared to yesterday.
-*   **Geographic Clustering:** Uses DBSCAN (Density-Based Spatial Clustering of Applications with Noise) to find clusters of issues (e.g., multiple reports of the same pothole).
-*   **Top Emerging Concern:** The system prioritizes the category with the highest percentage increase (spike) over raw volume. If no spikes are detected, the category with the highest volume is selected.
+### 1. Trend Detection (`backend/trend_analyzer.py`)
+*   **Keyword Extraction**: Identifies top 5 most common keywords (excluding stop words) from issue descriptions.
+*   **Category Spikes**: Detects categories with a >50% increase in volume compared to the previous day.
+*   **Geographic Clustering**: Uses DBSCAN (Density-Based Spatial Clustering of Applications with Noise) to identify hotspots where multiple issues are reported in close proximity.
 
-2. **`adaptiveWeights`**: Dynamically adjusts system parameters based on the `trendAnalyzer`.
-    - Automatically increases the severity weight of categories experiencing spikes, meaning subsequent incoming reports of that type will be flagged as higher urgency.
-    - Automatically adjusts the duplicate detection proximity threshold depending on the density of the highest-severity region.
-    - Maintains an auditable history of previous weights in `modelWeights.json`.
+### 2. Adaptive Weight Optimization (`backend/adaptive_weights.py`)
+The system learns from human actions to improve its automated severity scoring.
 
-3. **`intelligenceIndex`**: Calculates a daily "Civic Intelligence Index" score.
-    - Ranges up to 100. Points are deducted based on system strain (unresolved spikes) and rewarded for consistent activity.
-    - Generates and stores a historical `snapshot.json` to map VishwaGuru's daily operational efficiency.
+*   **Logic**: If administrators manually upgrade the severity of issues in a specific category (e.g., changing "pothole" from Low to Critical) more than 3 times in a day, the system infers that its default weight for that category is too low.
+*   **Action**: The category multiplier in `modelWeights.json` is automatically increased by 10%.
+*   **Constraint**: Weights are clamped between 0.5x and 3.0x to prevent runaway values.
 
-### 4. Civic Intelligence Index
-A daily score (0-100) reflecting the city's civic health.
-*   **Base Score:** 70
-*   **Bonus:** +2.0 per resolved issue.
-*   **Penalty:** -0.5 per new issue.
-*   **Delta Calculation:** Compares the current score with the previous day's score to show improvement or decline (e.g., `+3.1`).
-*   **Output:** Includes "Top Emerging Concern", "Highest Severity Region", and the daily score change.
+### 3. Duplicate Pattern Learning
+The system adjusts the radius used for spatial deduplication based on the density of issues.
 
-## 📂 Architecture
+*   **Logic**:
+    *   **High Density** (> 5 clusters): Increases search radius by 5% to better group related issues.
+    *   **High Volume, No Clusters**: Increases search radius to catch potential duplicates that are slightly further apart.
+    *   **Low Volume**: Decays radius slightly (by 5%) to improve precision.
+*   **Implementation**: Updates `duplicate_search_radius` in `modelWeights.json`. This value is consumed by the `create_issue` endpoint for real-time deduplication.
 
-- `/services/`: Core logic (analyzing, adapting, indexing).
-- `/scheduler/`: Execution trigger (`node-cron`).
-- `/data/modelWeights.json`: Auditable adaptive parameter registry.
-- `/data/dailySnapshots/`: JSON files mapping daily intelligence scores.
+### 4. Civic Intelligence Index (`backend/civic_intelligence.py`)
+A daily score (0-100) reflecting the civic health and system responsiveness.
+
+*   **Formula**: `Base (70) + (Resolved Issues * 2) - (New Issues * 0.5)`
+*   **Insights**:
+    *   **Top Emerging Concern**: The category with the highest volume.
+    *   **Highest Severity Region**: The geographic center of the largest issue cluster.
+
+---
+
+## 📁 Data & Transparency
 
 ### Daily Snapshots
-*   Stored in `backend/data/dailySnapshots/YYYY-MM-DD.json`.
-*   Contains:
-    *   `civic_index`: The calculated score, score delta, and metrics.
-    *   `trends`: Keywords, distribution, clusters, and detected spikes.
-    *   `weight_changes`: A detailed audit log of what weights were changed, the old value, the new value, and the reason.
-    *   `model_weights`: A copy of the full weight configuration at the time of the snapshot for full reproducibility.
+Snapshots are stored in `backend/data/dailySnapshots/YYYY-MM-DD.json`.
+They contain:
+*   `trends`: Top keywords, category distribution, clusters.
+*   `civic_index`: The daily score and insights.
+*   `weight_changes`: Audit log of any automatic weight adjustments.
+*   `model_weights`: The state of weights at that time.
 
-Run tests to ensure system integrity:
-```bash
-npm test
-```
+### Model Weights
+Dynamic configuration is stored in `backend/data/modelWeights.json`.
+*   `category_multipliers`: Dynamic severity weights.
+*   `duplicate_search_radius`: Dynamic search radius in meters.
+
+---
+
+## 🛠️ Architecture
+
+*   **Scheduler**: A lightweight `asyncio` loop in `backend/scheduler.py` triggers the job.
+*   **Execution**: `CivicIntelligenceEngine.run_daily_cycle` runs in a separate thread to avoid blocking the main event loop.
+*   **Persistence**: All state changes are persisted to JSON files, ensuring "Local First" architecture with no external API dependencies for core logic.
