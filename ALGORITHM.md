@@ -1,72 +1,58 @@
-# Priority Engine Algorithm Design
+# Daily Civic Intelligence Refinement Algorithm
 
-The VishwaGuru Issue Prioritization Engine is a modular, rule-based AI system designed to analyze civic complaints in real-time. It operates fully locally without external API dependencies, ensuring privacy, speed, and reliability.
+This document explains the logic behind the "Self-Improving AI Infrastructure" implemented in VishwaGuru.
 
-## Core Components
+## Overview
 
-The engine (`backend/priority_engine.py`) processes input text and optional image labels to determine three key metrics:
+The system runs a daily scheduled job (`backend/scheduler/daily_refinement_job.py`) that analyzes civic issues from the last 24 hours to detect trends, optimize AI models, and generate a "Civic Intelligence Index".
 
-1.  **Severity Classification** (Critical, High, Medium, Low)
-2.  **Urgency Score** (0-100)
-3.  **Category Tagging** (Multi-label)
+## Key Components
 
-It also provides **Explainability** by returning the specific reasons (keywords or patterns) that triggered a high priority.
+### 1. Trend Detection (`backend/trend_analyzer.py`)
+- **Keywords**: Uses `scikit-learn`'s `CountVectorizer` (or a fallback tokenizer) to extract top 10 keywords from issue descriptions.
+- **Categories**: Calculates distribution of issue categories.
+- **Geographic Clustering**: Uses DBSCAN (Density-Based Spatial Clustering of Applications with Noise) to identify hotspots where multiple issues are reported close together (default 100m radius).
 
-### 1. Severity Classification
+### 2. Adaptive Weight Optimization (`backend/civic_intelligence.py`)
+- **Goal**: Automatically adjust severity scoring rules based on manual corrections.
+- **Logic**:
+    - The system checks `EscalationAudit` logs for issues where the severity was manually upgraded (e.g., from "Low" to "Critical").
+    - If a specific category (e.g., "Pothole") is frequently upgraded (> 3 times in 24h), the system automatically adds the category name to the **High Severity Keywords** list in `data/modelWeights.json`.
+    - This ensures future reports of "Pothole" are flagged as High Severity immediately.
 
-Severity is determined by scanning the text for keywords mapped to four levels. The highest matched level determines the final severity.
+### 3. Duplicate Pattern Learning (`backend/civic_intelligence.py`)
+- **Goal**: Tune the spatial deduplication radius to balance between missing duplicates and false positives.
+- **Logic**:
+    - It analyzes the density of geographic clusters found by the Trend Analyzer.
+    - **High Density**: If many clusters with >1 issue are found, it implies users are reporting the same problems but they are not being caught as duplicates during submission. The system **increases** the duplicate search radius (e.g., from 50m to 55m).
+    - **Low Density**: If no clusters are found, the system slightly **decreases** the radius to be more precise.
+    - The updated radius is stored in `data/modelWeights.json` and used by the submission API.
 
--   **Critical (Score 90):** Life-threatening or major infrastructure failures.
-    -   *Keywords:* fire, explosion, blood, death, collapse, gas leak, electric shock, flood, open manhole, live wire.
--   **High (Score 70):** Dangerous conditions, health hazards, or significant disruptions.
-    -   *Keywords:* accident, injury, broken, hazard, sewage, disease, theft, traffic jam, pothole, dead animal.
--   **Medium (Score 40):** Nuisances, hygiene issues, or minor obstructions.
-    -   *Keywords:* garbage, smell, noise, illegal parking, construction debris, graffiti.
--   **Low (Score 10):** Cosmetic issues or maintenance requests.
-    -   *Keywords:* light flicker, faded sign, broken bench, aesthetic issues.
+### 4. Civic Intelligence Index (`backend/civic_intelligence.py`)
+A daily score (0-100) reflecting the health and efficiency of the civic response system.
 
-### 2. Urgency Scoring
+**Formula:**
+`Index = (Activity * 0.2) + (Resolution Rate * 0.4) + (AI Accuracy * 0.4)`
 
-The Urgency Score (0-100) starts with the Severity Score as a baseline and is modified by context:
+- **Activity**: Normalized score based on volume of reports (target: 50 issues/day).
+- **Resolution Rate**: Percentage of issues resolved within 24 hours.
+- **AI Accuracy**: 100 minus the percentage of issues that required manual severity escalation.
 
--   **Base Score:** = Severity Score (e.g., Critical starts at 90).
--   **Temporal Modifiers:**
-    -   "now", "immediately", "urgent": +20 points.
-    -   "today", "tonight": +10 points.
-    -   "yesterday", "last week": +5 points.
--   **Context Modifiers:**
-    -   "fire", "smoke": +30 points.
-    -   "blood", "injury": +25 points.
-    -   "blocked", "stuck": +15 points.
-    -   Sensitive locations (school, hospital): +15 points.
-    -   Vulnerable groups (child, elderly): +10 points.
+## Data Persistence
 
-The final score is capped at 100.
+- **Weights**: Stored in `data/modelWeights.json`. This file is hot-loaded by the `PriorityEngine` and `Issue Router`.
+- **Snapshots**: Daily analysis results are saved in `data/dailySnapshots/YYYY-MM-DD.json` for historical tracking and auditability.
 
-### 3. Category Tagging
+## Running the Job
 
-The engine detects categories by counting keyword matches for predefined categories such as:
--   Fire
--   Pothole
--   Street Light
--   Garbage
--   Water Leak
--   Stray Animal
--   Traffic Sign
--   ...and more.
+To run the refinement process manually:
 
-The top 3 matching categories are returned.
+```bash
+python backend/scheduler/daily_refinement_job.py
+```
 
-## Explainability
+To schedule it (e.g., via cron):
 
-Every analysis returns a `reasoning` list. This list contains human-readable strings explaining why a specific severity or urgency score was assigned (e.g., "Flagged as Critical due to keywords: fire, smoke").
-
-## Performance Optimization
-
--   **Regex Compilation:** Key patterns are pre-compiled for speed.
--   **O(1) Lookups:** Keyword lists are optimized for fast checking.
--   **Local Execution:** No network latency or external API costs.
-
-## Client-Side Mirror
-
-A TypeScript implementation (`frontend/src/utils/priorityEngine.ts`) is provided to enable optimistic UI updates and immediate feedback to the user before the request even reaches the server.
+```bash
+0 0 * * * cd /path/to/repo && python backend/scheduler/daily_refinement_job.py >> /var/log/civic_refinement.log 2>&1
+```

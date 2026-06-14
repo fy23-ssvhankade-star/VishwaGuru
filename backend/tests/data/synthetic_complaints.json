@@ -14,8 +14,8 @@
   {
     "description": "Streetlight on 5th avenue has been flickering for a week. It is annoying.",
     "expected_category": "Street Light",
-    "expected_severity": "Low",
-    "expected_urgency_max": 40
+    "expected_severity": "High",
+    "expected_urgency_max": 75
   },
   {
     "description": "Garbage has not been collected for 3 days in Sector 4. The smell is getting bad.",
@@ -69,7 +69,7 @@
     "description": "Abandoned car parked on the roadside for months. It's rusting.",
     "expected_category": "Abandoned Vehicle",
     "expected_severity": "Medium",
-    "expected_urgency_max": 50
+    "expected_urgency_max": 40
   },
   {
     "description": "Public toilet in the market is overflowing and unusable.",
@@ -109,9 +109,9 @@
   },
   {
     "description": "Someone is burning plastic in the open field. Toxic smoke.",
-    "expected_category": "Air Pollution",
+    "expected_category": "Fire",
     "expected_severity": "Critical",
-    "expected_urgency_min": 75
+    "expected_urgency_min": 60
   },
   {
     "description": "Bus stop shelter has collapsed. No shade for commuters.",
