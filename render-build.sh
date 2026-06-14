@@ -10,8 +10,11 @@ else
     pip install --no-cache-dir -r backend/requirements.txt
 fi
 
-# Frontend build is skipped because this is a backend-only service.
-# Frontend should be deployed separately (e.g. Netlify, Vercel).
-echo "Skipping Frontend Build (Backend-only deployment)"
+# Skip frontend build on Render backend service to save resources/time
+# echo "Building Frontend..."
+# cd frontend
+# npm install
+# npm run build
+# cd ..
 
 echo "Build complete."
