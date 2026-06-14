@@ -131,52 +131,10 @@ def migrate_db():
             except Exception:
                 pass
 
-            # Add previous_integrity_hash column for blockchain feature
+            # Add index on parent_issue_id
             try:
-                conn.execute(text("ALTER TABLE issues ADD COLUMN previous_integrity_hash VARCHAR"))
-                print("Migrated database: Added previous_integrity_hash column.")
-            except Exception:
-                pass
-
-            # Add parent_issue_id column for duplicate tracking
-            try:
-                conn.execute(text("ALTER TABLE issues ADD COLUMN parent_issue_id INTEGER"))
-                print("Migrated database: Added parent_issue_id column.")
-            except Exception:
-                pass
-
-            # Add previous_integrity_hash column for robust blockchain verification
-            try:
-                conn.execute(text("ALTER TABLE issues ADD COLUMN previous_integrity_hash VARCHAR"))
-                print("Migrated database: Added previous_integrity_hash column.")
-            except Exception:
-                pass
-
-            # Add previous_integrity_hash column for robust blockchain chaining
-            try:
-                conn.execute(text("ALTER TABLE issues ADD COLUMN previous_integrity_hash VARCHAR"))
-                print("Migrated database: Added previous_integrity_hash column.")
-            except Exception:
-                pass
-
-            # Add parent_issue_id column for deduplication tracking
-            try:
-                conn.execute(text("ALTER TABLE issues ADD COLUMN parent_issue_id INTEGER"))
-                print("Migrated database: Added parent_issue_id column.")
-            except Exception:
-                pass
-
-            # Add previous_integrity_hash column for improved blockchain verification
-            try:
-                conn.execute(text("ALTER TABLE issues ADD COLUMN previous_integrity_hash VARCHAR"))
-                print("Migrated database: Added previous_integrity_hash column.")
-            except Exception:
-                pass
-
-            # Add index on previous_integrity_hash
-            try:
-                conn.execute(text("CREATE INDEX ix_issues_previous_integrity_hash ON issues (previous_integrity_hash)"))
-                print("Migrated database: Added index on previous_integrity_hash column.")
+                conn.execute(text("CREATE INDEX ix_issues_parent_issue_id ON issues (parent_issue_id)"))
+                logger.info("Migrated database: Added index on parent_issue_id column.")
             except Exception:
                 pass
 

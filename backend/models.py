@@ -162,7 +162,8 @@ class Issue(Base):
     location = Column(String, nullable=True)
     action_plan = Column(JSONEncodedDict, nullable=True)
     integrity_hash = Column(String, nullable=True)  # Blockchain integrity seal
-    previous_integrity_hash = Column(String, nullable=True, index=True)  # Stores the hash of the previous block for verification
+    previous_integrity_hash = Column(String, nullable=True)  # Link to previous block
+    parent_issue_id = Column(Integer, ForeignKey("issues.id"), nullable=True, index=True)  # Duplicate tracking
 
 class PushSubscription(Base):
     __tablename__ = "push_subscriptions"

@@ -457,18 +457,37 @@ async def detect_abandoned_vehicle_clip(image: Union[Image.Image, bytes], client
     targets = ["abandoned car", "rusted vehicle", "car with flat tires", "wrecked car"]
     return await _detect_clip_generic(image, labels, targets, client)
 
-async def detect_public_facilities_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
+async def detect_all_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
     """
-    Detects public facility issues like dirty toilets, broken benches, etc.
+    Consolidated Zero-Shot Classification for multiple civic issue types.
+    Reduces API roundtrips by batching all labels into one CLIP call.
     """
-    labels = ["dirty public toilet", "clean public toilet", "overflowing garbage bin", "broken park bench", "maintained facility", "graffiti on wall", "damaged bus stop"]
-    targets = ["dirty public toilet", "overflowing garbage bin", "broken park bench", "graffiti on wall", "damaged bus stop"]
-    return await _detect_clip_generic(image, labels, targets, client)
+    labels = [
+        "vandalism", "graffiti", "broken infrastructure", "flooded street",
+        "fire", "garbage", "trash", "clean area", "safe street"
+    ]
 
-async def detect_construction_safety_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
-    """
-    Detects construction safety violations like workers without helmets.
-    """
-    labels = ["construction worker with helmet", "construction worker without helmet", "unsafe scaffolding", "safe construction site", "unfenced construction site", "construction debris"]
-    targets = ["construction worker without helmet", "unsafe scaffolding", "unfenced construction site", "construction debris"]
-    return await _detect_clip_generic(image, labels, targets, client)
+    try:
+        img_bytes = _prepare_image_bytes(image)
+        results = await query_hf_api(img_bytes, labels, client=client)
+
+        if not isinstance(results, list):
+            return {}
+
+        def _filter(target_labels):
+            return [{
+                "label": r['label'],
+                "confidence": r['score'],
+                "box": []
+            } for r in results if r.get('label') in target_labels and r.get('score', 0) > 0.4]
+
+        return {
+            "vandalism": _filter(["vandalism", "graffiti"]),
+            "infrastructure": _filter(["broken infrastructure"]),
+            "flooding": _filter(["flooded street"]),
+            "fire": _filter(["fire"]),
+            "garbage": _filter(["garbage", "trash"])
+        }
+    except Exception as e:
+        logger.error(f"Batch HF Detection Error: {e}")
+        return {}

@@ -1,4 +1,3 @@
-from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Request, BackgroundTasks, status
 from fastapi.responses import JSONResponse
 from fastapi.concurrency import run_in_threadpool
@@ -170,28 +169,45 @@ async def create_issue(
             # Continue with issue creation if deduplication fails
 
     try:
-        # Full Blockchain Integrity: Always create a new record, even for duplicates
-        # This ensures every report is cryptographically sealed in the chain.
-        is_duplicate = deduplication_info is not None and deduplication_info.has_nearby_issues
+        # Blockchain feature: calculate integrity hash for the report
+        # Always maintain the chain for every report attempt
+        # Optimization: Fetch only the last hash to maintain the chain with minimal overhead
+        prev_issue = await run_in_threadpool(
+            lambda: db.query(Issue.integrity_hash).order_by(Issue.id.desc()).first()
+        )
+        prev_hash = prev_issue[0] if prev_issue and prev_issue[0] else ""
 
-        # Chaining logic: hash(description|category|prev_hash)
+        # Simple but effective SHA-256 chaining
         hash_content = f"{description}|{category}|{prev_hash}"
         integrity_hash = hashlib.sha256(hash_content.encode()).hexdigest()
 
-            new_issue = Issue(
-                reference_id=str(uuid.uuid4()),
-                description=description,
-                category=category,
-                image_path=image_path,
-                source="web",
-                user_email=user_email,
-                latitude=latitude,
-                longitude=longitude,
-                location=location,
-                action_plan=None,
-                integrity_hash=integrity_hash,
-                previous_integrity_hash=prev_hash
-            )
+        # Determine status and parent link based on deduplication
+        issue_status = "open"
+        current_parent_id = None
+
+        if deduplication_info and deduplication_info.has_nearby_issues:
+            issue_status = "duplicate"
+            current_parent_id = linked_issue_id
+
+        new_issue = Issue(
+            reference_id=str(uuid.uuid4()),
+            description=description,
+            category=category,
+            image_path=image_path,
+            source="web",
+            status=issue_status,
+            user_email=user_email,
+            latitude=latitude,
+            longitude=longitude,
+            location=location,
+            action_plan=None,
+            integrity_hash=integrity_hash,
+            previous_integrity_hash=prev_hash,
+            parent_issue_id=current_parent_id
+        )
+
+        # Offload blocking DB operations to threadpool
+        await run_in_threadpool(save_issue_db, db, new_issue)
 
     except Exception as e:
         # Clean up uploaded file if DB save failed
@@ -204,8 +220,8 @@ async def create_issue(
         logger.error(f"Database error while creating issue: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to save issue to database")
 
-    # Add background task for AI generation only if new issue was created
-    if new_issue:
+    # Add background task for AI generation only if it's a new primary issue
+    if new_issue and new_issue.status != "duplicate":
         background_tasks.add_task(process_action_plan_background, new_issue.id, description, category, language, image_path)
 
         # Create grievance for escalation management
@@ -227,10 +243,12 @@ async def create_issue(
         )
 
     # Return response with deduplication information
-    # If it was a duplicate, we return id=None to trigger the 'linked issue' UI flow
-    if new_issue and new_issue.status != "duplicate":
+    # If it was a duplicate, return id=None to maintain frontend behavior
+    return_id = new_issue.id if (new_issue and new_issue.status != "duplicate") else None
+
+    if return_id:
         return IssueCreateWithDeduplicationResponse(
-            id=new_issue.id,
+            id=return_id,
             message="Issue reported successfully. Action plan will be generated shortly.",
             action_plan=None,
             deduplication_info=deduplication_info,
@@ -605,65 +623,51 @@ def get_user_issues(
 @router.get("/api/issues/{issue_id}/blockchain-verify", response_model=BlockchainVerificationResponse)
 async def verify_blockchain_integrity(issue_id: int, db: Session = Depends(get_db)):
     """
-    Verify the cryptographic integrity of a report using the blockchain-style chaining.
-    Optimized: Uses previous_integrity_hash column for faster and more robust verification.
+    Verify the cryptographic integrity of a report using blockchain chaining.
+    Optimized: Fetches current and predecessor in a single query (Bolt: 50% fewer DB roundtrips).
     """
-    # Fetch current issue data including the stored previous hash
-    current_issue = await run_in_threadpool(
+    # Fetch current issue and its immediate predecessor in one query
+    # Optimization: Use column projection and limit(2)
+    issues = await run_in_threadpool(
         lambda: db.query(
-            Issue.id, Issue.description, Issue.category, Issue.integrity_hash, Issue.previous_integrity_hash
-        ).filter(Issue.id == issue_id).first()
+            Issue.id, Issue.description, Issue.category,
+            Issue.integrity_hash, Issue.previous_integrity_hash
+        ).filter(Issue.id <= issue_id)
+        .order_by(Issue.id.desc())
+        .limit(2)
+        .all()
     )
 
-    if not current_issue:
+    if not issues or issues[0].id != issue_id:
         raise HTTPException(status_code=404, detail="Issue not found")
 
-    # Use stored previous hash to verify the chain
-    prev_hash = current_issue.previous_integrity_hash or ""
+    current_issue = issues[0]
+    # Predecessor is the second item if it exists
+    prev_issue = issues[1] if len(issues) > 1 else None
+    actual_prev_hash = prev_issue.integrity_hash if prev_issue else ""
 
-    # Recompute hash based on current data and previous hash
-    # Chaining logic: hash(description|category|prev_hash)
-    prev_hash = current_issue.previous_integrity_hash or ""
-    hash_content = f"{current_issue.description}|{current_issue.category}|{prev_hash}"
+    # Recompute hash based on current data and actual predecessor hash
+    hash_content = f"{current_issue.description}|{current_issue.category}|{actual_prev_hash}"
     computed_hash = hashlib.sha256(hash_content.encode()).hexdigest()
 
-    # Step 1: Internal Consistency Check
-    internal_valid = (computed_hash == current_issue.integrity_hash)
+    # Integrity is valid if:
+    # 1. Recomputed hash matches stored hash
+    # 2. Stored previous_integrity_hash matches actual predecessor's hash (if column is populated)
+    hashes_match = (computed_hash == current_issue.integrity_hash)
 
-    # Step 2: Chain Link Consistency Check
-    link_valid = True
-    chain_status = "Intact"
+    # Check chain link consistency if we have the recorded previous hash
+    chain_linked = True
+    if current_issue.previous_integrity_hash is not None:
+        chain_linked = (current_issue.previous_integrity_hash == actual_prev_hash)
 
-    # Try to find the immediate predecessor
-    predecessor = await run_in_threadpool(
-        lambda: db.query(Issue.integrity_hash).filter(Issue.id < issue_id).order_by(Issue.id.desc()).first()
-    )
+    is_valid = hashes_match and chain_linked
 
-    if predecessor:
-        # Predecessor exists, check if hash matches our stored previous hash
-        # Use index access for Row object consistency
-        if predecessor[0] != prev_hash:
-            chain_status = "Broken (Link Mismatch)"
-            link_valid = False
-    elif prev_hash:
-        # No predecessor found in DB, but we have a previous hash stored.
-        # This means the predecessor was deleted.
-        chain_status = "Broken (Predecessor Missing)"
-        link_valid = False
-    # Else: No predecessor and no prev_hash (Genesis block) -> Intact
-
-    if internal_valid and link_valid:
-        message = "Integrity verified. This report is cryptographically sealed and chain is intact."
-    elif internal_valid and not link_valid:
-        if chain_status == "Broken (Predecessor Missing)":
-            message = "Internal integrity verified. Previous link is missing (likely deleted), but this record is safe."
-        else:
-            message = "Internal integrity verified, but chain link is broken! Previous block hash mismatch."
+    if is_valid:
+        message = "Integrity verified. This report is cryptographically sealed and its chain link is intact."
+    elif not hashes_match:
+        message = "Integrity check failed! The report data does not match its cryptographic seal."
     else:
-        if current_issue.previous_integrity_hash is None:
-             message = "Integrity check failed! The chain might be broken due to deleted records, or data tampering occurred."
-        else:
-             message = "Integrity check failed! The report data does not match its cryptographic seal."
+        message = "Integrity check failed! The report's link to the previous record has been tampered with."
 
     # We return internal validity as primary 'is_valid' to avoid false negatives on deletions
     return BlockchainVerificationResponse(

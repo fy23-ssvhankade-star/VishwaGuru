@@ -53,7 +53,7 @@ class UnifiedDetectionService:
             return self._local_available
         
         try:
-            from local_ml_service import get_general_model
+            from backend.local_ml_service import get_general_model
             model = get_general_model()
             
             # Check if model is loaded
@@ -123,12 +123,12 @@ class UnifiedDetectionService:
         backend = await self._get_detection_backend()
         
         if backend == "local":
-            from local_ml_service import detect_vandalism_local
+            from backend.local_ml_service import detect_vandalism_local
             return await detect_vandalism_local(image)
         
         elif backend == "huggingface":
-            from hf_service import detect_vandalism_clip
-            return await detect_vandalism_clip(image)
+            from backend.hf_api_service import detect_graffiti_art_clip
+            return await detect_graffiti_art_clip(image)
         
         else:
             logger.error("No detection backend available")
@@ -151,12 +151,13 @@ class UnifiedDetectionService:
         backend = await self._get_detection_backend()
         
         if backend == "local":
-            from local_ml_service import detect_infrastructure_local
+            from backend.local_ml_service import detect_infrastructure_local
             return await detect_infrastructure_local(image)
         
         elif backend == "huggingface":
-            from hf_service import detect_infrastructure_clip
-            return await detect_infrastructure_clip(image)
+            from backend.hf_api_service import detect_all_clip
+            results = await detect_all_clip(image)
+            return results.get("infrastructure", [])
         
         else:
             logger.error("No detection backend available")
@@ -179,12 +180,13 @@ class UnifiedDetectionService:
         backend = await self._get_detection_backend()
         
         if backend == "local":
-            from local_ml_service import detect_flooding_local
+            from backend.local_ml_service import detect_flooding_local
             return await detect_flooding_local(image)
         
         elif backend == "huggingface":
-            from hf_service import detect_flooding_clip
-            return await detect_flooding_clip(image)
+            from backend.hf_api_service import detect_all_clip
+            results = await detect_all_clip(image)
+            return results.get("flooding", [])
         
         else:
             logger.error("No detection backend available")
@@ -278,25 +280,15 @@ class UnifiedDetectionService:
     async def detect_all(self, image: Image.Image) -> Dict[str, List[Dict]]:
         """
         Run all detection types on an image.
-        
-        Args:
-            image: PIL Image to analyze
-            
-        Returns:
-            Dictionary mapping detection type to list of results
+        Optimized: Uses batched HF API call to reduce latency.
         """
         backend = await self._get_detection_backend()
-
+        
         if backend == "huggingface":
-            try:
-                from backend.hf_api_service import detect_all_clip_optimized
-                return await detect_all_clip_optimized(image)
-            except Exception as e:
-                logger.error(f"Optimized detection failed, falling back to individual calls: {e}")
-                # Fallback to individual calls logic below
-
+            from backend.hf_api_service import detect_all_clip
+            return await detect_all_clip(image)
+            
         import asyncio
-
         results = await asyncio.gather(
             self.detect_vandalism(image),
             self.detect_infrastructure(image),
@@ -340,7 +332,7 @@ class UnifiedDetectionService:
         # Add local model details if available
         if local_available:
             try:
-                from local_ml_service import get_detection_status
+                from backend.local_ml_service import get_detection_status
                 status["local_backend"]["details"] = await get_detection_status()
             except Exception:
                 pass

@@ -12,6 +12,7 @@ try:
     import magic
 except ImportError:
     magic = None
+import mimetypes
 from typing import Optional
 
 from backend.cache import user_upload_cache
@@ -74,8 +75,30 @@ def _validate_uploaded_file_sync(file: UploadFile) -> Optional[Image.Image]:
             detail=f"File too large. Maximum size allowed is {MAX_FILE_SIZE // (1024*1024)}MB"
         )
 
-    # Check MIME type from content using python-magic if available
-    if magic:
+    # Check MIME type from content
+    try:
+        # Read first 1024 bytes for MIME detection
+        file_content = file.file.read(1024)
+        file.file.seek(0)  # Reset file pointer
+
+        if magic:
+            detected_mime = magic.from_buffer(file_content, mime=True)
+        else:
+            # Fallback to mimetypes guess if magic is not available
+            detected_mime, _ = mimetypes.guess_type(file.filename or "")
+            if not detected_mime:
+                 # Last resort: check extension
+                 ext = os.path.splitext(file.filename or "")[1].lower()
+                 mime_map = {'.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp'}
+                 detected_mime = mime_map.get(ext, 'application/octet-stream')
+
+        if detected_mime not in ALLOWED_MIME_TYPES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid file type. Only image files are allowed. Detected: {detected_mime}"
+            )
+
+        # Additional content validation: Try to open with PIL to ensure it's a valid image
         try:
             # Read first 1024 bytes for MIME detection
             file_content = file.file.read(1024)
@@ -171,10 +194,13 @@ def process_uploaded_image_sync(file: UploadFile) -> tuple[Image.Image, bytes]:
 
     # Check MIME type
     try:
+        file_content = file.file.read(1024)
+        file.file.seek(0)
+
         if magic:
-            file_content = file.file.read(1024)
-            file.file.seek(0)
             detected_mime = magic.from_buffer(file_content, mime=True)
+        else:
+            detected_mime, _ = mimetypes.guess_type(file.filename or "")
 
             if detected_mime not in ALLOWED_MIME_TYPES:
                 raise HTTPException(
