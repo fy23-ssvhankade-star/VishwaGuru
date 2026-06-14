@@ -457,49 +457,18 @@ async def detect_abandoned_vehicle_clip(image: Union[Image.Image, bytes], client
     targets = ["abandoned car", "rusted vehicle", "car with flat tires", "wrecked car"]
     return await _detect_clip_generic(image, labels, targets, client)
 
-async def detect_all_clip_optimized(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
+async def detect_public_facilities_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
     """
-    Optimized detection for all categories in a single API call.
+    Detects damaged public facilities like benches, fountains, or playground equipment.
     """
-    # Define label groups
-    vandalism_pos = ["graffiti", "broken window", "vandalized wall"]
-    infrastructure_pos = ["pothole", "cracked road", "broken pavement"]
-    flooding_pos = ["flooded street", "waterlogging"]
-    garbage_pos = ["garbage pile", "trash overflow", "scattered waste"]
-    fire_pos = ["fire", "smoke", "flames"]
+    labels = ["broken bench", "damaged park bench", "broken water fountain", "damaged playground equipment", "broken swing", "graffiti on facility", "good condition bench", "clean park"]
+    targets = ["broken bench", "damaged park bench", "broken water fountain", "damaged playground equipment", "broken swing", "graffiti on facility"]
+    return await _detect_clip_generic(image, labels, targets, client)
 
-    neutral = ["safe", "clean street", "smooth road", "dry street", "normal scene", "intact window", "clean wall", "intact infrastructure"]
-
-    all_labels = list(set(vandalism_pos + infrastructure_pos + flooding_pos + garbage_pos + fire_pos + neutral))
-
-    img_bytes = _prepare_image_bytes(image)
-    results = await query_hf_api(img_bytes, all_labels, client=client)
-
-    if not isinstance(results, list):
-        return {
-            "vandalism": [],
-            "infrastructure": [],
-            "flooding": [],
-            "garbage": [],
-            "fire": []
-        }
-
-    # Helper to extract detections for a category
-    def extract_detections(positive_labels):
-        detected = []
-        for res in results:
-            if isinstance(res, dict) and res.get('label') in positive_labels and res.get('score', 0) > 0.4:
-                 detected.append({
-                     "label": res['label'],
-                     "confidence": res['score'],
-                     "box": []
-                 })
-        return detected
-
-    return {
-        "vandalism": extract_detections(vandalism_pos),
-        "infrastructure": extract_detections(infrastructure_pos),
-        "flooding": extract_detections(flooding_pos),
-        "garbage": extract_detections(garbage_pos),
-        "fire": extract_detections(fire_pos)
-    }
+async def detect_construction_safety_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
+    """
+    Detects construction safety violations.
+    """
+    labels = ["unsafe scaffolding", "construction worker without helmet", "construction debris blocking path", "unsecured construction site", "safe construction site", "worker with helmet"]
+    targets = ["unsafe scaffolding", "construction worker without helmet", "construction debris blocking path", "unsecured construction site"]
+    return await _detect_clip_generic(image, labels, targets, client)

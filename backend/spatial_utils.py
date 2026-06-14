@@ -4,6 +4,10 @@ Spatial utilities for geospatial operations and deduplication.
 import math
 import logging
 from typing import List, Tuple, Optional
+try:
+    from sklearn.cluster import DBSCAN
+except ImportError:
+    DBSCAN = None
 import numpy as np
 import logging
 
@@ -138,12 +142,14 @@ def cluster_issues_dbscan(issues: List[Issue], eps_meters: float = 30.0) -> List
     # 1 degree longitude ≈ 111,000 * cos(latitude) meters
     eps_degrees = eps_meters / 111000  # Rough approximation
 
-    if HAS_SKLEARN:
-        try:
-            # Perform DBSCAN clustering
-            db = DBSCAN(eps=eps_degrees, min_samples=1, metric='haversine').fit(
-                np.radians(coordinates)
-            )
+    if DBSCAN is None:
+        # Fallback if scikit-learn is not installed
+        return [[issue] for issue in valid_issues]
+
+    # Perform DBSCAN clustering
+    db = DBSCAN(eps=eps_degrees, min_samples=1, metric='haversine').fit(
+        np.radians(coordinates)
+    )
 
             # Group issues by cluster
             clusters = {}
