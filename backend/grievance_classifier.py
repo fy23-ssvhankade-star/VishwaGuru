@@ -8,7 +8,6 @@ try:
     HAS_JOBLIB = True
 except ImportError:
     HAS_JOBLIB = False
-    logger.warning("Joblib not available. Grievance classification disabled.")
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), 'ml/grievance_model.joblib')
 
@@ -19,6 +18,7 @@ class GrievanceClassifier:
 
     def load_model(self):
         if not HAS_JOBLIB:
+            logger.warning("GrievanceClassifier: joblib not installed, model loading skipped")
             return
 
         if os.path.exists(MODEL_PATH):

@@ -634,17 +634,25 @@ async def verify_blockchain_integrity(issue_id: int, db: Session = Depends(get_d
     # Fetch current issue data including stored previous hash
     current_issue = await run_in_threadpool(
         lambda: db.query(
-            Issue.id, Issue.description, Issue.category,
-            Issue.integrity_hash, Issue.previous_integrity_hash
+            Issue.id, Issue.description, Issue.category, Issue.integrity_hash, Issue.previous_integrity_hash
         ).filter(Issue.id == issue_id).first()
     )
 
     if not current_issue:
         raise HTTPException(status_code=404, detail="Issue not found")
 
-    # Recompute hash based on current data and stored previous hash
-    # This proves the record itself hasn't been tampered with since creation.
-    prev_hash = current_issue.previous_integrity_hash or ""
+    # Use the stored previous hash if available (robust against deletion), otherwise try to reconstruct
+    if current_issue.previous_integrity_hash is not None:
+        prev_hash = current_issue.previous_integrity_hash
+    else:
+        # Fallback for old records without previous_integrity_hash
+        prev_issue_hash = await run_in_threadpool(
+            lambda: db.query(Issue.integrity_hash).filter(Issue.id < issue_id).order_by(Issue.id.desc()).first()
+        )
+        prev_hash = prev_issue_hash[0] if prev_issue_hash and prev_issue_hash[0] else ""
+
+    # Recompute hash based on current data and previous hash
+    # Chaining logic: hash(description|category|prev_hash)
     hash_content = f"{current_issue.description}|{current_issue.category}|{prev_hash}"
     computed_hash = hashlib.sha256(hash_content.encode()).hexdigest()
 
@@ -667,8 +675,10 @@ async def verify_blockchain_integrity(issue_id: int, db: Session = Depends(get_d
     elif internal_valid and not chain_intact:
         message = "Warning: Report data is internally consistent, but the blockchain link to the previous record is broken or missing."
     else:
-        message = "Integrity check failed! The report data does not match its cryptographic seal."
-        is_valid = False
+        if current_issue.previous_integrity_hash is None:
+             message = "Integrity check failed! The chain might be broken due to deleted records, or data tampering occurred."
+        else:
+             message = "Integrity check failed! The report data does not match its cryptographic seal."
 
     return BlockchainVerificationResponse(
         is_valid=is_valid,

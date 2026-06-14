@@ -456,3 +456,50 @@ async def detect_abandoned_vehicle_clip(image: Union[Image.Image, bytes], client
     labels = ["abandoned car", "rusted vehicle", "car with flat tires", "wrecked car", "normal parked car"]
     targets = ["abandoned car", "rusted vehicle", "car with flat tires", "wrecked car"]
     return await _detect_clip_generic(image, labels, targets, client)
+
+async def detect_all_clip_optimized(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
+    """
+    Optimized detection for all categories in a single API call.
+    """
+    # Define label groups
+    vandalism_pos = ["graffiti", "broken window", "vandalized wall"]
+    infrastructure_pos = ["pothole", "cracked road", "broken pavement"]
+    flooding_pos = ["flooded street", "waterlogging"]
+    garbage_pos = ["garbage pile", "trash overflow", "scattered waste"]
+    fire_pos = ["fire", "smoke", "flames"]
+
+    neutral = ["safe", "clean street", "smooth road", "dry street", "normal scene", "intact window", "clean wall", "intact infrastructure"]
+
+    all_labels = list(set(vandalism_pos + infrastructure_pos + flooding_pos + garbage_pos + fire_pos + neutral))
+
+    img_bytes = _prepare_image_bytes(image)
+    results = await query_hf_api(img_bytes, all_labels, client=client)
+
+    if not isinstance(results, list):
+        return {
+            "vandalism": [],
+            "infrastructure": [],
+            "flooding": [],
+            "garbage": [],
+            "fire": []
+        }
+
+    # Helper to extract detections for a category
+    def extract_detections(positive_labels):
+        detected = []
+        for res in results:
+            if isinstance(res, dict) and res.get('label') in positive_labels and res.get('score', 0) > 0.4:
+                 detected.append({
+                     "label": res['label'],
+                     "confidence": res['score'],
+                     "box": []
+                 })
+        return detected
+
+    return {
+        "vandalism": extract_detections(vandalism_pos),
+        "infrastructure": extract_detections(infrastructure_pos),
+        "flooding": extract_detections(flooding_pos),
+        "garbage": extract_detections(garbage_pos),
+        "fire": extract_detections(fire_pos)
+    }
