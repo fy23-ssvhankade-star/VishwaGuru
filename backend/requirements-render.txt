@@ -9,5 +9,9 @@ async-lru
 httpx
 pywebpush
 Pillow
+firebase-functions
+firebase-admin
+a2wsgi
+numpy
 python-jose[cryptography]
 passlib[bcrypt]

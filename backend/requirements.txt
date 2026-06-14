@@ -6,6 +6,8 @@ google-generativeai
 python-multipart
 psycopg2-binary
 async-lru
+scikit-learn
+numpy
 ultralyticsplus==0.0.28
 ultralytics
 opencv-python-headless

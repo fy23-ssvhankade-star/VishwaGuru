@@ -37,3 +37,7 @@
 ## 2026-02-08 - Return Type Consistency in Utilities
 **Learning:** Inconsistent return types in shared utility functions (like `process_uploaded_image`) can cause runtime crashes across multiple modules, especially when some expect tuples and others expect single values. This can lead to deployment failures that are hard to debug without full integration logs.
 **Action:** Always maintain strict return type consistency for core utilities. Use type hints and verify all call sites when changing a function's signature. Ensure that performance-oriented optimizations (like returning multiple processed formats) are applied uniformly.
+
+## 2026-02-12 - Aggregation Consolidation for Dashboards
+**Learning:** Dashboards often require multiple counts (total, status-based, category-based). Running separate `count()` queries for each metric leads to multiple table scans. A single `GROUP BY` query on the necessary columns can fetch all data in one pass.
+**Action:** Consolidate multiple scalar aggregation queries into a single `db.query(..., func.count()).group_by(...)` call. Aggregate the final metrics in Python to minimize database I/O.

@@ -17,7 +17,6 @@ from backend.ai_service import chat_with_civic_assistant
 from backend.gemini_services import get_ai_services
 from backend.maharashtra_locator import (
     find_constituency_by_pincode,
-    find_mla_by_constituency,
     find_mla_by_constituency
 )
 
@@ -49,23 +48,39 @@ def health():
 
 @router.get("/api/stats", response_model=StatsResponse)
 def get_stats(db: Session = Depends(get_db)):
+    """
+    Get application-wide statistics.
+    Optimized: Consolidates multiple queries into a single aggregation pass.
+    """
     cached_stats = recent_issues_cache.get("stats")
     if cached_stats:
         return JSONResponse(content=cached_stats)
 
-    total = db.query(func.count(Issue.id)).scalar()
-    resolved = db.query(func.count(Issue.id)).filter(Issue.status.in_(['resolved', 'verified'])).scalar()
-    # Pending is everything else
-    pending = total - resolved
+    # Perform a single group-by query to get counts by category and status
+    # This avoids multiple table scans and is significantly more efficient
+    results = db.query(
+        Issue.category,
+        Issue.status,
+        func.count(Issue.id)
+    ).group_by(Issue.category, Issue.status).all()
 
-    # By category
-    cat_counts = db.query(Issue.category, func.count(Issue.id)).group_by(Issue.category).all()
-    issues_by_category = {cat: count for cat, count in cat_counts}
+    total = 0
+    resolved_count = 0
+    issues_by_category = {}
+
+    for category, status, count in results:
+        total += count
+        if status in ['resolved', 'verified']:
+            resolved_count += count
+
+        # Handle null categories to avoid Pydantic validation errors
+        cat_key = category if category is not None else "Uncategorized"
+        issues_by_category[cat_key] = issues_by_category.get(cat_key, 0) + count
 
     response = StatsResponse(
         total_issues=total,
-        resolved_issues=resolved,
-        pending_issues=pending,
+        resolved_issues=resolved_count,
+        pending_issues=total - resolved_count,
         issues_by_category=issues_by_category
     )
 

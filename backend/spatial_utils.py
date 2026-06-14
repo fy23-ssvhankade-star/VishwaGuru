@@ -2,9 +2,12 @@
 Spatial utilities for geospatial operations and deduplication.
 """
 import math
+import logging
 from typing import List, Tuple, Optional
 
 from backend.models import Issue
+
+logger = logging.getLogger(__name__)
 
 
 def get_bounding_box(lat: float, lon: float, radius_meters: float) -> Tuple[float, float, float, float]:
@@ -132,6 +135,60 @@ def find_nearby_issues(
     nearby_issues.sort(key=lambda x: x[1])
 
     return nearby_issues
+
+
+def cluster_issues_dbscan(issues: List[Issue], eps_meters: float = 30.0) -> List[List[Issue]]:
+    """
+    Cluster issues using DBSCAN algorithm based on spatial proximity.
+    Optimized: Lazy-imports scikit-learn to reduce startup overhead and build dependencies.
+
+    Args:
+        issues: List of Issue objects with latitude/longitude
+        eps_meters: Maximum distance between two samples for one to be considered
+                   as in the neighborhood of the other (default 30m)
+
+    Returns:
+        List of clusters, where each cluster is a list of Issue objects
+    """
+    try:
+        from sklearn.cluster import DBSCAN
+        import numpy as np
+    except ImportError:
+        logger.warning("scikit-learn not installed. Spatial clustering disabled.")
+        return [[issue] for issue in issues] # Return each issue as its own cluster
+
+    # Filter issues with valid coordinates
+    valid_issues = [
+        issue for issue in issues
+        if issue.latitude is not None and issue.longitude is not None
+    ]
+
+    if not valid_issues:
+        return []
+
+    # Convert to numpy array for DBSCAN
+    coordinates = np.array([
+        [issue.latitude, issue.longitude] for issue in valid_issues
+    ])
+
+    # Convert eps from meters to radians for DBSCAN with haversine metric
+    # Earth's radius in meters is approximately 6,371,000
+    eps_radians = eps_meters / 6371000.0
+
+    # Perform DBSCAN clustering using haversine metric which expects radians
+    db = DBSCAN(eps=eps_radians, min_samples=1, metric='haversine').fit(
+        np.radians(coordinates)
+    )
+
+    # Group issues by cluster
+    clusters = {}
+    for i, label in enumerate(db.labels_):
+        if label not in clusters:
+            clusters[label] = []
+        clusters[label].append(valid_issues[i])
+
+    # Return clusters as list of lists (exclude noise points labeled as -1)
+    return [cluster for label, cluster in clusters.items() if label != -1]
 
 
 def get_cluster_representative(cluster: List[Issue]) -> Issue:

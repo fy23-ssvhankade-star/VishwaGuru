@@ -27,7 +27,12 @@ from backend.bot import start_bot_thread, stop_bot_thread
 from backend.init_db import migrate_db
 from backend.maharashtra_locator import load_maharashtra_pincode_data, load_maharashtra_mla_data
 from backend.exceptions import EXCEPTION_HANDLERS
-from backend.routers import issues, detection, grievances, utility, auth, admin
+from backend.routers.issues import router as issues_router
+from backend.routers.detection import router as detection_router
+from backend.routers.grievances import router as grievances_router
+from backend.routers.utility import router as utility_router
+from backend.routers.auth import router as auth_router
+from backend.routers.admin import router as admin_router
 from backend.grievance_service import GrievanceService
 import backend.dependencies
 
@@ -164,12 +169,12 @@ app.add_middleware(
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
 # Include Modular Routers
-app.include_router(issues.router, tags=["Issues"])
-app.include_router(detection.router, tags=["Detection"])
-app.include_router(grievances.router, tags=["Grievances"])
-app.include_router(utility.router, tags=["Utility"])
-app.include_router(auth.router, tags=["Authentication"])
-app.include_router(admin.router)
+app.include_router(issues_router, tags=["Issues"])
+app.include_router(detection_router, tags=["Detection"])
+app.include_router(grievances_router, tags=["Grievances"])
+app.include_router(utility_router, tags=["Utility"])
+app.include_router(auth_router, tags=["Authentication"])
+app.include_router(admin_router)
 
 @app.get("/health")
 def health():
