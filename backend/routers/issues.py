@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-@router.post("/issues", response_model=IssueCreateWithDeduplicationResponse, status_code=201)
+@router.post("/api/issues", response_model=IssueCreateWithDeduplicationResponse, status_code=201)
 async def create_issue(
     request: Request,
     background_tasks: BackgroundTasks,
@@ -265,7 +265,7 @@ async def create_issue(
             linked_issue_id=linked_issue_id
         )
 
-@router.post("/issues/{issue_id}/vote", response_model=VoteResponse)
+@router.post("/api/issues/{issue_id}/vote", response_model=VoteResponse)
 async def upvote_issue(issue_id: int, db: Session = Depends(get_db)):
     """
     Upvote an issue.
@@ -294,7 +294,7 @@ async def upvote_issue(issue_id: int, db: Session = Depends(get_db)):
         message="Issue upvoted successfully"
     )
 
-@router.get("/issues/nearby", response_model=List[NearbyIssueResponse])
+@router.get("/api/issues/nearby", response_model=List[NearbyIssueResponse])
 def get_nearby_issues(
     latitude: float = Query(..., ge=-90, le=90, description="Latitude of the location"),
     longitude: float = Query(..., ge=-180, le=180, description="Longitude of the location"),
@@ -366,7 +366,7 @@ def get_nearby_issues(
         logger.error(f"Error getting nearby issues: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to retrieve nearby issues")
 
-@router.post("/issues/{issue_id}/verify", response_model=Union[VoteResponse, Dict[str, Any]])
+@router.post("/api/issues/{issue_id}/verify", response_model=Union[VoteResponse, Dict[str, Any]])
 async def verify_issue_endpoint(
     issue_id: int,
     request: Request,
@@ -482,7 +482,7 @@ async def verify_issue_endpoint(
             message="Issue verified successfully"
         )
 
-@router.put("/issues/status", response_model=IssueStatusUpdateResponse)
+@router.put("/api/issues/status", response_model=IssueStatusUpdateResponse)
 def update_issue_status(
     request: IssueStatusUpdateRequest,
     background_tasks: BackgroundTasks,
@@ -536,7 +536,7 @@ def update_issue_status(
         message=f"Issue status updated to {request.status.value}"
     )
 
-@router.post("/push-subscription", response_model=PushSubscriptionResponse)
+@router.post("/api/push-subscription", response_model=PushSubscriptionResponse)
 def subscribe_push_notifications(
     request: PushSubscriptionRequest,
     db: Session = Depends(get_db)
@@ -577,7 +577,7 @@ def subscribe_push_notifications(
         message="Push subscription created"
     )
 
-@router.get("/issues/user", response_model=List[IssueSummaryResponse])
+@router.get("/api/issues/user", response_model=List[IssueSummaryResponse])
 def get_user_issues(
     user_email: str = Query(..., description="Email of the user"),
     limit: int = Query(10, ge=1, le=50, description="Number of issues to return"),
@@ -624,7 +624,7 @@ def get_user_issues(
 
     return data
 
-@router.get("/issues/{issue_id}/blockchain-verify", response_model=BlockchainVerificationResponse)
+@router.get("/api/issues/{issue_id}/blockchain-verify", response_model=BlockchainVerificationResponse)
 async def verify_blockchain_integrity(issue_id: int, db: Session = Depends(get_db)):
     """
     Verify the cryptographic integrity of a report using the blockchain-style chaining.
@@ -674,7 +674,7 @@ async def verify_blockchain_integrity(issue_id: int, db: Session = Depends(get_d
         message=message
     )
 
-@router.get("/issues/recent", response_model=List[IssueSummaryResponse])
+@router.get("/api/issues/recent", response_model=List[IssueSummaryResponse])
 def get_recent_issues(
     limit: int = Query(10, ge=1, le=50, description="Number of issues to return"),
     offset: int = Query(0, ge=0, description="Number of results to skip"),

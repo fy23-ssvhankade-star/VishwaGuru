@@ -12,7 +12,6 @@ class AdaptiveWeights:
     _instance = None
     _weights = None
     _last_loaded = 0
-    _last_check_time = 0
 
     def __new__(cls):
         if cls._instance is None:
@@ -41,11 +40,8 @@ class AdaptiveWeights:
                 self._weights = {}
 
     def _check_reload(self):
-        # Optimization: 5-second throttle to prevent excessive I/O in hot paths.
-        now = time.time()
-        if now - self._last_check_time > 5:
-            self._last_check_time = now
-            self._load_weights()
+        # Optimization: Checking mtime is fast (stat call).
+        self._load_weights()
 
     def _save_weights(self):
         try:

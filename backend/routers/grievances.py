@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-@router.get("/grievances", response_model=List[GrievanceSummaryResponse])
+@router.get("/api/grievances", response_model=List[GrievanceSummaryResponse])
 def get_grievances(
     status: Optional[str] = Query(None, description="Filter by status"),
     category: Optional[str] = Query(None, description="Filter by category"),
@@ -86,7 +86,7 @@ def get_grievances(
         logger.error(f"Error getting grievances: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to retrieve grievances")
 
-@router.get("/grievances/{grievance_id}", response_model=GrievanceSummaryResponse)
+@router.get("/api/grievances/{grievance_id}", response_model=GrievanceSummaryResponse)
 def get_grievance(grievance_id: int, db: Session = Depends(get_db)):
     """Get detailed grievance information with escalation history"""
     try:
@@ -135,7 +135,7 @@ def get_grievance(grievance_id: int, db: Session = Depends(get_db)):
         logger.error(f"Error getting grievance {grievance_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to retrieve grievance")
 
-@router.get("/escalation-stats", response_model=EscalationStatsResponse)
+@router.get("/api/escalation-stats", response_model=EscalationStatsResponse)
 def get_escalation_stats(db: Session = Depends(get_db)):
     """
     Get escalation statistics.
@@ -170,7 +170,7 @@ def get_escalation_stats(db: Session = Depends(get_db)):
         logger.error(f"Error getting escalation stats: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to retrieve escalation statistics")
 
-@router.post("/grievances/{grievance_id}/escalate")
+@router.post("/api/grievances/{grievance_id}/escalate")
 def manual_escalate_grievance(
     grievance_id: int,
     request: Request,
@@ -219,7 +219,7 @@ def _load_responsibility_map():
     with open(file_path, "r") as f:
         return json.load(f)
 
-@router.get("/responsibility-map", response_model=ResponsibilityMapResponse)
+@router.get("/api/responsibility-map", response_model=ResponsibilityMapResponse)
 def get_responsibility_map():
     """Get responsibility mapping data for civic authorities"""
     try:
@@ -237,7 +237,7 @@ def get_responsibility_map():
 # COMMUNITY CONFIRMATION ENDPOINTS (Issue #289)
 # ============================================================================
 
-@router.post("/grievances/{grievance_id}/follow", response_model=FollowGrievanceResponse)
+@router.post("/api/grievances/{grievance_id}/follow", response_model=FollowGrievanceResponse)
 def follow_grievance(
     grievance_id: int,
     request: FollowGrievanceRequest,
@@ -286,7 +286,7 @@ def follow_grievance(
         raise HTTPException(status_code=500, detail="Failed to follow grievance")
 
 
-@router.delete("/grievances/{grievance_id}/follow")
+@router.delete("/api/grievances/{grievance_id}/follow")
 def unfollow_grievance(
     grievance_id: int,
     user_email: str = Query(..., description="Email of user to unfollow"),
@@ -314,7 +314,7 @@ def unfollow_grievance(
         raise HTTPException(status_code=500, detail="Failed to unfollow grievance")
 
 
-@router.post("/grievances/{grievance_id}/request-closure", response_model=RequestClosureResponse)
+@router.post("/api/grievances/{grievance_id}/request-closure", response_model=RequestClosureResponse)
 def request_grievance_closure(
     grievance_id: int,
     request_data: RequestClosureRequest,
@@ -348,7 +348,7 @@ def request_grievance_closure(
         raise HTTPException(status_code=500, detail="Failed to request closure")
 
 
-@router.post("/grievances/{grievance_id}/confirm-closure", response_model=ConfirmClosureResponse)
+@router.post("/api/grievances/{grievance_id}/confirm-closure", response_model=ConfirmClosureResponse)
 def confirm_grievance_closure(
     grievance_id: int,
     confirmation: ConfirmClosureRequest,
@@ -387,7 +387,7 @@ def confirm_grievance_closure(
         raise HTTPException(status_code=500, detail="Failed to confirm closure")
 
 
-@router.get("/grievances/{grievance_id}/closure-status", response_model=ClosureStatusResponse)
+@router.get("/api/grievances/{grievance_id}/closure-status", response_model=ClosureStatusResponse)
 def get_closure_status(
     grievance_id: int,
     db: Session = Depends(get_db)

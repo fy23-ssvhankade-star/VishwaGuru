@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, case
 from datetime import datetime, timezone
 import logging
 
@@ -47,18 +47,28 @@ def health():
         }
     )
 
-@router.get("/stats", response_model=StatsResponse)
+@router.get("/api/stats", response_model=StatsResponse)
 def get_stats(db: Session = Depends(get_db)):
+    """
+    Get general issue statistics.
+    Optimized: Uses a single aggregate query for total and resolved counts to reduce
+    database round-trips.
+    """
     cached_stats = recent_issues_cache.get("stats")
     if cached_stats:
         return JSONResponse(content=cached_stats)
 
-    total = db.query(func.count(Issue.id)).scalar()
-    resolved = db.query(func.count(Issue.id)).filter(Issue.status.in_(['resolved', 'verified'])).scalar()
-    # Pending is everything else
+    # Performance Boost: Combined total and resolved count in one query
+    counts = db.query(
+        func.count(Issue.id).label("total"),
+        func.sum(case((Issue.status.in_(['resolved', 'verified']), 1), else_=0)).label("resolved")
+    ).first()
+
+    total = counts.total or 0
+    resolved = int(counts.resolved or 0)
     pending = total - resolved
 
-    # By category
+    # By category (separate group-by query is necessary here)
     cat_counts = db.query(Issue.category, func.count(Issue.id)).group_by(Issue.category).all()
     issues_by_category = {cat: count for cat, count in cat_counts}
 
@@ -74,7 +84,7 @@ def get_stats(db: Session = Depends(get_db)):
 
     return response
 
-@router.get("/ml-status", response_model=MLStatusResponse)
+@router.get("/api/ml-status", response_model=MLStatusResponse)
 async def ml_status():
     """
     Get the status of the ML detection service.
@@ -87,7 +97,7 @@ async def ml_status():
         memory_usage=status.get("memory_usage")
     )
 
-@router.post("/chat", response_model=ChatResponse)
+@router.post("/api/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
     try:
         response = await chat_with_civic_assistant(request.query)
@@ -96,7 +106,7 @@ async def chat_endpoint(request: ChatRequest):
         logger.error(f"Chat service error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Chat service temporarily unavailable")
 
-@router.get("/leaderboard", response_model=LeaderboardResponse)
+@router.get("/api/leaderboard", response_model=LeaderboardResponse)
 def get_leaderboard(db: Session = Depends(get_db)):
     """Get top reporters leaderboard (cached)"""
     cache_key = "leaderboard"
@@ -141,7 +151,7 @@ def get_leaderboard(db: Session = Depends(get_db)):
     return response_data
 
 
-@router.get("/mh/rep-contacts")
+@router.get("/api/mh/rep-contacts")
 async def get_maharashtra_rep_contacts(pincode: str = Query(..., min_length=6, max_length=6)):
     """
     Get MLA and representative contact information for Maharashtra by pincode.

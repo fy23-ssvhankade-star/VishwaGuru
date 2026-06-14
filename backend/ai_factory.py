@@ -15,30 +15,20 @@ from backend.gemini_services import (
     create_gemini_chat_service,
     create_gemini_mla_summary_service,
 )
-from backend.hf_text_services import (
-    create_hf_action_plan_service,
-    create_hf_chat_service,
-    create_hf_mla_summary_service,
-)
 from backend.mock_services import (
     create_mock_action_plan_service,
     create_mock_chat_service,
     create_mock_mla_summary_service,
 )
 
-ServiceType = Literal["gemini", "huggingface", "mock"]
+ServiceType = Literal["gemini", "mock"]
 
 
 def get_service_type() -> ServiceType:
     """
-    Determine which service implementation to use.
-
-    Priority when AI_SERVICE_TYPE is not explicitly set:
-        1. Gemini   – if GEMINI_API_KEY is present
-        2. HuggingFace – if HF_TOKEN is present
-        3. Mock     – always available
+    Determine which service implementation to use based on environment variables.
     """
-    explicit = os.environ.get("AI_SERVICE_TYPE", "").lower()
+    service_type = os.environ.get("AI_SERVICE_TYPE", "").lower()
 
     if explicit == "mock":
         return "mock"
@@ -56,35 +46,7 @@ def get_service_type() -> ServiceType:
             return "mock"
         return "gemini"
     else:
-        # Auto-detect: gemini → huggingface → mock
-        if os.environ.get("GEMINI_API_KEY"):
-            return "gemini"
-        if os.environ.get("HF_TOKEN"):
-            print("ℹ️ GEMINI_API_KEY not found. Using HUGGINGFACE services.")
-            return "huggingface"
-        print("⚠️ No AI API keys found. Defaulting to MOCK services.")
-        return "mock"
-
-
-# ── Factory functions ────────────────────────────────────────────────────────
-
-_FACTORIES = {
-    "gemini": (
-        create_gemini_action_plan_service,
-        create_gemini_chat_service,
-        create_gemini_mla_summary_service,
-    ),
-    "huggingface": (
-        create_hf_action_plan_service,
-        create_hf_chat_service,
-        create_hf_mla_summary_service,
-    ),
-    "mock": (
-        create_mock_action_plan_service,
-        create_mock_chat_service,
-        create_mock_mla_summary_service,
-    ),
-}
+        return "gemini"
 
 
 def create_action_plan_service(service_type: ServiceType = None) -> ActionPlanService:

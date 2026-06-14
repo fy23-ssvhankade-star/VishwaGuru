@@ -13,26 +13,7 @@ class PriorityEngine:
     def __init__(self):
         # We no longer hardcode values here.
         # They are fetched dynamically from AdaptiveWeights on each analysis.
-        self._regex_cache = []
-        self._last_loaded_time = 0
-
-    def _get_compiled_patterns(self):
-        """
-        Retrieves pre-compiled regex patterns for urgency calculations.
-        Invalidates cache if adaptive weights have been updated.
-        """
-        # Ensure latest weights are at least checked for reload (subject to throttling)
-        adaptive_weights._check_reload()
-
-        current_load_time = adaptive_weights._last_loaded
-        if not self._regex_cache or current_load_time > self._last_loaded_time:
-            urgency_patterns = adaptive_weights.get_urgency_patterns()
-            self._regex_cache = [
-                (re.compile(pattern, re.IGNORECASE), weight)
-                for pattern, weight in urgency_patterns
-            ]
-            self._last_loaded_time = current_load_time
-        return self._regex_cache
+        pass
 
     def analyze(self, text: str, image_labels: Optional[List[str]] = None) -> Dict[str, Any]:
         """
@@ -135,15 +116,13 @@ class PriorityEngine:
         urgency = severity_score
         reasons = []
 
-        # Optimization: Use pre-compiled regex patterns to improve performance
-        compiled_patterns = self._get_compiled_patterns()
+        urgency_patterns = adaptive_weights.get_urgency_patterns()
 
         # Apply regex modifiers
-        for pattern_obj, weight in compiled_patterns:
-            match = pattern_obj.search(text)
-            if match:
+        for pattern, weight in urgency_patterns:
+            if re.search(pattern, text):
                 urgency += weight
-                reasons.append(f"Urgency increased by context matching pattern: '{pattern_obj.pattern}'")
+                reasons.append(f"Urgency increased by context matching pattern: '{pattern}'")
 
         # Cap at 100
         urgency = min(100, urgency)

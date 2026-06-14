@@ -53,24 +53,6 @@ class IssueSummaryResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    @field_validator('image_path')
-    @classmethod
-    def format_image_url(cls, v: Optional[str]) -> Optional[str]:
-        if not v:
-            return None
-        # Normalize path separators
-        v = v.replace('\\', '/')
-        # If stored as 'data/uploads/filename.jpg', convert to '/uploads/filename.jpg'
-        if 'data/uploads/' in v:
-            return v.replace('data/uploads/', '/uploads/')
-        # If it doesn't start with /, assume it needs /uploads/ prefix if it's just a filename
-        if not v.startswith('/'):
-             if 'uploads/' not in v:
-                 return f"/uploads/{v}"
-             else:
-                 return f"/{v}"
-        return v
-
 class IssueResponse(IssueSummaryResponse):
     action_plan: Optional[Union[Dict[str, Any], Any]] = Field(None, description="Generated action plan")
 

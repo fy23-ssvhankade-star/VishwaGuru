@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case
 from typing import List
@@ -16,7 +16,18 @@ router = APIRouter(
 
 @router.get("/users", response_model=List[UserResponse])
 def get_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    users = db.query(User).offset(skip).limit(limit).all()
+    """
+    Get all users with pagination.
+    Optimized: Uses column projection to reduce database overhead.
+    """
+    users = db.query(
+        User.id,
+        User.email,
+        User.full_name,
+        User.role,
+        User.is_active,
+        User.created_at
+    ).offset(skip).limit(limit).all()
     return users
 
 @router.get("/stats")
