@@ -14,6 +14,7 @@ import speech_recognition as sr
 from googletrans import Translator
 from langdetect import detect, LangDetectException
 from pydub import AudioSegment
+from pydub.exceptions import CouldntDecodeError
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +79,19 @@ class VoiceService:
                 audio = AudioSegment.from_file(temp_input_path)
                 temp_wav_path = temp_input_path + '.wav'
                 audio.export(temp_wav_path, format='wav')
+            except FileNotFoundError:
+                # This specific error usually means ffmpeg is not installed in the system path
+                logger.warning("FFmpeg not found. Audio conversion skipped. If input is not WAV/FLAC, transcription may fail.")
+                # Try renaming to .wav and loading directly (works if input is already WAV-compatible)
+                temp_wav_path = temp_input_path + '.wav'
+                os.rename(temp_input_path, temp_wav_path)
+                temp_input_path = None  # Mark as renamed
+            except CouldntDecodeError:
+                # Specific pydub error when ffmpeg fails or file is corrupt
+                logger.warning("Could not decode audio file (FFmpeg missing or corrupt file). Attempting fallback.")
+                temp_wav_path = temp_input_path + '.wav'
+                os.rename(temp_input_path, temp_wav_path)
+                temp_input_path = None
             except Exception as conv_error:
                 logger.warning(f"Audio conversion failed, trying direct load: {conv_error}")
                 # Try renaming to .wav and loading directly
@@ -160,6 +174,16 @@ class VoiceService:
                 if os.path.exists(temp_wav_path):
                     os.unlink(temp_wav_path)
                     
+        except ValueError as ve:
+            # Often raised when audio file format is invalid (e.g. MP3 passed as WAV because ffmpeg failed)
+            logger.error(f"Audio format error: {ve}")
+            return {
+                'text': None,
+                'language': None,
+                'language_name': None,
+                'confidence': 0.0,
+                'error': 'Invalid audio format. If using MP3/M4A, server requires FFmpeg.'
+            }
         except sr.UnknownValueError:
             logger.warning("Speech recognition could not understand audio")
             return {

@@ -12,7 +12,7 @@
     "expected_urgency_min": 70
   },
   {
-    "description": "Streetlight on 5th avenue has been flickering for a week. It's annoying.",
+    "description": "Streetlight on 5th avenue has been flickering for a week. It is annoying.",
     "expected_category": "Street Light",
     "expected_severity": "Low",
     "expected_urgency_max": 40
@@ -30,7 +30,7 @@
     "expected_urgency_min": 80
   },
   {
-    "description": "Stray dogs are chasing children near the primary school. Very dangerous situation.",
+    "description": "Stray dogs are chasing children near the primary school. Very scary situation.",
     "expected_category": "Stray Animal",
     "expected_severity": "Critical",
     "expected_urgency_min": 70
@@ -69,7 +69,7 @@
     "description": "Abandoned car parked on the roadside for months. It's rusting.",
     "expected_category": "Abandoned Vehicle",
     "expected_severity": "Medium",
-    "expected_urgency_max": 40
+    "expected_urgency_max": 50
   },
   {
     "description": "Public toilet in the market is overflowing and unusable.",

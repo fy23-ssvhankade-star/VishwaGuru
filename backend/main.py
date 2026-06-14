@@ -133,33 +133,34 @@ for exception_type, handler in EXCEPTION_HANDLERS.items():
 # CORS Configuration - Security Enhanced
 frontend_url = os.environ.get("FRONTEND_URL")
 is_production = os.environ.get("ENVIRONMENT", "").lower() == "production"
+allow_origin_regex = None
 
 allowed_origins = []
 
 if not frontend_url:
     if is_production:
-        # To prevent Render deployment crashes, default to a wildcard regex if missing
-        # Log a warning instead of raising an error
-        logger.warning("FRONTEND_URL environment variable is missing in production. Defaulting to allow all origins (regex) for availability.")
-        frontend_url = r"https://.*\.netlify\.app"
+        logger.warning(
+            "FRONTEND_URL environment variable is not set in production. "
+            "Defaulting to allow all origins via regex to prevent startup failure. "
+            "For better security, set FRONTEND_URL to your frontend domain."
+        )
+        allow_origin_regex = ".*"  # Allow all origins if not specified
+        allowed_origins = []
     else:
         logger.warning("FRONTEND_URL not set. Defaulting to http://localhost:5173 for development.")
         frontend_url = "http://localhost:5173"
-        allowed_origins.append(frontend_url)
-
-if frontend_url and (frontend_url.startswith("http://") or frontend_url.startswith("https://")):
-    if frontend_url not in allowed_origins and "*" not in allowed_origins:
-        allowed_origins.append(frontend_url)
-elif frontend_url and "*" not in allowed_origins:
-     logger.warning(f"Invalid FRONTEND_URL format: {frontend_url}. Ignored for CORS.")
-
-allowed_origins = []
-allowed_origin_regex = None
-
-if is_production and frontend_url == r"https://.*\.netlify\.app":
-    allowed_origin_regex = frontend_url
+        allowed_origins = [frontend_url]
 else:
-    allowed_origins = [frontend_url]
+    if not (frontend_url.startswith("http://") or frontend_url.startswith("https://")):
+        # Log warning instead of crashing
+        logger.warning(f"Invalid FRONTEND_URL: {frontend_url}. Expected HTTP/HTTPS URL.")
+        if is_production:
+            allow_origin_regex = ".*"
+            allowed_origins = []
+        else:
+            allowed_origins = ["http://localhost:5173"]
+    else:
+        allowed_origins = [frontend_url]
 
 if not is_production:
     dev_origins = [
@@ -171,14 +172,17 @@ if not is_production:
         "http://127.0.0.1:5174",
         "http://localhost:8080",
     ]
-    for origin in dev_origins:
-        if origin not in allowed_origins:
-            allowed_origins.append(origin)
+    # Only extend if allowed_origins is initialized
+    if allowed_origins is not None:
+        allowed_origins.extend(dev_origins)
+        # Also add the one from .env if it's different
+        if frontend_url and frontend_url not in allowed_origins and frontend_url.startswith("http"):
+             allowed_origins.append(frontend_url)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_origin_regex=allowed_origin_regex,
+    allow_origin_regex=allow_origin_regex,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],

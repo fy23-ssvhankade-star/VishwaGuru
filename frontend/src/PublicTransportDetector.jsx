@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
-const TrafficSignDetector = ({ onBack }) => {
+const PublicTransportDetector = ({ onBack }) => {
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const [isDetecting, setIsDetecting] = useState(false);
@@ -41,23 +41,14 @@ const TrafficSignDetector = ({ onBack }) => {
 
             const yPos = 60 + (index * 60);
 
-            context.fillStyle = 'rgba(255, 255, 255, 0.95)';
-            context.beginPath();
-            context.roundRect(20, yPos - 35, textWidth + 30, 40, 4);
-            context.fill();
-            context.strokeStyle = '#FBBF24';
-            context.lineWidth = 2;
-            context.stroke();
+            context.fillStyle = '#FFFFFF';
+            context.fillRect(20, yPos - 35, textWidth + 30, 40);
 
-            context.fillStyle = '#F59E0B';
-            context.beginPath();
-            context.moveTo(35, yPos - 25);
-            context.lineTo(40, yPos - 15);
-            context.lineTo(30, yPos - 15);
-            context.fill();
+            context.fillStyle = det.label.includes('damage') || det.label.includes('graffiti') ? '#DC2626' : '#2563EB';
+            context.fillRect(20, yPos - 35, 6, 40);
 
             context.fillStyle = '#111827';
-            context.fillText(label, 50, yPos - 10);
+            context.fillText(label, 35, yPos - 10);
         });
     };
 
@@ -83,7 +74,7 @@ const TrafficSignDetector = ({ onBack }) => {
             formData.append('image', blob, 'frame.jpg');
 
             try {
-                const response = await fetch(`${API_URL}/api/detect-traffic-sign`, {
+                const response = await fetch(`${API_URL}/api/detect-public-transport`, {
                     method: 'POST',
                     body: formData
                 });
@@ -119,19 +110,19 @@ const TrafficSignDetector = ({ onBack }) => {
     }, [isDetecting]);
 
     return (
-        <div className="flex flex-col h-full bg-yellow-50 text-gray-900">
-            <div className="p-4 flex items-center justify-between bg-white shadow-md z-10">
-                <button onClick={onBack} className="text-yellow-600 font-bold flex items-center text-sm">
+        <div className="flex flex-col h-full bg-blue-900 text-white">
+            <div className="p-4 flex items-center justify-between bg-blue-800 shadow-md z-10">
+                <button onClick={onBack} className="text-white/80 font-bold flex items-center text-sm">
                     &larr; Back
                 </button>
-                <h2 className="text-lg font-bold tracking-tight">Traffic Sign Check</h2>
+                <h2 className="text-lg font-bold tracking-tight">Transport Inspector</h2>
                 <div className="w-8"></div>
             </div>
 
-            <div className="relative flex-grow flex flex-col items-center justify-center overflow-hidden bg-yellow-100/50">
-                {error && <div className="absolute top-4 left-4 right-4 bg-red-500 text-white p-3 rounded-lg z-20 text-center text-sm">{error}</div>}
+            <div className="relative flex-grow flex flex-col items-center justify-center overflow-hidden bg-gradient-to-b from-blue-900 to-indigo-900">
+                {error && <div className="absolute top-4 left-4 right-4 bg-red-500 text-white p-3 rounded z-20 text-center text-sm">{error}</div>}
 
-                <div className="relative w-full h-full max-w-lg md:aspect-video md:h-auto bg-black md:rounded-2xl overflow-hidden shadow-xl border-4 border-white">
+                <div className="relative w-full h-full max-w-lg md:aspect-video md:h-auto bg-black md:rounded-lg overflow-hidden shadow-2xl">
                      <video
                         ref={videoRef}
                         autoPlay
@@ -148,23 +139,23 @@ const TrafficSignDetector = ({ onBack }) => {
                         <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm">
                             <button
                                 onClick={() => setIsDetecting(true)}
-                                className="px-8 py-4 bg-yellow-500 hover:bg-yellow-600 rounded-full font-bold text-lg text-white shadow-lg transform hover:scale-105 transition-all"
+                                className="px-8 py-3 bg-white text-blue-900 rounded-lg font-black uppercase tracking-wider text-sm shadow-xl transform hover:scale-105 transition-all"
                             >
-                                Scan Signs
+                                Start Inspection
                             </button>
                         </div>
                     )}
                 </div>
 
                 <div className="absolute bottom-8 px-6 text-center max-w-md pointer-events-none">
-                     <p className="text-yellow-900 font-medium bg-white/80 backdrop-blur px-4 py-2 rounded-full inline-block shadow-sm">
-                        Detects damaged, faded, or vandalized traffic signs
+                     <p className="text-blue-100 text-xs font-medium bg-blue-900/50 backdrop-blur px-4 py-2 rounded-lg inline-block border border-blue-500/30">
+                        Check bus stops and facilities for damage or vandalism
                      </p>
                      <div className="pointer-events-auto mt-4">
                         {isDetecting && (
                             <button
                                 onClick={() => setIsDetecting(false)}
-                                className="px-6 py-2 bg-white text-yellow-600 border border-yellow-200 rounded-full text-sm font-bold shadow-sm hover:bg-gray-50 transition-colors"
+                                className="px-6 py-2 bg-red-600 text-white rounded-lg text-sm font-bold shadow-md hover:bg-red-700 transition-colors"
                             >
                                 Stop
                             </button>
@@ -176,4 +167,4 @@ const TrafficSignDetector = ({ onBack }) => {
     );
 };
 
-export default TrafficSignDetector;
+export default PublicTransportDetector;

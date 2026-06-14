@@ -84,6 +84,7 @@ const Home = ({ setView, fetchResponsibilityMap, recentIssues, handleUpvote, loa
         { id: 'streetlight', label: t('home.issues.darkStreet'), icon: <Lightbulb size={24} />, color: 'text-slate-600', bg: 'bg-slate-50' },
         { id: 'traffic-sign', label: t('home.issues.trafficSign'), icon: <Signpost size={24} />, color: 'text-yellow-600', bg: 'bg-yellow-50' },
         { id: 'abandoned-vehicle', label: t('home.issues.abandonedVehicle'), icon: <Car size={24} />, color: 'text-gray-600', bg: 'bg-gray-50' },
+        { id: 'public-transport', label: 'Public Transport', icon: <Truck size={24} />, color: 'text-blue-600', bg: 'bg-blue-50' },
       ]
     },
     {
@@ -99,8 +100,9 @@ const Home = ({ setView, fetchResponsibilityMap, recentIssues, handleUpvote, loa
         { id: 'noise', label: t('home.issues.noise'), icon: <Volume2 size={24} />, color: 'text-purple-600', bg: 'bg-purple-50' },
         { id: 'crowd', label: t('home.issues.crowd'), icon: <Users size={24} />, color: 'text-red-500', bg: 'bg-red-50' },
         { id: 'water-leak', label: t('home.issues.waterLeak'), icon: <Waves size={24} />, color: 'text-blue-500', bg: 'bg-blue-50' },
-        { id: 'report', label: t('home.issues.waste'), icon: <Recycle size={24} />, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-        { id: 'graffiti', label: 'Graffiti', icon: <Brush size={24} />, color: 'text-pink-600', bg: 'bg-pink-50' },
+        { id: 'waste', label: t('home.issues.waste'), icon: <Recycle size={24} />, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+        { id: 'air-quality', label: 'Air Quality', icon: <Waves size={24} />, color: 'text-sky-600', bg: 'bg-sky-50' },
+        { id: 'cleanliness', label: 'Cleanliness', icon: <Brush size={24} />, color: 'text-teal-600', bg: 'bg-teal-50' },
       ]
     },
     {
@@ -108,6 +110,7 @@ const Home = ({ setView, fetchResponsibilityMap, recentIssues, handleUpvote, loa
       icon: <Monitor size={20} className="text-gray-600" />,
       items: [
         { id: 'safety-check', label: t('home.issues.civicEye'), icon: <Eye size={24} />, color: 'text-blue-600', bg: 'bg-blue-50' },
+        { id: 'playground', label: 'Playground Safety', icon: <Accessibility size={24} />, color: 'text-indigo-600', bg: 'bg-indigo-50' },
         { id: 'my-reports', label: t('home.issues.myReports'), icon: <CheckCircle size={24} />, color: 'text-teal-600', bg: 'bg-teal-50' },
         { id: 'grievance', label: t('home.issues.grievanceManagement'), icon: <AlertTriangle size={24} />, color: 'text-orange-600', bg: 'bg-orange-50' },
         { id: 'stats', label: t('home.issues.viewStats'), icon: <Activity size={24} />, color: 'text-indigo-600', bg: 'bg-indigo-50' },

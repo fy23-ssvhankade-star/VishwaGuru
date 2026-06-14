@@ -458,26 +458,38 @@ async def detect_abandoned_vehicle_clip(image: Union[Image.Image, bytes], client
     targets = ["abandoned car", "rusted vehicle", "car with flat tires", "wrecked car"]
     return await _detect_clip_generic(image, labels, targets, client)
 
-async def detect_vandalism_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
+
+async def detect_air_quality_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
     """
-    Detects vandalism/graffiti.
+    Detects visible air quality issues like smog or smoke.
     """
-    labels = ["graffiti", "vandalism", "spray paint", "street art", "clean wall", "public property", "normal street"]
-    targets = ["graffiti", "vandalism", "spray paint"]
+    labels = ["clear sky", "blue sky", "smog", "heavy smoke", "haze", "air pollution"]
+    targets = ["smog", "heavy smoke", "haze", "air pollution"]
     return await _detect_clip_generic(image, labels, targets, client)
 
-async def detect_infrastructure_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
+
+async def detect_playground_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
     """
-    Detects general infrastructure damage.
+    Detects safety issues in playgrounds.
     """
-    labels = ["broken streetlight", "damaged traffic sign", "fallen tree", "damaged fence", "pothole", "clean street", "normal infrastructure"]
-    targets = ["broken streetlight", "damaged traffic sign", "fallen tree", "damaged fence"]
+    labels = ["safe playground", "broken swing", "rusted slide", "damaged equipment", "clean playground", "dangerous playground"]
+    targets = ["broken swing", "rusted slide", "damaged equipment", "dangerous playground"]
     return await _detect_clip_generic(image, labels, targets, client)
 
-async def detect_flooding_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
+
+async def detect_public_transport_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
     """
-    Detects flooding/waterlogging (outdoor).
+    Detects issues with public transport infrastructure.
     """
-    labels = ["flooded street", "waterlogging", "blocked drain", "heavy rain", "dry street", "normal road"]
-    targets = ["flooded street", "waterlogging", "blocked drain", "heavy rain"]
+    labels = ["clean bus stop", "damaged bus shelter", "broken seat", "graffiti on bus stop", "missing schedule", "safe transport stop"]
+    targets = ["damaged bus shelter", "broken seat", "graffiti on bus stop", "missing schedule"]
+    return await _detect_clip_generic(image, labels, targets, client)
+
+
+async def detect_cleanliness_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
+    """
+    Detects general cleanliness issues.
+    """
+    labels = ["clean street", "litter on ground", "overflowing garbage bin", "dirty floor", "spotless area", "trash scattered"]
+    targets = ["litter on ground", "overflowing garbage bin", "dirty floor", "trash scattered"]
     return await _detect_clip_generic(image, labels, targets, client)
