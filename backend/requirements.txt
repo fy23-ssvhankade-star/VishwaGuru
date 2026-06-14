@@ -24,6 +24,6 @@ a2wsgi
 scikit-learn
 numpy
 pytest
-python-jose
-passlib
-bcrypt==3.2.2
+python-jose[cryptography]
+passlib[bcrypt]
+bcrypt==3.2.0
