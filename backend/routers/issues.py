@@ -731,11 +731,10 @@ def get_recent_issues(
     category: str = Query(None, description="Filter issues by category"),
     db: Session = Depends(get_db)
 ):
-    # v2: cache JSON string to avoid conflicts with v1 list data and ensure safe typing
-    cache_key = f"v2_recent_issues_{limit}_{offset}"
-    cached_json = recent_issues_cache.get(cache_key)
-    if cached_json:
-        return Response(content=cached_json, media_type="application/json")
+    cache_key = f"recent_issues_{limit}_{offset}"
+    cached_data = recent_issues_cache.get(cache_key)
+    if cached_data:
+        return cached_data
 
     # Fetch issues with pagination
     # Optimized: Use column projection to fetch only needed fields
