@@ -147,16 +147,22 @@ def cluster_issues_dbscan(issues: List[Issue], eps_meters: float = 30.0) -> List
         return [[issue] for issue in valid_issues]
 
     # Perform DBSCAN clustering
-    db = DBSCAN(eps=eps_degrees, min_samples=1, metric='haversine').fit(
-        np.radians(coordinates)
-    )
+    if DBSCAN:
+        db = DBSCAN(eps=eps_degrees, min_samples=1, metric='haversine').fit(
+            np.radians(coordinates)
+        )
+        labels = db.labels_
+    else:
+        # Fallback: Treat each issue as its own cluster if sklearn is missing
+        # or implement a simple distance-based clustering here if critical
+        labels = range(len(valid_issues))
 
-            # Group issues by cluster
-            clusters = {}
-            for i, label in enumerate(db.labels_):
-                if label not in clusters:
-                    clusters[label] = []
-                clusters[label].append(valid_issues[i])
+    # Group issues by cluster
+    clusters = {}
+    for i, label in enumerate(labels):
+        if label not in clusters:
+            clusters[label] = []
+        clusters[label].append(valid_issues[i])
 
             # Return clusters as list of lists (exclude noise points labeled as -1)
             return [cluster for label, cluster in clusters.items() if label != -1]
