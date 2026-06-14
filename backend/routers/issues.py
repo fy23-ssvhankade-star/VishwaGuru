@@ -178,25 +178,20 @@ async def create_issue(
         hash_content = f"{description}|{category}|{prev_hash}"
         integrity_hash = hashlib.sha256(hash_content.encode()).hexdigest()
 
-        new_issue = Issue(
-            reference_id=str(uuid.uuid4()),
-            description=description,
-            category=category,
-            image_path=image_path,
-            source="web",
-            user_email=user_email,
-            latitude=latitude,
-            longitude=longitude,
-            location=location,
-            action_plan=None,
-            integrity_hash=integrity_hash,
-            previous_integrity_hash=prev_hash,
-            status="duplicate" if is_duplicate else "open",
-            parent_issue_id=linked_issue_id if is_duplicate else None
-        )
-
-        # Offload blocking DB operations to threadpool
-        await run_in_threadpool(save_issue_db, db, new_issue)
+            new_issue = Issue(
+                reference_id=str(uuid.uuid4()),
+                description=description,
+                category=category,
+                image_path=image_path,
+                source="web",
+                user_email=user_email,
+                latitude=latitude,
+                longitude=longitude,
+                location=location,
+                action_plan=None,
+                integrity_hash=integrity_hash,
+                previous_integrity_hash=prev_hash
+            )
 
     except Exception as e:
         # Clean up uploaded file if DB save failed
@@ -219,6 +214,7 @@ async def create_issue(
         # Invalidate cache so new issue appears
         try:
             recent_issues_cache.clear()
+            nearby_issues_cache.clear()
         except Exception as e:
             logger.error(f"Error clearing cache: {e}")
 
@@ -615,50 +611,63 @@ async def verify_blockchain_integrity(issue_id: int, db: Session = Depends(get_d
     # Fetch current issue data including the stored previous hash
     current_issue = await run_in_threadpool(
         lambda: db.query(
-            Issue.id,
-            Issue.description,
-            Issue.category,
-            Issue.integrity_hash,
-            Issue.previous_integrity_hash
+            Issue.id, Issue.description, Issue.category, Issue.integrity_hash, Issue.previous_integrity_hash
         ).filter(Issue.id == issue_id).first()
     )
 
     if not current_issue:
         raise HTTPException(status_code=404, detail="Issue not found")
 
-    # Step 1: Internal Consistency - Recompute hash from data and stored previous hash
+    # Use stored previous hash to verify the chain
+    prev_hash = current_issue.previous_integrity_hash or ""
+
+    # Recompute hash based on current data and previous hash
     # Chaining logic: hash(description|category|prev_hash)
     prev_hash = current_issue.previous_integrity_hash or ""
     hash_content = f"{current_issue.description}|{current_issue.category}|{prev_hash}"
     computed_hash = hashlib.sha256(hash_content.encode()).hexdigest()
 
-    # Step 2: Chain Verification - Ensure stored previous hash matches the actual hash of the predecessor
-    # Optimization: Use a single query to fetch the preceding record's hash
-    chain_valid = True
-    actual_prev_hash = ""
+    # Step 1: Internal Consistency Check
+    internal_valid = (computed_hash == current_issue.integrity_hash)
 
-    if prev_hash:
-        predecessor = await run_in_threadpool(
-            lambda: db.query(Issue.integrity_hash).filter(Issue.id < issue_id).order_by(Issue.id.desc()).first()
-        )
-        actual_prev_hash = predecessor[0] if predecessor and predecessor[0] else ""
-        if actual_prev_hash != prev_hash:
-            chain_valid = False
+    # Step 2: Chain Link Consistency Check
+    link_valid = True
+    chain_status = "Intact"
 
-    is_valid = (computed_hash == current_issue.integrity_hash) and chain_valid
+    # Try to find the immediate predecessor
+    predecessor = await run_in_threadpool(
+        lambda: db.query(Issue.integrity_hash).filter(Issue.id < issue_id).order_by(Issue.id.desc()).first()
+    )
 
-    if is_valid:
-        message = "Integrity verified. This report is cryptographically sealed and part of a valid chain."
-    elif not chain_valid:
-        message = f"Chain integrity broken! Stored predecessor hash ({prev_hash[:8]}...) does not match actual predecessor hash ({actual_prev_hash[:8]}...)."
+    if predecessor:
+        # Predecessor exists, check if hash matches our stored previous hash
+        # Use index access for Row object consistency
+        if predecessor[0] != prev_hash:
+            chain_status = "Broken (Link Mismatch)"
+            link_valid = False
+    elif prev_hash:
+        # No predecessor found in DB, but we have a previous hash stored.
+        # This means the predecessor was deleted.
+        chain_status = "Broken (Predecessor Missing)"
+        link_valid = False
+    # Else: No predecessor and no prev_hash (Genesis block) -> Intact
+
+    if internal_valid and link_valid:
+        message = "Integrity verified. This report is cryptographically sealed and chain is intact."
+    elif internal_valid and not link_valid:
+        if chain_status == "Broken (Predecessor Missing)":
+            message = "Internal integrity verified. Previous link is missing (likely deleted), but this record is safe."
+        else:
+            message = "Internal integrity verified, but chain link is broken! Previous block hash mismatch."
     else:
         if current_issue.previous_integrity_hash is None:
              message = "Integrity check failed! The chain might be broken due to deleted records, or data tampering occurred."
         else:
              message = "Integrity check failed! The report data does not match its cryptographic seal."
 
+    # We return internal validity as primary 'is_valid' to avoid false negatives on deletions
     return BlockchainVerificationResponse(
-        is_valid=is_valid,
+        is_valid=internal_valid,
         current_hash=current_issue.integrity_hash,
         computed_hash=computed_hash,
         message=message

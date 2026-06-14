@@ -74,22 +74,8 @@ def _validate_uploaded_file_sync(file: UploadFile) -> Optional[Image.Image]:
             detail=f"File too large. Maximum size allowed is {MAX_FILE_SIZE // (1024*1024)}MB"
         )
 
-    # Check MIME type from content
-    try:
-        # Read first 1024 bytes for MIME detection
-        if magic:
-            file_content = file.file.read(1024)
-            file.file.seek(0)  # Reset file pointer
-
-            detected_mime = magic.from_buffer(file_content, mime=True)
-
-            if detected_mime not in ALLOWED_MIME_TYPES:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Invalid file type. Only image files are allowed. Detected: {detected_mime}"
-                )
-
-        # Additional content validation: Try to open with PIL to ensure it's a valid image
+    # Check MIME type from content using python-magic if available
+    if magic:
         try:
             # Read first 1024 bytes for MIME detection
             file_content = file.file.read(1024)
@@ -102,11 +88,11 @@ def _validate_uploaded_file_sync(file: UploadFile) -> Optional[Image.Image]:
                     status_code=400,
                     detail=f"Invalid file type. Only image files are allowed. Detected: {detected_mime}"
                 )
+        except HTTPException:
+            raise
         except Exception as e:
-            logger.warning(f"Magic validation failed: {e}")
-            # Fallback to extension check or PIL check
-    else:
-        logger.warning("python-magic not available, skipping MIME type check")
+            logger.warning(f"Magic validation error: {e}")
+            file.file.seek(0)
 
     # Additional content validation: Try to open with PIL to ensure it's a valid image
     try:
@@ -133,6 +119,19 @@ def _validate_uploaded_file_sync(file: UploadFile) -> Optional[Image.Image]:
             file.file = output
             file.size = output.tell()
             output.seek(0)
+
+        # Return the image object (resized or original)
+        # Ensure file pointer is at start for any subsequent reads from file.file
+        file.file.seek(0)
+
+        return img
+
+    except Exception as pil_error:
+        logger.error(f"PIL validation failed for {file.filename}: {pil_error}")
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid image file. The file appears to be corrupted or not a valid image."
+        )
 
         # Return the image object (resized or original)
         # Ensure file pointer is at start for any subsequent reads from file.file
