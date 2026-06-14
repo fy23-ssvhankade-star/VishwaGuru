@@ -2,7 +2,9 @@
 Spatial utilities for geospatial operations and deduplication.
 """
 import math
-from typing import List, Tuple, Optional
+from typing import List, Tuple
+from sklearn.cluster import DBSCAN
+import numpy as np
 
 from backend.models import Issue
 
@@ -78,6 +80,17 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
     return R * c
 
 
+def equirectangular_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """
+    Calculate distance using the equirectangular approximation.
+    Faster than Haversine for small distances (e.g., < 1km).
+    """
+    R = 6371000.0
+    x = math.radians(lon2 - lon1) * math.cos(math.radians((lat1 + lat2) / 2))
+    y = math.radians(lat2 - lat1)
+    return R * math.sqrt(x*x + y*y)
+
+
 def find_nearby_issues(
     issues: List[Issue],
     target_lat: float,
@@ -98,15 +111,14 @@ def find_nearby_issues(
     """
     nearby_issues = []
 
-    # Optimization: Use Equirectangular approximation for small radii (< 10km)
-    # It is significantly faster (avoids multiple trigonometric calls)
-    use_fast_dist = radius_meters < 10000.0
+    # Use optimized calculation for small radii
+    use_fast_calc = radius_meters < 1000.0
 
     for issue in issues:
         if issue.latitude is None or issue.longitude is None:
             continue
 
-        if use_fast_dist:
+        if use_fast_calc:
             distance = equirectangular_distance(
                 target_lat, target_lon,
                 issue.latitude, issue.longitude
