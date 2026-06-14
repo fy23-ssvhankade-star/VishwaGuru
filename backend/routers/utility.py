@@ -57,21 +57,27 @@ def get_stats(db: Session = Depends(get_db)):
     if cached_stats:
         return JSONResponse(content=cached_stats)
 
-    # Perform all counts in a single pass using conditional aggregation
-    stats = db.query(
-        func.count(Issue.id).label("total"),
-        func.sum(case({Issue.status.in_(['resolved', 'verified']): 1}, else_=0)).label("resolved")
-    ).first()
+    # Bolt Optimization: Fetch category and status counts in a single grouped query
+    # to avoid 3 separate database roundtrips.
+    counts = db.query(
+        Issue.category, Issue.status, func.count(Issue.id)
+    ).group_by(Issue.category, Issue.status).all()
 
-    total = stats.total or 0
-    resolved = int(stats.resolved or 0)
+    total = 0
+    resolved = 0
+    issues_by_category = {}
+
+    for cat, status, count in counts:
+        # Map None category to 'Uncategorized' for Dict[str, int] schema compliance
+        cat_name = cat if cat else "Uncategorized"
+
+        total += count
+        if status in ['resolved', 'verified']:
+            resolved += count
+
+        issues_by_category[cat_name] = issues_by_category.get(cat_name, 0) + count
+
     pending = total - resolved
-
-    # Category counts still need a group_by, but we can't easily merge it with the above
-    # without complex subqueries which might be slower than two simple queries.
-    # Still, reducing the first two queries into one is a win.
-    cat_counts = db.query(Issue.category, func.count(Issue.id)).group_by(Issue.category).all()
-    issues_by_category = {cat if cat is not None else "Uncategorized": count for cat, count in cat_counts}
 
     response = StatsResponse(
         total_issues=total,
@@ -81,6 +87,7 @@ def get_stats(db: Session = Depends(get_db)):
     )
 
     data = response.model_dump(mode='json')
+    # Note: ThreadSafeCache uses set(data, key) signature.
     recent_issues_cache.set(data, "stats")
 
     return response
@@ -160,6 +167,7 @@ def get_leaderboard(db: Session = Depends(get_db)):
 
     response_data = {"leaderboard": leaderboard_data}
     # Cache for 5 minutes to reduce DB load on frequent hits
+    # Note: ThreadSafeCache uses set(data, key) signature.
     recent_issues_cache.set(response_data, cache_key)
 
     return response_data

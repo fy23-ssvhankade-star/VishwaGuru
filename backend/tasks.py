@@ -23,8 +23,8 @@ async def process_action_plan_background(issue_id: int, description: str, catego
             issue.action_plan = action_plan
             db.commit()
 
-            # Invalidate cache to ensure users get the updated action plan
-            recent_issues_cache.clear()
+            # Bolt Optimization: Removed unnecessary recent_issues_cache.clear()
+            # since recent issues list doesn't include action_plan and doesn't change on update.
     except Exception as e:
         logger.error(f"Background action plan generation failed for issue {issue_id}: {e}", exc_info=True)
     finally:
