@@ -38,6 +38,6 @@
 **Learning:** Inconsistent return types in shared utility functions (like `process_uploaded_image`) can cause runtime crashes across multiple modules, especially when some expect tuples and others expect single values. This can lead to deployment failures that are hard to debug without full integration logs.
 **Action:** Always maintain strict return type consistency for core utilities. Use type hints and verify all call sites when changing a function's signature. Ensure that performance-oriented optimizations (like returning multiple processed formats) are applied uniformly.
 
-## 2026-05-24 - Unbounded Spatial Queries
-**Learning:** Spatial bounding box queries without a `LIMIT` clause can cause severe performance degradation in dense areas or when using large search radii. The application attempts to load and process all matching records in Python, leading to O(N) memory usage and processing time.
-**Action:** Always apply a safety `.limit()` to spatial candidate queries to prevent worst-case scenarios, even if the primary filter is a bounding box. A reasonable limit (e.g., 100) balances result completeness with system stability.
+## 2024-05-30 - Chaining for O(1) Integrity Verification
+**Learning:** Chained data structures (like blockchains) that require cross-record lookups for verification can suffer from O(N) or O(log N) latency as the dataset grows. Storing the "back-link" (the previous hash) directly on the current record transforms verification into a single (1)$ database lookup.
+**Action:** Always store the hash of the preceding record in the current record if integrity chaining is required, allowing for immediate verification without secondary queries.

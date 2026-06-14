@@ -7,6 +7,7 @@ import os
 import google.generativeai as genai
 from typing import Dict, Optional, Callable, Any
 import warnings
+import time
 import logging
 import asyncio
 from datetime import datetime, timedelta, timezone
@@ -49,6 +50,10 @@ def _get_fallback_summary(mla_name: str, assembly_constituency: str, district: s
     )
 
 
+# Simple cache to avoid async-lru dependency
+_summary_cache = {}
+SUMMARY_CACHE_TTL = 86400  # 24 hours
+
 async def generate_mla_summary(
     district: str,
     assembly_constituency: str,
@@ -57,18 +62,24 @@ async def generate_mla_summary(
 ) -> str:
     """
     Generate a human-readable summary about an MLA using Gemini with retry logic.
-    Uses a manual cache with 24h TTL.
-    """
-    cache_key = f"{district}_{assembly_constituency}_{mla_name}_{issue_category or 'none'}"
+    Optimized: Uses a simple manual cache to remove async-lru dependency.
 
-    # Check cache
+    Args:
+        district: District name
+        assembly_constituency: Assembly constituency name
+        mla_name: Name of the MLA
+        issue_category: Optional category of issue for context
+
+    Returns:
+        A short paragraph describing the MLA's role and responsibilities
+    """
+    cache_key = f"{district}_{assembly_constituency}_{mla_name}_{issue_category}"
+    current_time = time.time()
+
     if cache_key in _summary_cache:
-        val, expiry = _summary_cache[cache_key]
-        if datetime.now(timezone.utc) < expiry:
+        val, ts = _summary_cache[cache_key]
+        if current_time - ts < SUMMARY_CACHE_TTL:
             return val
-        else:
-            # Expired
-            _summary_cache.pop(cache_key, None)
 
     async def _generate_mla_summary_with_gemini() -> str:
         """Inner function to generate MLA summary with Gemini"""
@@ -90,12 +101,9 @@ async def generate_mla_summary(
         return response.text.strip()
 
     try:
-        result = await retry_with_exponential_backoff(_generate_mla_summary_with_gemini, max_retries=2)
-
-        # Update cache (24 hour TTL)
-        _summary_cache[cache_key] = (result, datetime.now(timezone.utc) + timedelta(hours=24))
-
-        return result
+        summary = await retry_with_exponential_backoff(_generate_mla_summary_with_gemini, max_retries=2)
+        _summary_cache[cache_key] = (summary, current_time)
+        return summary
     except Exception as e:
         logger.error(f"Gemini MLA summary generation failed after retries: {e}")
         # Fallback to simple description

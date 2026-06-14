@@ -12,13 +12,12 @@ Pillow
 firebase-functions
 firebase-admin
 a2wsgi
-python-jose[cryptography]
-passlib[bcrypt]
+python-jose
+cryptography
+passlib
 bcrypt<4.0.0
 SpeechRecognition
 pydub
 # Use deep-translator to avoid httpcore version conflicts with python-telegram-bot
 deep-translator
 langdetect
-scikit-learn
-numpy<2.0.0

@@ -671,9 +671,9 @@ def get_user_issues(
 async def verify_blockchain_integrity(issue_id: int, db: Session = Depends(get_db)):
     """
     Verify the cryptographic integrity of a report using the blockchain-style chaining.
-    Optimized: Uses column projection and stored previous_integrity_hash for verification.
+    Optimized: Uses previous_integrity_hash for O(1) verification.
     """
-    # Fetch current issue data including the stored previous hash
+    # Fetch current issue data including previous hash for O(1) verification
     current_issue = await run_in_threadpool(
         lambda: db.query(
             Issue.id, Issue.description, Issue.category, Issue.integrity_hash, Issue.previous_integrity_hash
@@ -683,16 +683,15 @@ async def verify_blockchain_integrity(issue_id: int, db: Session = Depends(get_d
     if not current_issue:
         raise HTTPException(status_code=404, detail="Issue not found")
 
-    # Fetch previous issue's integrity hash to verify the chain
-    if current_issue.previous_integrity_hash is not None:
-        # Optimized path: Use stored previous hash
-        prev_hash = current_issue.previous_integrity_hash
-    else:
-        # Legacy path: Fetch from DB
+    # Fallback for legacy records that don't have previous_integrity_hash stored
+    if current_issue.previous_integrity_hash is None:
+        # Fetch previous issue's integrity hash to verify the chain
         prev_issue_hash = await run_in_threadpool(
             lambda: db.query(Issue.integrity_hash).filter(Issue.id < issue_id).order_by(Issue.id.desc()).first()
         )
         prev_hash = prev_issue_hash[0] if prev_issue_hash and prev_issue_hash[0] else ""
+    else:
+        prev_hash = current_issue.previous_integrity_hash
 
     # Recompute hash based on current data and previous hash
     # Chaining logic: hash(description|category|prev_hash)
