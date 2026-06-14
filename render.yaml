@@ -4,7 +4,7 @@ services:
     name: vishwaguru-backend
     runtime: python
     buildCommand: "./render-build.sh"
-    startCommand: "uvicorn backend.main:app --host 0.0.0.0 --port $PORT"
+    startCommand: "python start-backend.py"
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.0
