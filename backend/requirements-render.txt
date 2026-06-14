@@ -12,13 +12,10 @@ Pillow
 firebase-functions
 firebase-admin<7.0.0
 a2wsgi
-python-jose
-cryptography
-passlib
-bcrypt
+python-jose[cryptography]
+passlib[bcrypt]
+# Voice and Language Support
 SpeechRecognition
 pydub
 googletrans==4.0.2
 langdetect
-indic-nlp-library
-async-lru

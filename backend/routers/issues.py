@@ -622,8 +622,8 @@ def get_user_issues(
 @router.get("/api/issues/{issue_id}/blockchain-verify", response_model=BlockchainVerificationResponse)
 async def verify_blockchain_integrity(issue_id: int, db: Session = Depends(get_db)):
     """
-    Verify the cryptographic integrity of a report using blockchain-style chaining.
-    Optimized: Fetches current data and previous hash in a SINGLE database roundtrip.
+    Verify the cryptographic integrity of a report using the blockchain-style chaining.
+    Optimized: Uses O(1) verification with stored previous hash.
     """
     # Define subquery to fetch the hash of the actual preceding record (securely)
     prev_hash_subquery = db.query(Issue.integrity_hash).filter(
@@ -634,20 +634,30 @@ async def verify_blockchain_integrity(issue_id: int, db: Session = Depends(get_d
     # This reduces roundtrips from 2 to 1 while maintaining cryptographic chain of trust.
     data = await run_in_threadpool(
         lambda: db.query(
+            Issue.id,
             Issue.description,
             Issue.category,
             Issue.integrity_hash,
-            prev_hash_subquery.label("prev_hash")
+            Issue.previous_integrity_hash
         ).filter(Issue.id == issue_id).first()
     )
 
     if not data:
         raise HTTPException(status_code=404, detail="Issue not found")
 
-    # prev_hash will be None for the very first issue
-    prev_hash = data.prev_hash if data.prev_hash is not None else ""
+    # Determine previous hash:
+    # 1. Use explicitly stored previous_integrity_hash (O(1), reliable)
+    # 2. Fallback to searching by ID (Legacy method, O(log N) or worse, race-prone)
+    if current_issue.previous_integrity_hash is not None:
+        prev_hash = current_issue.previous_integrity_hash
+    else:
+        # Fetch previous issue's integrity hash to verify the chain (Legacy fallback)
+        prev_issue_hash = await run_in_threadpool(
+            lambda: db.query(Issue.integrity_hash).filter(Issue.id < issue_id).order_by(Issue.id.desc()).first()
+        )
+        prev_hash = prev_issue_hash[0] if prev_issue_hash and prev_issue_hash[0] else ""
 
-    # Recompute hash based on current data and verified previous hash
+    # Recompute hash based on current data and previous hash
     # Chaining logic: hash(description|category|prev_hash)
     hash_content = f"{data.description}|{data.category}|{prev_hash}"
     computed_hash = hashlib.sha256(hash_content.encode()).hexdigest()

@@ -135,22 +135,26 @@ allowed_origins = []
 
 if not frontend_url:
     if is_production:
-        logger.critical(
+        logger.error(
             "FRONTEND_URL environment variable is MISSING in production! "
-            "CORS will be disabled (no origins allowed) for security. "
-            "Set it to your frontend URL in Render dashboard."
+            "CORS will reject all requests from browsers. Please configure FRONTEND_URL."
         )
+        # Security: Do NOT allow * in production. Fail secure by allowing nothing.
+        # We don't raise ValueError to prevent crash loops (app availability), but feature will be broken.
+        allowed_origins = []
+        frontend_url = ""
     else:
         logger.warning("FRONTEND_URL not set. Defaulting to http://localhost:5173 for development.")
         frontend_url = "http://localhost:5173"
-
-if frontend_url:
-    if not (frontend_url.startswith("http://") or frontend_url.startswith("https://")):
-        logger.error(f"FRONTEND_URL must be a valid HTTP/HTTPS URL. Got: {frontend_url}")
-    else:
         allowed_origins.append(frontend_url)
 
-if not is_production:
+if frontend_url and (frontend_url.startswith("http://") or frontend_url.startswith("https://")):
+    if frontend_url not in allowed_origins and "*" not in allowed_origins:
+        allowed_origins.append(frontend_url)
+elif frontend_url and "*" not in allowed_origins:
+     logger.warning(f"Invalid FRONTEND_URL format: {frontend_url}. Ignored for CORS.")
+
+if not is_production and "*" not in allowed_origins:
     dev_origins = [
         "http://localhost:3000",
         "http://localhost:5173",
@@ -160,10 +164,9 @@ if not is_production:
         "http://127.0.0.1:5174",
         "http://localhost:8080",
     ]
-    allowed_origins.extend(dev_origins)
-    # Also add the one from .env if it's different
-    if frontend_url not in allowed_origins:
-        allowed_origins.append(frontend_url)
+    for origin in dev_origins:
+        if origin not in allowed_origins:
+            allowed_origins.append(origin)
 
 app.add_middleware(
     CORSMiddleware,
