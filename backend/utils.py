@@ -8,7 +8,12 @@ import os
 import shutil
 import logging
 import io
-import mimetypes
+try:
+    import magic
+    MAGIC_AVAILABLE = True
+except ImportError:
+    magic = None
+    MAGIC_AVAILABLE = False
 from typing import Optional
 
 # Try to import magic for MIME type detection, fallback to basic methods if unavailable (e.g., on Render)
@@ -83,11 +88,7 @@ def _validate_uploaded_file_sync(file: UploadFile) -> Optional[Image.Image]:
     try:
         detected_mime = None
 
-        if HAS_MAGIC:
-            # Read first 1024 bytes for MIME detection
-            file_content = file.file.read(1024)
-            file.file.seek(0)  # Reset file pointer
-
+        if MAGIC_AVAILABLE:
             detected_mime = magic.from_buffer(file_content, mime=True)
 
             if detected_mime not in ALLOWED_MIME_TYPES:
@@ -96,14 +97,7 @@ def _validate_uploaded_file_sync(file: UploadFile) -> Optional[Image.Image]:
                     detail=f"Invalid file type. Only image files are allowed. Detected: {detected_mime}"
                 )
         else:
-            # Fallback: Check extension
-            mime_type, _ = mimetypes.guess_type(file.filename)
-            if mime_type and mime_type not in ALLOWED_MIME_TYPES:
-                 # Only fail if extension is explicitly disallowed
-                 raise HTTPException(
-                    status_code=400,
-                    detail=f"Invalid file type based on extension. Only image files are allowed."
-                )
+            logger.warning("python-magic not available, skipping MIME detection by content.")
 
         # Additional content validation: Try to open with PIL to ensure it's a valid image
         try:
@@ -178,22 +172,16 @@ def process_uploaded_image_sync(file: UploadFile) -> tuple[Image.Image, bytes]:
 
     # Check MIME type
     try:
-        if HAS_MAGIC:
-            file_content = file.file.read(1024)
-            file.file.seek(0)
+        file_content = file.file.read(1024)
+        file.file.seek(0)
+
+        if MAGIC_AVAILABLE:
             detected_mime = magic.from_buffer(file_content, mime=True)
 
             if detected_mime not in ALLOWED_MIME_TYPES:
                 raise HTTPException(
                     status_code=400,
                     detail=f"Invalid file type. Only image files are allowed. Detected: {detected_mime}"
-                )
-        else:
-             mime_type, _ = mimetypes.guess_type(file.filename)
-             if mime_type and mime_type not in ALLOWED_MIME_TYPES:
-                 raise HTTPException(
-                    status_code=400,
-                    detail=f"Invalid file type based on extension. Only image files are allowed."
                 )
 
         try:
