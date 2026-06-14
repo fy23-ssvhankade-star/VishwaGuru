@@ -11,9 +11,9 @@ class PriorityEngine:
     """
 
     def __init__(self):
-        # Cache for pre-compiled regex patterns to improve performance
-        self._regex_cache = []
-        self._last_reload_count = -1
+        # We no longer hardcode values here.
+        # They are fetched dynamically from AdaptiveWeights on each analysis.
+        pass
 
     def analyze(self, text: str, image_labels: Optional[List[str]] = None) -> Dict[str, Any]:
         """
@@ -116,18 +116,13 @@ class PriorityEngine:
         urgency = severity_score
         reasons = []
 
-        # Optimization: Use pre-compiled regex from cache if configuration hasn't changed
-        current_reload_count = adaptive_weights.reload_count
-        if self._last_reload_count != current_reload_count:
-            urgency_patterns = adaptive_weights.get_urgency_patterns()
-            self._regex_cache = [(re.compile(pattern), weight, pattern) for pattern, weight in urgency_patterns]
-            self._last_reload_count = current_reload_count
+        urgency_patterns = adaptive_weights.get_urgency_patterns()
 
-        # Apply regex modifiers using compiled patterns
-        for regex, weight, original_pattern in self._regex_cache:
-            if regex.search(text):
+        # Apply regex modifiers
+        for pattern, weight in urgency_patterns:
+            if re.search(pattern, text):
                 urgency += weight
-                reasons.append(f"Urgency increased by context matching pattern: '{original_pattern}'")
+                reasons.append(f"Urgency increased by context matching pattern: '{pattern}'")
 
         # Cap at 100
         urgency = min(100, urgency)
