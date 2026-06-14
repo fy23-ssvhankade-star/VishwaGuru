@@ -56,9 +56,4 @@ export const detectorsApi = {
     transcribe: async (formData) => {
         return await apiClient.postForm('/transcribe-audio', formData);
     },
-
-    // Emotion Detection (HF integration)
-    emotion: async (formData) => {
-        return await apiClient.postForm('/detect-emotion', formData);
-    },
 };

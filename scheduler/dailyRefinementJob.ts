@@ -6,9 +6,9 @@ import { AdaptiveWeights } from "../services/adaptiveWeights";
 import { IntelligenceIndex } from "../services/intelligenceIndex";
 import { Issue } from "../services/types";
 
-// Use DB_PATH environment variable if set; otherwise fall back to data/issues.db
+// Load environmental or fallback to test.db or production db
 const dbPath =
-  process.env.DB_PATH || path.join(__dirname, "../data/issues.db");
+  process.env.DB_PATH || path.join(__dirname, "../../backend/app.db");
 
 export class DailyRefinementJob {
   private db: sqlite3.Database;
@@ -134,5 +134,3 @@ if (require.main === module) {
     job.runRefinement();
   }
 }
-// Implementation is complete and verified.
-// Implementation is complete and verified.

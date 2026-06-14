@@ -104,4 +104,3 @@ export class AdaptiveWeights {
     );
   }
 }
-// Implementation is complete and verified.
