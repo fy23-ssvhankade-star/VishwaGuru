@@ -8,7 +8,10 @@ import os
 import shutil
 import logging
 import io
-import mimetypes
+try:
+    import magic
+except ImportError:
+    magic = None
 from typing import Optional
 
 try:
@@ -80,30 +83,18 @@ def _validate_uploaded_file_sync(file: UploadFile) -> Optional[Image.Image]:
         )
 
     try:
-        # Check MIME type from content using python-magic if available
-        if MAGIC_AVAILABLE:
-            try:
-                # Read first 1024 bytes for MIME detection
-                file_content = file.file.read(1024)
-                file.file.seek(0)  # Reset file pointer
+        if magic:
+            # Read first 1024 bytes for MIME detection
+            file_content = file.file.read(1024)
+            file.file.seek(0)  # Reset file pointer
 
-                detected_mime = magic.from_buffer(file_content, mime=True)
+            detected_mime = magic.from_buffer(file_content, mime=True)
 
-                if detected_mime not in ALLOWED_MIME_TYPES:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Invalid file type. Only image files are allowed. Detected: {detected_mime}"
-                    )
-            except Exception as e:
-                logger.warning(f"Error checking magic bytes: {e}")
-                # Fallback to file extension check if magic fails but file might be valid
-                pass
-        else:
-            # Fallback: check extension
-            content_type = mimetypes.guess_type(file.filename)[0]
-            if content_type and content_type not in ALLOWED_MIME_TYPES:
-                 # Just a warning/hint, real validation happens via PIL below
-                 pass
+            if detected_mime not in ALLOWED_MIME_TYPES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid file type. Only image files are allowed. Detected: {detected_mime}"
+                )
 
         # content validation: Try to open with PIL to ensure it's a valid image
         try:
@@ -177,20 +168,16 @@ def process_uploaded_image_sync(file: UploadFile) -> tuple[Image.Image, bytes]:
         )
 
     try:
-        # Check MIME type if magic is available
-        if MAGIC_AVAILABLE:
-            try:
-                file_content = file.file.read(1024)
-                file.file.seek(0)
-                detected_mime = magic.from_buffer(file_content, mime=True)
+        if magic:
+            file_content = file.file.read(1024)
+            file.file.seek(0)
+            detected_mime = magic.from_buffer(file_content, mime=True)
 
-                if detected_mime not in ALLOWED_MIME_TYPES:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Invalid file type. Only image files are allowed. Detected: {detected_mime}"
-                    )
-            except Exception:
-                pass # Continue to PIL validation
+            if detected_mime not in ALLOWED_MIME_TYPES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid file type. Only image files are allowed. Detected: {detected_mime}"
+                )
 
         try:
             img = Image.open(file.file)

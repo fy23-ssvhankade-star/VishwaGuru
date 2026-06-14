@@ -124,16 +124,18 @@ if not frontend_url:
     if is_production:
         logger.warning(
             "FRONTEND_URL environment variable is MISSING in production. "
-            "Defaulting to '*' for availability. Please set FRONTEND_URL for security."
+            "Defaulting to wildcard '*' for CORS to allow startup. "
+            "PLEASE SET THIS IN RENDER DASHBOARD."
         )
-        frontend_url = "*"
+        frontend_url = "*" # Allow all origins temporarily to fix deployment
     else:
         logger.warning("FRONTEND_URL not set. Defaulting to http://localhost:5173 for development.")
         frontend_url = "http://localhost:5173"
 
-# Only validate if not wildcard
 if frontend_url != "*" and not (frontend_url.startswith("http://") or frontend_url.startswith("https://")):
-    logger.error(f"FRONTEND_URL must be a valid HTTP/HTTPS URL. Got: {frontend_url}. Defaulting to *")
+    logger.warning(
+        f"FRONTEND_URL format invalid: {frontend_url}. Expected HTTP/HTTPS URL. Using '*' as fallback."
+    )
     frontend_url = "*"
 
 if frontend_url == "*":

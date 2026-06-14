@@ -27,10 +27,10 @@ def validate_environment():
         print("❌ Missing required environment variables:")
         for var in missing_vars:
             print(f"   - {var}")
-        print("\nPlease set these variables in the Render Dashboard.")
-        print("⚠️  Proceeding with startup, but some features may not work correctly.")
-        # Do not return False here, allow startup to continue so health checks can pass
-        # return False
+        print("\nPlease set these variables or create a .env file.")
+        print("See backend/.env.example for reference.")
+        # We don't return False here to allow the app to start and serve health check
+        print("⚠️  Proceeding with missing variables (some features may be broken)")
 
     # Set defaults for optional variables
     if not os.getenv("DATABASE_URL"):
