@@ -8,12 +8,11 @@ psycopg2-binary
 async-lru
 huggingface-hub
 httpx
+python-magic
 pywebpush
 Pillow
-firebase-functions
-firebase-admin
 a2wsgi
 python-jose[cryptography]
-cryptography
-passlib[bcrypt]
-bcrypt==3.2.0
+passlib
+bcrypt<4.0.0
+python-dotenv

@@ -107,10 +107,14 @@ def test_blockchain_backward_compatibility(client, db_session):
 
 def test_blockchain_verification_failure(client, db_session):
     # Create issue with tampered hash
+    lat, lon = 19.0760, 72.8777
     issue = Issue(
         description="Tampered issue",
         category="Road",
-        integrity_hash="invalidhash"
+        latitude=lat,
+        longitude=lon,
+        integrity_hash="invalidhash",
+        previous_integrity_hash=""
     )
     db_session.add(issue)
     db_session.commit()
