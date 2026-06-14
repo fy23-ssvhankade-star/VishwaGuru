@@ -4,10 +4,12 @@ import GenericDetector from './components/GenericDetector';
 const AbandonedVehicleDetector = ({ onBack }) => {
     return (
         <GenericDetector
-            apiEndpoint="/api/detect-abandoned-vehicle"
-            title="Abandoned Vehicle Finder"
-            instructions="Identify abandoned, wrecked, or rusted vehicles on public property."
             onBack={onBack}
+            title="Live Abandoned Vehicle Detector"
+            endpoint="/api/detect-abandoned-vehicle"
+            description="Point your camera at vehicles. Abandoned or wrecked cars will be detected."
+            color="#64748B"
+            buttonClassName="bg-slate-700 hover:bg-slate-800"
         />
     );
 };

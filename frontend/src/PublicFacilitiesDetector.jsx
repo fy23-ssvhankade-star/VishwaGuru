@@ -4,10 +4,12 @@ import GenericDetector from './components/GenericDetector';
 const PublicFacilitiesDetector = ({ onBack }) => {
     return (
         <GenericDetector
-            apiEndpoint="/api/detect-public-facilities"
-            title="Public Facilities Check"
-            instructions="Inspect benches, playgrounds, fountains, and other public amenities for damage."
             onBack={onBack}
+            title="Public Facilities Monitor"
+            endpoint="/api/detect-public-facilities"
+            description="Monitor public facilities for cleanliness and maintenance issues."
+            color="#0EA5E9"
+            buttonClassName="bg-sky-600 hover:bg-sky-700"
         />
     );
 };

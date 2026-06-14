@@ -459,16 +459,16 @@ async def detect_abandoned_vehicle_clip(image: Union[Image.Image, bytes], client
 
 async def detect_public_facilities_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
     """
-    Detects damaged public facilities like benches, fountains, or playground equipment.
+    Detects public facility issues like dirty toilets, broken benches, etc.
     """
-    labels = ["broken bench", "damaged park bench", "broken water fountain", "damaged playground equipment", "broken swing", "graffiti on facility", "good condition bench", "clean park"]
-    targets = ["broken bench", "damaged park bench", "broken water fountain", "damaged playground equipment", "broken swing", "graffiti on facility"]
+    labels = ["dirty public toilet", "clean public toilet", "overflowing garbage bin", "broken park bench", "maintained facility", "graffiti on wall", "damaged bus stop"]
+    targets = ["dirty public toilet", "overflowing garbage bin", "broken park bench", "graffiti on wall", "damaged bus stop"]
     return await _detect_clip_generic(image, labels, targets, client)
 
 async def detect_construction_safety_clip(image: Union[Image.Image, bytes], client: httpx.AsyncClient = None):
     """
-    Detects construction safety violations.
+    Detects construction safety violations like workers without helmets.
     """
-    labels = ["unsafe scaffolding", "construction worker without helmet", "construction debris blocking path", "unsecured construction site", "safe construction site", "worker with helmet"]
-    targets = ["unsafe scaffolding", "construction worker without helmet", "construction debris blocking path", "unsecured construction site"]
+    labels = ["construction worker with helmet", "construction worker without helmet", "unsafe scaffolding", "safe construction site", "unfenced construction site", "construction debris"]
+    targets = ["construction worker without helmet", "unsafe scaffolding", "unfenced construction site", "construction debris"]
     return await _detect_clip_generic(image, labels, targets, client)
