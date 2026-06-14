@@ -232,11 +232,27 @@ async def create_issue(
         filename = f"{uuid.uuid4()}_{image.filename}"
         file_location = f"data/uploads/{filename}"
 
-        # Write to disk in a threadpool to avoid blocking event loop
-        await run_in_threadpool(save_file_blocking, image.file, file_location)
+        # Offload blocking file I/O to a thread
+        def save_file():
+            with open(image_path, "wb") as buffer:
+                shutil.copyfileobj(image.file, buffer)
 
-        # Analyze with AI
-        ai_analysis = await analyze_issue_image(file_location)
+        await asyncio.to_thread(save_file)
+
+    # Offload blocking DB operations to a thread
+    def save_to_db():
+        new_issue = Issue(
+            description=description,
+            category=category,
+            image_path=image_path,
+            source="web"
+        )
+        db.add(new_issue)
+        db.commit()
+        db.refresh(new_issue)
+        return new_issue
+
+    new_issue = await asyncio.to_thread(save_to_db)
 
         # Generate Action Plan (AI)
         action_plan = await generate_action_plan(description, category, file_location)
