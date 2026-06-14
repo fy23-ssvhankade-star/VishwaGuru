@@ -11,5 +11,5 @@ python-magic
 pywebpush
 Pillow
 python-jose[cryptography]
-passlib[bcrypt]
+passlib
 bcrypt<4.0.0
