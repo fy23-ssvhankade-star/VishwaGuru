@@ -3,10 +3,6 @@ import math
 from typing import List, Dict, Any, Optional
 from backend.adaptive_weights import adaptive_weights
 
-import logging
-
-logger = logging.getLogger(__name__)
-
 class PriorityEngine:
     """
     A rule-based AI engine for prioritizing civic issues.
@@ -15,34 +11,28 @@ class PriorityEngine:
     """
 
     def __init__(self):
-        self._regex_cache = {}
-        self._recompile_cache()
+        # We no longer hardcode values here.
+        # They are fetched dynamically from AdaptiveWeights on each analysis.
+        self._regex_cache = []
+        self._last_loaded_time = 0
 
-    def _recompile_cache(self):
+    def _get_compiled_patterns(self):
         """
-        Pre-compiles regular expressions for high-performance matching.
-        Consolidates keywords into single regex patterns to avoid iterative checks.
+        Retrieves pre-compiled regex patterns for urgency calculations.
+        Invalidates cache if adaptive weights have been updated.
         """
-        # 1. Severity Keywords Cache (Consolidated patterns for each level)
-        severity_keywords = adaptive_weights.get_severity_keywords()
-        self._regex_cache['severity'] = {}
-        for level, keywords in severity_keywords.items():
-            if keywords:
-                # Escape and join keywords. Word boundaries are tricky with multi-word keywords.
-                # We'll use a simple alternation and rely on re.IGNORECASE if needed (already lowercased).
-                pattern = '(' + '|'.join([re.escape(k) for k in keywords]) + ')'
-                self._regex_cache['severity'][level] = re.compile(pattern)
+        # Ensure latest weights are at least checked for reload (subject to throttling)
+        adaptive_weights._check_reload()
 
-        # 2. Urgency Patterns Cache
-        urgency_patterns = adaptive_weights.get_urgency_patterns()
-        self._regex_cache['urgency'] = []
-        for pattern, weight in urgency_patterns:
-            try:
-                self._regex_cache['urgency'].append((re.compile(pattern), weight))
-            except re.error as e:
-                logger.error(f"Invalid urgency pattern '{pattern}': {e}")
-
-        logger.info("PriorityEngine regex cache recompiled.")
+        current_load_time = adaptive_weights._last_loaded
+        if not self._regex_cache or current_load_time > self._last_loaded_time:
+            urgency_patterns = adaptive_weights.get_urgency_patterns()
+            self._regex_cache = [
+                (re.compile(pattern, re.IGNORECASE), weight)
+                for pattern, weight in urgency_patterns
+            ]
+            self._last_loaded_time = current_load_time
+        return self._regex_cache
 
     def analyze(self, text: str, image_labels: Optional[List[str]] = None) -> Dict[str, Any]:
         """
@@ -107,40 +97,30 @@ class PriorityEngine:
         reasons = []
         label = "Low"
 
-        # Check if cache needs update (AdaptiveWeights handles the throttle)
-        if adaptive_weights._check_reload():
-            self._recompile_cache()
-
-        severity_cache = self._regex_cache.get('severity', {})
+        severity_keywords = adaptive_weights.get_severity_keywords()
 
         # Check for critical keywords (highest priority)
-        critical_regex = severity_cache.get('critical')
-        if critical_regex:
-            matches = critical_regex.findall(text)
-            if matches:
-                score = 90
-                label = "Critical"
-                reasons.append(f"Flagged as Critical due to keywords: {', '.join(list(dict.fromkeys(matches))[:3])}")
+        found_critical = [word for word in severity_keywords.get("critical", []) if word in text]
+        if found_critical:
+            score = 90
+            label = "Critical"
+            reasons.append(f"Flagged as Critical due to keywords: {', '.join(found_critical[:3])}")
 
         # Check for high keywords
         if score < 70:
-            high_regex = severity_cache.get('high')
-            if high_regex:
-                matches = high_regex.findall(text)
-                if matches:
-                    score = max(score, 70)
-                    label = "High" if score == 70 else label
-                    reasons.append(f"Flagged as High Severity due to keywords: {', '.join(list(dict.fromkeys(matches))[:3])}")
+            found_high = [word for word in severity_keywords.get("high", []) if word in text]
+            if found_high:
+                score = max(score, 70)
+                label = "High" if score == 70 else label
+                reasons.append(f"Flagged as High Severity due to keywords: {', '.join(found_high[:3])}")
 
         # Check for medium keywords
         if score < 40:
-            medium_regex = severity_cache.get('medium')
-            if medium_regex:
-                matches = medium_regex.findall(text)
-                if matches:
-                    score = max(score, 40)
-                    label = "Medium" if score == 40 else label
-                    reasons.append(f"Flagged as Medium Severity due to keywords: {', '.join(list(dict.fromkeys(matches))[:3])}")
+            found_medium = [word for word in severity_keywords.get("medium", []) if word in text]
+            if found_medium:
+                score = max(score, 40)
+                label = "Medium" if score == 40 else label
+                reasons.append(f"Flagged as Medium Severity due to keywords: {', '.join(found_medium[:3])}")
 
         # Default to low
         if score == 0:
@@ -155,13 +135,15 @@ class PriorityEngine:
         urgency = severity_score
         reasons = []
 
-        urgency_cache = self._regex_cache.get('urgency', [])
+        # Optimization: Use pre-compiled regex patterns to improve performance
+        compiled_patterns = self._get_compiled_patterns()
 
-        # Apply pre-compiled regex modifiers
-        for pattern_re, weight in urgency_cache:
-            if pattern_re.search(text):
+        # Apply regex modifiers
+        for pattern_obj, weight in compiled_patterns:
+            match = pattern_obj.search(text)
+            if match:
                 urgency += weight
-                reasons.append(f"Urgency increased by context matching pattern: '{pattern_re.pattern}'")
+                reasons.append(f"Urgency increased by context matching pattern: '{pattern_obj.pattern}'")
 
         # Cap at 100
         urgency = min(100, urgency)

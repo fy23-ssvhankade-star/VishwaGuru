@@ -54,6 +54,6 @@
 **Learning:** Executing multiple separate `count()` queries to gather system statistics results in multiple database round-trips and redundant table scans.
 **Action:** Use a single SQLAlchemy query with `func.count()` and `func.sum(case(...))` to calculate all metrics in one go. This reduces network overhead and allows the database to perform calculations in a single pass.
 
-## 2026-02-12 - Throttled Configuration I/O and Regex Consolidation
-**Learning:** Unthrottled `os.path.getmtime` calls in hot paths (like `PriorityEngine.analyze`) compound to introduce measurable latency. Additionally, iterative substring matching (`word in text`) over large keyword lists is significantly slower than consolidated regex alternation. However, word boundaries (`\b`) must be avoided if parity with substring matching is required (e.g., 'spark' should match 'sparks').
-**Action:** Throttle hot-reloading configuration checks (e.g., 5 seconds). Pre-compile and consolidate keyword lists into single regex patterns for O(M) matching.
+## 2026-02-12 - Regex Caching and I/O Throttling in Priority Engine
+**Learning:** Repeatedly calling `re.search` on string patterns and unthrottled `os.path.getmtime` calls in hot paths (like every `analyze` request) introduces measurable latency. Pre-compiling regexes and implementing a time-based (e.g., 5s) throttle for configuration reloads significantly improves throughput.
+**Action:** Use `re.compile()` for static patterns and implement time-based throttling for any file-based configuration hot-reloading to avoid filesystem bottlenecks. Ensure the consumer (e.g., `PriorityEngine`) always triggers the reload check before checking cache freshness.
