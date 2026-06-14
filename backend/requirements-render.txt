@@ -1,7 +1,6 @@
 fastapi
 uvicorn
 sqlalchemy
-python-dotenv
 python-telegram-bot
 google-generativeai
 python-multipart
@@ -22,4 +21,3 @@ googletrans==4.0.2
 langdetect
 numpy
 scikit-learn
-python-dotenv>=1.0.0
