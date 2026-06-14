@@ -8,6 +8,10 @@ import os
 import sys
 import uvicorn
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load .env file from project root
+load_dotenv(Path(__file__).parent / ".env")
 
 # Add backend to Python path
 backend_path = Path(__file__).parent / "backend"
@@ -15,12 +19,16 @@ sys.path.insert(0, str(backend_path))
 
 def validate_environment():
     """Validate required environment variables"""
-    required_vars = ["GEMINI_API_KEY", "TELEGRAM_BOT_TOKEN", "FRONTEND_URL"]
+    required_vars = ["TELEGRAM_BOT_TOKEN", "FRONTEND_URL"]
     missing_vars = []
 
     for var in required_vars:
         if not os.getenv(var):
             missing_vars.append(var)
+
+    # Check for at least one AI API key
+    if not os.getenv("NVIDIA_API_KEY") and not os.getenv("GEMINI_API_KEY"):
+        missing_vars.append("NVIDIA_API_KEY or GEMINI_API_KEY")
 
     if missing_vars:
         print("❌ Missing required environment variables:")

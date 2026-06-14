@@ -17,8 +17,8 @@ class Config:
     Loads and validates all required environment variables.
     """
     
-    # API Keys
-    gemini_api_key: str
+    # API Keys (NVIDIA NIM preferred, Gemini as fallback)
+    ai_api_key: str
     telegram_bot_token: str
     
     # Database
@@ -45,10 +45,10 @@ class Config:
         """
         errors = []
         
-        # Required variables
-        gemini_api_key = os.getenv("GEMINI_API_KEY")
-        if not gemini_api_key:
-            errors.append("GEMINI_API_KEY is required")
+        # Required variables — accept NVIDIA_API_KEY or GEMINI_API_KEY
+        ai_api_key = os.getenv("NVIDIA_API_KEY") or os.getenv("GEMINI_API_KEY")
+        if not ai_api_key:
+            errors.append("NVIDIA_API_KEY or GEMINI_API_KEY is required")
         
         telegram_bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
         if not telegram_bot_token:
@@ -95,7 +95,7 @@ class Config:
             raise ValueError(error_message)
         
         return cls(
-            gemini_api_key=gemini_api_key,
+            ai_api_key=ai_api_key,
             telegram_bot_token=telegram_bot_token,
             database_url=database_url,
             environment=environment,
@@ -130,7 +130,7 @@ class Config:
         Returns dict with validation status for each key.
         """
         validations = {
-            "gemini_api_key": len(self.gemini_api_key) > 20,
+            "ai_api_key": len(self.ai_api_key) > 20,
             "telegram_bot_token": ":" in self.telegram_bot_token and len(self.telegram_bot_token) > 40,
         }
         return validations
@@ -142,7 +142,7 @@ class Config:
             f"  environment={self.environment},\n"
             f"  database={self.get_database_type()},\n"
             f"  debug={self.debug},\n"
-            f"  gemini_api_key={'*' * 10 if self.gemini_api_key else 'NOT SET'},\n"
+            f"  ai_api_key={'*' * 10 if self.ai_api_key else 'NOT SET'},\n"
             f"  telegram_bot_token={'*' * 10 if self.telegram_bot_token else 'NOT SET'}\n"
             f")"
         )
@@ -200,9 +200,9 @@ def validate_startup_config() -> bool:
 
 
 # Convenience function to get specific config values
-def get_gemini_api_key() -> str:
-    """Get Gemini API key from config."""
-    return get_config().gemini_api_key
+def get_ai_api_key() -> str:
+    """Get AI API key from config (NVIDIA NIM or Gemini)."""
+    return get_config().ai_api_key
 
 
 def get_telegram_bot_token() -> str:

@@ -112,6 +112,14 @@ class DetectionResponse(BaseModel):
 class DetectionResponse(BaseModel):
     detections: List[Dict[str, Any]] = Field(..., description="List of detected objects/items")
 
+class VisionAnalysisResponse(BaseModel):
+    description: str = Field(..., description="AI-generated description of the issue")
+    category: str = Field(..., description="Detected issue category")
+    severity: str = Field(..., description="Severity level: Low, Medium, or High")
+    authority: Optional[str] = Field(None, description="Responsible authority")
+    action_plan: Optional[str] = Field(None, description="Recommended action plan")
+    model_used: str = Field(..., description="Vision model used for analysis")
+
 class UrgencyAnalysisRequest(BaseModel):
     description: str = Field(..., min_length=10, max_length=1000, description="Issue description")
     category: IssueCategory = Field(..., description="Issue category")

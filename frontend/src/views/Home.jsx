@@ -1,6 +1,14 @@
 import React from 'react';
-import { AlertTriangle, MapPin, Search, Activity, Camera, Trash2, ThumbsUp, Brush, Droplets, Zap, Truck, Flame, Dog, XCircle, Lightbulb, TreePine } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
+import {
+  AlertTriangle, MapPin, Search, Activity, Camera, Trash2, ThumbsUp,
+  Brush, Droplets, Zap, Truck, Flame, Dog, XCircle, Lightbulb, TreePine,
+  ChevronRight, ChevronUp, Shield, Monitor, Scan, Trophy,
+  LayoutGrid, Leaf, Bug, Volume2, Users, Waves, Recycle, Eye, CheckCircle
+} from 'lucide-react';
 
+// ─── Camera Check Modal ────────────────────────────────────────────────────────
 const CameraCheckModal = ({ onClose }) => {
   const videoRef = React.useRef(null);
   const [status, setStatus] = React.useState('requesting');
@@ -36,166 +44,28 @@ const CameraCheckModal = ({ onClose }) => {
           {status === 'error' && <span className="text-red-500 font-medium">Camera access failed. Check permissions.</span>}
           <video ref={videoRef} autoPlay playsInline className={`w-full h-full object-cover ${status === 'active' ? 'block' : 'hidden'}`} />
         </div>
-        <span className="font-semibold text-blue-800 text-sm">Report Issue</span>
-      </button>
-
-      <button
-        onClick={() => setView('pothole')}
-        className="flex flex-col items-center justify-center bg-red-50 border-2 border-red-100 p-4 rounded-xl hover:bg-red-100 transition shadow-sm h-32"
-      >
-        <div className="bg-red-500 text-white p-3 rounded-full mb-2">
-          <Camera size={24} />
-        </div>
-        <span className="font-semibold text-red-800 text-sm">Pothole</span>
-      </button>
-
-      <button
-        onClick={() => setView('garbage')}
-        className="flex flex-col items-center justify-center bg-orange-50 border-2 border-orange-100 p-4 rounded-xl hover:bg-orange-100 transition shadow-sm h-32"
-      >
-        <div className="bg-orange-500 text-white p-3 rounded-full mb-2">
-          <Trash2 size={24} />
-        </div>
-        <span className="font-semibold text-orange-800 text-sm">Garbage</span>
-      </button>
-
-      <button
-        onClick={() => setView('mh-rep')}
-        className="flex flex-col items-center justify-center bg-purple-50 border-2 border-purple-100 p-4 rounded-xl hover:bg-purple-100 transition shadow-sm h-32"
-      >
-        <div className="bg-purple-500 text-white p-3 rounded-full mb-2">
-          <Search size={24} />
-        </div>
-        <span className="font-semibold text-purple-800 text-sm">Find MLA</span>
-      </button>
-
-      <button
-        onClick={() => setView('vandalism')}
-        className="flex flex-col items-center justify-center bg-indigo-50 border-2 border-indigo-100 p-4 rounded-xl hover:bg-indigo-100 transition shadow-sm h-32"
-      >
-        <div className="bg-indigo-500 text-white p-3 rounded-full mb-2">
-          <Brush size={24} />
-        </div>
-        <span className="font-semibold text-indigo-800 text-sm">Graffiti</span>
-      </button>
-
-      <button
-        onClick={() => setView('flood')}
-        className="flex flex-col items-center justify-center bg-cyan-50 border-2 border-cyan-100 p-4 rounded-xl hover:bg-cyan-100 transition shadow-sm h-32"
-      >
-        <div className="bg-cyan-500 text-white p-3 rounded-full mb-2">
-          <Droplets size={24} />
-        </div>
-        <span className="font-semibold text-cyan-800 text-sm">Flood</span>
-      </button>
-
-      <button
-        onClick={() => setView('infrastructure')}
-        className="flex flex-col items-center justify-center bg-yellow-50 border-2 border-yellow-100 p-4 rounded-xl hover:bg-yellow-100 transition shadow-sm h-32"
-      >
-        <div className="bg-yellow-500 text-white p-3 rounded-full mb-2">
-          <Zap size={24} />
-        </div>
-        <span className="font-semibold text-yellow-800 text-sm">Broken Infra</span>
-      </button>
-
-      {/* New Western Style Features */}
-      <button
-        onClick={() => setView('parking')}
-        className="flex flex-col items-center justify-center bg-rose-50 border-2 border-rose-100 p-4 rounded-xl hover:bg-rose-100 transition shadow-sm h-32"
-      >
-        <div className="bg-rose-500 text-white p-3 rounded-full mb-2">
-          <Truck size={24} />
-        </div>
-        <span className="font-semibold text-rose-800 text-sm">Illegal Parking</span>
-      </button>
-
-      <button
-        onClick={() => setView('streetlight')}
-        className="flex flex-col items-center justify-center bg-slate-50 border-2 border-slate-100 p-4 rounded-xl hover:bg-slate-100 transition shadow-sm h-32"
-      >
-        <div className="bg-slate-700 text-white p-3 rounded-full mb-2">
-          <Lightbulb size={24} />
-        </div>
-        <span className="font-semibold text-slate-800 text-sm">Dark Street</span>
-      </button>
-
-      <button
-        onClick={() => setView('fire')}
-        className="flex flex-col items-center justify-center bg-red-100 border-2 border-red-200 p-4 rounded-xl hover:bg-red-200 transition shadow-sm h-32"
-      >
-        <div className="bg-red-600 text-white p-3 rounded-full mb-2">
-          <Flame size={24} />
-        </div>
-        <span className="font-semibold text-red-900 text-sm">Fire/Smoke</span>
-      </button>
-
-      <button
-        onClick={() => setView('animal')}
-        className="flex flex-col items-center justify-center bg-amber-50 border-2 border-amber-100 p-4 rounded-xl hover:bg-amber-100 transition shadow-sm h-32"
-      >
-        <div className="bg-amber-600 text-white p-3 rounded-full mb-2">
-          <Dog size={24} />
-        </div>
-        <span className="font-semibold text-amber-900 text-sm">Stray Animal</span>
-      </button>
-
-      <button
-        onClick={() => setView('blocked')}
-        className="flex flex-col items-center justify-center bg-gray-50 border-2 border-gray-100 p-4 rounded-xl hover:bg-gray-100 transition shadow-sm h-32"
-      >
-        <div className="bg-gray-600 text-white p-3 rounded-full mb-2">
-          <XCircle size={24} />
-        </div>
-        <span className="font-semibold text-gray-800 text-sm">Blocked Road</span>
-      </button>
-
-      <button
-        onClick={() => setView('tree')}
-        className="flex flex-col items-center justify-center bg-green-50 border-2 border-green-100 p-4 rounded-xl hover:bg-green-100 transition shadow-sm h-32"
-      >
-        <div className="bg-green-700 text-white p-3 rounded-full mb-2">
-          <TreePine size={24} />
-        </div>
-        <span className="font-semibold text-green-900 text-sm">Tree Hazard</span>
-      </button>
-    </div>
-
-    <div className="grid grid-cols-1 mt-4">
-       <button
-        onClick={fetchResponsibilityMap}
-        className="flex flex-row items-center justify-center bg-green-50 border-2 border-green-100 p-4 rounded-xl hover:bg-green-100 transition shadow-sm h-16"
-      >
-        <div className="bg-green-500 text-white p-2 rounded-full mr-3">
-          <MapPin size={20} />
-        </div>
-        <span className="font-semibold text-green-800">Who is Responsible?</span>
-      </button>
-    </div>
-
-    {/* Recent Activity Feed */}
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-      <div className="p-4 border-b border-gray-100 flex items-center gap-2">
-        <Activity size={18} className="text-orange-500" />
-        <h2 className="font-bold text-gray-800">Community Activity</h2>
+        <button
+          onClick={onClose}
+          className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 transition"
+        >
+          Close
+        </button>
       </div>
     </div>
   );
 };
 
+// ─── Home Component ────────────────────────────────────────────────────────────
 const Home = ({ setView, fetchResponsibilityMap, recentIssues, handleUpvote }) => {
-  const { t } = useTranslation();
   const navigate = useNavigate();
   const [showCameraCheck, setShowCameraCheck] = React.useState(false);
   const [showScrollTop, setShowScrollTop] = React.useState(false);
   const totalImpact = 1240 + (recentIssues ? recentIssues.length : 0);
 
-  // Scroll to top function
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Show/hide scroll to top button based on scroll position
   React.useEffect(() => {
     const handleScroll = () => {
       setShowScrollTop(window.scrollY > 100);
@@ -206,81 +76,66 @@ const Home = ({ setView, fetchResponsibilityMap, recentIssues, handleUpvote }) =
 
   const categories = [
     {
-      title: t('home.categories.roadTraffic'),
+      title: 'Road & Traffic',
       icon: <LayoutGrid size={20} className="text-blue-600" />,
       items: [
-        { id: 'pothole', label: t('home.issues.pothole'), icon: <Camera size={24} />, color: 'text-red-600', bg: 'bg-red-50' },
-        { id: 'blocked', label: t('home.issues.blockedRoad'), icon: <XCircle size={24} />, color: 'text-gray-600', bg: 'bg-gray-50' },
-        { id: 'parking', label: t('home.issues.illegalParking'), icon: <Truck size={24} />, color: 'text-rose-600', bg: 'bg-rose-50' },
-        { id: 'streetlight', label: t('home.issues.darkStreet'), icon: <Lightbulb size={24} />, color: 'text-slate-600', bg: 'bg-slate-50' },
+        { id: 'pothole', label: 'Pothole', icon: <Camera size={24} />, color: 'text-red-600', bg: 'bg-red-50' },
+        { id: 'blocked', label: 'Blocked Road', icon: <XCircle size={24} />, color: 'text-gray-600', bg: 'bg-gray-50' },
+        { id: 'parking', label: 'Illegal Parking', icon: <Truck size={24} />, color: 'text-rose-600', bg: 'bg-rose-50' },
+        { id: 'streetlight', label: 'Dark Street', icon: <Lightbulb size={24} />, color: 'text-slate-600', bg: 'bg-slate-50' },
       ]
     },
     {
-      title: t('home.categories.environmentSafety'),
+      title: 'Environment & Safety',
       icon: <Leaf size={20} className="text-green-600" />,
       items: [
-        { id: 'garbage', label: t('home.issues.garbage'), icon: <Trash2 size={24} />, color: 'text-orange-600', bg: 'bg-orange-50' },
-        { id: 'flood', label: t('home.issues.flood'), icon: <Droplets size={24} />, color: 'text-cyan-600', bg: 'bg-cyan-50' },
-        { id: 'fire', label: t('home.issues.fireSmoke'), icon: <Flame size={24} />, color: 'text-red-600', bg: 'bg-red-50' },
-        { id: 'tree', label: t('home.issues.treeHazard'), icon: <TreeDeciduous size={24} />, color: 'text-green-600', bg: 'bg-green-50' },
-        { id: 'animal', label: t('home.issues.strayAnimal'), icon: <Dog size={24} />, color: 'text-amber-600', bg: 'bg-amber-50' },
-        { id: 'pest', label: t('home.issues.pestControl'), icon: <Bug size={24} />, color: 'text-amber-800', bg: 'bg-amber-50' },
-        { id: 'noise', label: "Noise", icon: <Volume2 size={24} />, color: 'text-purple-600', bg: 'bg-purple-50' },
-        { id: 'crowd', label: "Crowd", icon: <Users size={24} />, color: 'text-red-500', bg: 'bg-red-50' },
-        { id: 'water-leak', label: "Water Leak", icon: <Waves size={24} />, color: 'text-blue-500', bg: 'bg-blue-50' },
-        { id: 'waste', label: "Waste Sorter", icon: <Recycle size={24} />, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+        { id: 'garbage', label: 'Garbage', icon: <Trash2 size={24} />, color: 'text-orange-600', bg: 'bg-orange-50' },
+        { id: 'flood', label: 'Flood', icon: <Droplets size={24} />, color: 'text-cyan-600', bg: 'bg-cyan-50' },
+        { id: 'fire', label: 'Fire / Smoke', icon: <Flame size={24} />, color: 'text-red-600', bg: 'bg-red-50' },
+        { id: 'tree', label: 'Tree Hazard', icon: <TreePine size={24} />, color: 'text-green-600', bg: 'bg-green-50' },
+        { id: 'animal', label: 'Stray Animal', icon: <Dog size={24} />, color: 'text-amber-600', bg: 'bg-amber-50' },
+        { id: 'infrastructure', label: 'Broken Infra', icon: <Zap size={24} />, color: 'text-yellow-600', bg: 'bg-yellow-50' },
+        { id: 'vandalism', label: 'Graffiti', icon: <Brush size={24} />, color: 'text-indigo-600', bg: 'bg-indigo-50' },
       ]
     },
     {
-      title: t('home.categories.management'),
+      title: 'Management',
       icon: <Monitor size={20} className="text-gray-600" />,
       items: [
-        { id: 'civic-eye', label: "Civic Eye", icon: <Eye size={24} />, color: 'text-blue-600', bg: 'bg-blue-50' },
-        { id: 'grievance', label: t('home.issues.grievanceManagement'), icon: <AlertTriangle size={24} />, color: 'text-orange-600', bg: 'bg-orange-50' },
-        { id: 'stats', label: t('home.issues.viewStats'), icon: <Activity size={24} />, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-        { id: 'leaderboard', label: t('home.issues.leaderboard'), icon: <Trophy size={24} />, color: 'text-yellow-600', bg: 'bg-yellow-50' },
-        { id: 'map', label: t('home.issues.responsibilityMap'), icon: <MapPin size={24} />, color: 'text-green-600', bg: 'bg-green-50' },
+        { id: 'mh-rep', label: 'Find MLA', icon: <Search size={24} />, color: 'text-purple-600', bg: 'bg-purple-50' },
+        { id: 'report', label: 'Report Issue', icon: <AlertTriangle size={24} />, color: 'text-orange-600', bg: 'bg-orange-50' },
+        { id: 'map', label: 'Responsibility Map', icon: <MapPin size={24} />, color: 'text-green-600', bg: 'bg-green-50' },
       ]
     }
   ];
 
   return (
     <>
-      <div className="space-y-8 pb-12">
-
-
-
-
-        <div className="flex justify-end">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-100 shadow-sm">
-            <Shield size={14} />
-            {t('home.privacyActive')}
-          </span>
-        </div>
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 pb-12 mt-6">
 
         {/* Header Stats & CTA */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Impact Widget */}
           <button
-            onClick={() => setView('stats')}
+            onClick={() => setView('report')}
             className="w-full text-left bg-gradient-to-br from-indigo-600 to-purple-700 rounded-2xl p-6 text-white shadow-lg flex justify-between items-center transform transition hover:scale-[1.02] hover:opacity-95"
           >
             <div>
               <h2 className="text-xl font-bold flex items-center gap-2">
                 <Activity size={20} className="text-indigo-200" />
-                {t('home.communityImpact')}
+                Community Impact
               </h2>
-              <p className="text-indigo-100 text-sm mt-1 opacity-90">{t('home.makingChange')}</p>
+              <p className="text-indigo-100 text-sm mt-1 opacity-90">Making a change together</p>
             </div>
             <div className="text-right">
               <span className="text-4xl font-extrabold block">{totalImpact}</span>
-              <span className="text-xs text-indigo-200 uppercase tracking-wider font-semibold">{t('home.issuesSolved')}</span>
+              <span className="text-xs text-indigo-200 uppercase tracking-wider font-semibold">Issues Solved</span>
             </div>
           </button>
 
           {/* Smart Scanner CTA */}
           <button
-            onClick={() => setView('smart-scan')}
+            onClick={() => setView('pothole')}
             className="w-full bg-gradient-to-br from-blue-500 to-cyan-600 p-6 rounded-2xl shadow-lg flex items-center justify-between text-white hover:opacity-95 transition transform hover:scale-[1.02] active:scale-95 group"
           >
             <div className="flex items-center gap-4">
@@ -288,8 +143,8 @@ const Home = ({ setView, fetchResponsibilityMap, recentIssues, handleUpvote }) =
                 <Scan size={28} />
               </div>
               <div className="text-left">
-                <h3 className="font-bold text-xl">{t('home.smartScanner')}</h3>
-                <p className="text-blue-100 text-sm mt-1">{t('home.aiPoweredDetection')}</p>
+                <h3 className="font-bold text-xl">Smart Scanner</h3>
+                <p className="text-blue-100 text-sm mt-1">AI-powered issue detection</p>
               </div>
             </div>
             <div className="bg-white/10 p-2 rounded-full">
@@ -334,11 +189,11 @@ const Home = ({ setView, fetchResponsibilityMap, recentIssues, handleUpvote }) =
             Who is Responsible?
           </button>
           <button
-            onClick={() => setView('leaderboard')}
-            className="flex flex-row items-center justify-center bg-yellow-50 border border-yellow-100 p-4 rounded-xl hover:bg-yellow-100 transition shadow-sm h-16 gap-3 text-yellow-800 font-semibold"
+            onClick={() => setView('mh-rep')}
+            className="flex flex-row items-center justify-center bg-purple-50 border border-purple-100 p-4 rounded-xl hover:bg-purple-100 transition shadow-sm h-16 gap-3 text-purple-800 font-semibold"
           >
-            <Trophy size={20} className="text-yellow-600" />
-            Top Reporters
+            <Search size={20} className="text-purple-600" />
+            Find My MLA
           </button>
           <button
             onClick={() => setShowCameraCheck(true)}
@@ -360,8 +215,8 @@ const Home = ({ setView, fetchResponsibilityMap, recentIssues, handleUpvote }) =
             </div>
             <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded-full">Live Feed</span>
           </div>
-          <div className="divide-y divide-gray-50 max-h-80 overflow-y-auto custom-scrollbar">
-            {recentIssues.length > 0 ? (
+          <div className="divide-y divide-gray-50 max-h-80 overflow-y-auto">
+            {recentIssues && recentIssues.length > 0 ? (
               recentIssues.map((issue) => (
                 <div key={issue.id} className="p-4 hover:bg-gray-50 transition group">
                   <div className="flex justify-between items-start mb-1">
@@ -382,23 +237,13 @@ const Home = ({ setView, fetchResponsibilityMap, recentIssues, handleUpvote }) =
                       <MapPin size={12} />
                       {issue.location || 'Unknown Location'}
                     </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); navigate(`/verify/${issue.id}`); }}
-                        className="flex items-center gap-1.5 text-gray-500 hover:text-green-600 text-xs bg-gray-50 px-2 py-1 rounded-md transition hover:bg-green-50"
-                        title="Verify Resolution"
-                      >
-                        <CheckCircle size={12} />
-                        <span className="font-medium">Verify</span>
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleUpvote(issue.id); }}
-                        className="flex items-center gap-1.5 text-gray-500 hover:text-blue-600 text-xs bg-gray-50 px-2 py-1 rounded-md transition hover:bg-blue-50"
-                      >
-                        <ThumbsUp size={12} />
-                        <span className="font-medium">{issue.upvotes || 0}</span>
-                      </button>
-                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleUpvote(issue.id); }}
+                      className="flex items-center gap-1.5 text-gray-500 hover:text-blue-600 text-xs bg-gray-50 px-2 py-1 rounded-md transition hover:bg-blue-50"
+                    >
+                      <ThumbsUp size={12} />
+                      <span className="font-medium">{issue.upvotes || 0}</span>
+                    </button>
                   </div>
                 </div>
               ))
@@ -412,26 +257,15 @@ const Home = ({ setView, fetchResponsibilityMap, recentIssues, handleUpvote }) =
         </div>
       </div>
 
-      {/* Scroll to Top Button - Appears on scroll */}
-      {/* Scroll to Top Button - Portal to Body */}
-      {createPortal(
-        <AnimatePresence>
-          {showScrollTop && (
-            <motion.button
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              transition={{ duration: 0.2 }}
-              onClick={scrollToTop}
-              className="fixed right-8 bottom-[447px] bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-lg hover:shadow-2xl z-[9999] cursor-pointer"
-              aria-label="Scroll to top"
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-            >
-              <ChevronUp size={24} strokeWidth={2.5} />
-            </motion.button>
-          )}
-        </AnimatePresence>,
+      {/* Scroll to Top Button */}
+      {showScrollTop && createPortal(
+        <button
+          onClick={scrollToTop}
+          className="fixed right-8 bottom-44 bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-full shadow-lg hover:shadow-2xl z-[9999] cursor-pointer transition-all duration-300 animate-fadeIn"
+          aria-label="Scroll to top"
+        >
+          <ChevronUp size={24} strokeWidth={2.5} />
+        </button>,
         document.body
       )}
     </>

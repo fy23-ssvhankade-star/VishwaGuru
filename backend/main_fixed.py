@@ -26,14 +26,18 @@ from backend.database import engine, Base, SessionLocal, get_db
 from backend.models import Issue
 from backend.schemas import (
     IssueResponse, IssueCreateRequest, IssueCreateResponse, ChatRequest, ChatResponse,
-    VoteRequest, VoteResponse, DetectionResponse, UrgencyAnalysisRequest,
-    UrgencyAnalysisResponse, HealthResponse, MLStatusResponse, ResponsibilityMapResponse,
-    ErrorResponse, SuccessResponse, IssueCategory, IssueStatus
+    VoteRequest, VoteResponse, DetectionResponse, VisionAnalysisResponse,
+    UrgencyAnalysisRequest, UrgencyAnalysisResponse, HealthResponse, MLStatusResponse,
+    ResponsibilityMapResponse, ErrorResponse, SuccessResponse, IssueCategory, IssueStatus
 )
 from backend.exceptions import EXCEPTION_HANDLERS
-from backend.bot import run_bot
+from backend.bot import application
 from backend.ai_factory import create_all_ai_services
-from backend.ai_service import generate_action_plan, chat_with_civic_assistant
+from backend.ai_service import (
+    generate_action_plan, chat_with_civic_assistant,
+    analyze_issue_image, analyze_issue_with_ai,
+    VISION_MODEL, API_MODE
+)
 from backend.maharashtra_locator import (
     load_maharashtra_pincode_data,
     load_maharashtra_mla_data,
@@ -183,12 +187,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Error pre-loading Maharashtra data: {e}")
 
-    # Startup: Start Telegram Bot in separate thread (non-blocking for FastAPI)
+    # Startup: Start Telegram Bot
     try:
-        start_bot_thread()
-        logger.info("Telegram bot started in separate thread.")
+        if application:
+            await application.initialize()
+            await application.updater.start_polling()
+            await application.start()
+            logger.info("Telegram bot started.")
     except Exception as e:
-        logger.error(f"Error starting bot thread: {e}")
+        logger.error(f"Error starting Telegram bot: {e}")
     
     yield
     
@@ -196,12 +203,15 @@ async def lifespan(app: FastAPI):
     await app.state.http_client.aclose()
     logger.info("Shared HTTP Client closed.")
 
-    # Shutdown: Stop Telegram Bot thread
+    # Shutdown: Stop Telegram Bot
     try:
-        stop_bot_thread()
-        logger.info("Telegram bot thread stopped.")
+        if application:
+            await application.updater.stop()
+            await application.stop()
+            await application.shutdown()
+            logger.info("Telegram bot stopped.")
     except Exception as e:
-        logger.error(f"Error stopping bot thread: {e}")
+        logger.error(f"Error stopping Telegram bot: {e}")
 
 app = FastAPI(
     title="VishwaGuru Backend",
@@ -465,6 +475,75 @@ async def chat_endpoint(request: ChatRequest):
     except Exception as e:
         logger.error(f"Chat service error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Chat service temporarily unavailable")
+
+
+# ── NVIDIA NIM Vision Analysis ─────────────────────────────────────────────────
+
+@app.post("/api/vision/analyze", response_model=VisionAnalysisResponse)
+async def vision_analyze_endpoint(
+    image: UploadFile = File(...),
+    description: str = Form(""),
+):
+    """
+    Analyze an uploaded image using NVIDIA NIM vision model
+    (meta/llama-3.2-90b-vision-instruct).
+
+    Detects civic issues, categorizes them, and assesses severity.
+    Optionally accepts a text description for enhanced analysis.
+    """
+    if API_MODE == "none":
+        raise HTTPException(
+            status_code=503,
+            detail="Vision analysis unavailable — no AI API key configured"
+        )
+
+    # Validate the uploaded file
+    await validate_uploaded_file(image)
+
+    # Save temporarily
+    upload_dir = "data/uploads"
+    os.makedirs(upload_dir, exist_ok=True)
+    filename = f"{uuid.uuid4()}_{image.filename}"
+    image_path = os.path.join(upload_dir, filename)
+
+    try:
+        await run_in_threadpool(save_file_blocking, image.file, image_path)
+
+        if description.strip():
+            # Combined text + image analysis
+            result = await analyze_issue_with_ai(description, image_path)
+            return VisionAnalysisResponse(
+                description=result.get("category", "Unknown") + " issue detected",
+                category=result.get("category", "Unknown"),
+                severity=result.get("severity", "Medium"),
+                authority=result.get("authority"),
+                action_plan=result.get("action_plan"),
+                model_used=VISION_MODEL or "fallback",
+            )
+        else:
+            # Image-only analysis
+            result = await analyze_issue_image(image_path)
+            return VisionAnalysisResponse(
+                description=result.get("description", "Could not analyze image"),
+                category=result.get("category", "Unknown"),
+                severity=result.get("severity", "Unknown"),
+                authority=None,
+                action_plan=None,
+                model_used=VISION_MODEL or "fallback",
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Vision analysis error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Vision analysis failed")
+    finally:
+        # Clean up temp file
+        try:
+            if os.path.exists(image_path):
+                os.remove(image_path)
+        except OSError:
+            pass
+
 
 @app.get("/api/issues/recent", response_model=List[IssueResponse])
 def get_recent_issues(db: Session = Depends(get_db)):
