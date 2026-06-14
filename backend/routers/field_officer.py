@@ -403,28 +403,39 @@ def get_issue_visit_history(
 @router.get("/api/field-officer/visit-stats", response_model=VisitStatsResponse)
 def get_visit_statistics(db: Session = Depends(get_db)):
     """
-    Get aggregate statistics for all field officer visits using optimized SQL queries.
-    Optimized: Consolidates 6 individual queries into a single aggregate query to reduce
-    database round-trips and scan overhead.
+    Get aggregate statistics for all field officer visits.
+    Optimized: Uses a single aggregate query to calculate multiple metrics simultaneously,
+    avoiding N+1 aggregate query bottlenecks and reducing database round-trips.
     """
     try:
-        # Performance Boost: Single aggregate query for all metrics
+        # Use single SQL query for multiple aggregates to minimize round trips
         stats = db.query(
-            func.count(FieldOfficerVisit.id).label("total"),
-            func.sum(case((FieldOfficerVisit.verified_at.isnot(None), 1), else_=0)).label("verified"),
-            func.sum(case((FieldOfficerVisit.within_geofence == True, 1), else_=0)).label("within"),
-            func.sum(case((FieldOfficerVisit.within_geofence == False, 1), else_=0)).label("outside"),
-            func.count(func.distinct(FieldOfficerVisit.officer_email)).label("unique_officers"),
-            func.avg(FieldOfficerVisit.distance_from_site).label("avg_dist")
+            func.count(FieldOfficerVisit.id).label('total_visits'),
+            func.sum(case((FieldOfficerVisit.verified_at.isnot(None), 1), else_=0)).label('verified_visits'),
+            func.sum(case((FieldOfficerVisit.within_geofence == True, 1), else_=0)).label('within_geofence_count'),
+            func.sum(case((FieldOfficerVisit.within_geofence == False, 1), else_=0)).label('outside_geofence_count'),
+            func.count(func.distinct(FieldOfficerVisit.officer_email)).label('unique_officers'),
+            func.avg(FieldOfficerVisit.distance_from_site).label('average_distance')
         ).first()
+
+        total_visits = stats.total_visits or 0
+        verified_visits = int(stats.verified_visits or 0)
+        within_geofence_count = int(stats.within_geofence_count or 0)
+        outside_geofence_count = int(stats.outside_geofence_count or 0)
+        unique_officers = stats.unique_officers or 0
+        average_distance = stats.average_distance
+        
+        # Round to 2 decimals if not None
+        if average_distance is not None:
+            average_distance = round(float(average_distance), 2)
         
         return VisitStatsResponse(
-            total_visits=stats.total or 0,
-            verified_visits=int(stats.verified or 0),
-            within_geofence_count=int(stats.within or 0),
-            outside_geofence_count=int(stats.outside or 0),
-            unique_officers=stats.unique_officers or 0,
-            average_distance_from_site=round(float(stats.avg_dist), 2) if stats.avg_dist is not None else None
+            total_visits=total_visits,
+            verified_visits=verified_visits,
+            within_geofence_count=within_geofence_count,
+            outside_geofence_count=outside_geofence_count,
+            unique_officers=unique_officers,
+            average_distance_from_site=average_distance
         )
         
     except Exception as e:
