@@ -1,116 +1,99 @@
-import logging
-from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
-from typing import List, Dict, Any, Tuple
-import re
+from sqlalchemy import func
+from datetime import datetime, timedelta, timezone
 from collections import Counter
+import re
+from typing import Dict, Any, List
 
 from backend.models import Issue
-from backend.spatial_utils import cluster_issues_dbscan, calculate_cluster_centroid
-
-logger = logging.getLogger(__name__)
 
 class TrendAnalyzer:
     """
-    Analyzes civic issues to detect trends, keywords, and geographic hotspots.
+    Analyzes civic issues to detect trends, keyword spikes, and category patterns.
     """
+
     def __init__(self):
-        self.stop_words = {
-            "the", "a", "an", "in", "on", "at", "to", "for", "of", "with", "is", "are",
-            "was", "were", "this", "that", "it", "my", "our", "please", "help", "issue",
-            "problem", "report", "reported", "and", "or", "but", "so", "if", "when",
-            "where", "how", "why", "has", "have", "had", "been", "there", "their"
-        }
+        pass
 
-    def analyze_trends(self, db: Session, time_window_hours: int = 24) -> Dict[str, Any]:
+    def analyze_trends(self, db: Session) -> Dict[str, Any]:
         """
-        Analyzes issues from the last `time_window_hours` to find trends.
+        Analyzes issues from the last 24 hours.
+        Returns top keywords, category distribution, and emerging trends.
         """
-        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=time_window_hours)
+        now = datetime.now(timezone.utc)
+        one_day_ago = now - timedelta(hours=24)
+        two_days_ago = now - timedelta(hours=48)
 
-        # Fetch recent issues
-        recent_issues = db.query(Issue).filter(Issue.created_at >= cutoff_time).all()
+        # Fetch issues from last 24h
+        recent_issues = db.query(Issue.description, Issue.category, Issue.latitude, Issue.longitude)\
+            .filter(Issue.created_at >= one_day_ago).all()
 
-        if not recent_issues:
-            logger.info("No issues found in the last 24h for trend analysis.")
-            return {
-                "top_keywords": [],
-                "category_spikes": [],
-                "cluster_hotspots": [],
-                "total_issues": 0
-            }
+        # Fetch issues from previous period (24-48h ago) for baseline comparison
+        previous_issues = db.query(Issue.category)\
+            .filter(Issue.created_at >= two_days_ago, Issue.created_at < one_day_ago).all()
 
         # 1. Top Keywords
-        descriptions = [issue.description for issue in recent_issues if issue.description]
-        top_keywords = self._extract_top_keywords(descriptions)
+        keywords = self._extract_top_keywords([i.description for i in recent_issues if i.description])
 
-        # 2. Category Spikes (Frequency)
-        categories = [issue.category for issue in recent_issues if issue.category]
-        category_counts = Counter(categories)
-        top_categories = category_counts.most_common(5)
+        # 2. Category Analysis & Spikes
+        current_categories = Counter([i.category for i in recent_issues if i.category])
+        previous_categories = Counter([i.category for i in previous_issues if i.category])
 
-        # 3. Geographic Clustering
-        # Try DBSCAN first
-        clusters = cluster_issues_dbscan(recent_issues, eps_meters=100)
+        category_spikes = []
+        for cat, count in current_categories.items():
+            prev_count = previous_categories.get(cat, 0)
+            if prev_count > 0:
+                growth = ((count - prev_count) / prev_count) * 100
+                if growth > 50: # >50% increase
+                    category_spikes.append({"category": cat, "growth_percent": round(growth, 1), "current_count": count})
+            elif count >= 3: # New spike if at least 3 issues and none before
+                 category_spikes.append({"category": cat, "growth_percent": 100.0, "current_count": count, "note": "New emerging category"})
 
-        # Check if DBSCAN failed (returned all singletons) or wasn't available
-        is_trivial = all(len(c) == 1 for c in clusters) if clusters else True
-        if is_trivial and len(recent_issues) > 1:
-            # Fallback to grid-based clustering
-            clusters = self._grid_clustering(recent_issues)
-
-        hotspots = []
-        for cluster in clusters:
-            # Only consider clusters with multiple issues as "hotspots"
-            if len(cluster) >= 2:
-                try:
-                    lat, lon = calculate_cluster_centroid(cluster)
-                    hotspots.append({
-                        "latitude": lat,
-                        "longitude": lon,
-                        "count": len(cluster),
-                        "primary_category": self._get_primary_category(cluster)
-                    })
-                except ValueError:
-                    continue
-
-        # Sort hotspots by count descending
-        hotspots.sort(key=lambda x: x["count"], reverse=True)
+        # 3. Geographic Clustering (Simple)
+        # Identify regions with high density (simplification: group by rounded lat/lon)
+        hotspots = self._find_hotspots(recent_issues)
 
         return {
-            "top_keywords": top_keywords,
-            "category_spikes": [{"category": c, "count": n} for c, n in top_categories],
-            "cluster_hotspots": hotspots[:5], # Top 5 hotspots
-            "total_issues": len(recent_issues)
+            "period_start": one_day_ago.isoformat(),
+            "period_end": now.isoformat(),
+            "total_issues": len(recent_issues),
+            "top_keywords": keywords,
+            "category_distribution": dict(current_categories),
+            "category_spikes": category_spikes,
+            "hotspots": hotspots
         }
 
-    def _extract_top_keywords(self, texts: List[str], top_n: int = 5) -> List[Tuple[str, int]]:
-        all_words = []
+    def _extract_top_keywords(self, texts: List[str], top_n: int = 5) -> List[Dict[str, Any]]:
+        words = []
+        stop_words = set([
+            "the", "a", "an", "in", "on", "at", "to", "for", "of", "and", "is", "are", "was", "were",
+            "this", "that", "it", "with", "from", "by", "near", "my", "please", "help", "issue", "problem",
+            "there", "has", "been", "have", "not", "be", "very", "so", "can", "will", "would", "should"
+        ])
+
         for text in texts:
-            # Simple tokenization: lowercase, remove punctuation
-            words = re.findall(r'\b\w+\b', text.lower())
-            filtered_words = [w for w in words if w not in self.stop_words and len(w) > 3]
-            all_words.extend(filtered_words)
+            # Simple tokenization
+            tokens = re.findall(r'\b[a-z]{3,}\b', text.lower())
+            words.extend([t for t in tokens if t not in stop_words])
 
-        return Counter(all_words).most_common(top_n)
+        counter = Counter(words)
+        return [{"keyword": word, "count": count} for word, count in counter.most_common(top_n)]
 
-    def _get_primary_category(self, cluster: List[Issue]) -> str:
-        cats = [issue.category for issue in cluster if issue.category]
-        if not cats:
-            return "Unknown"
-        return Counter(cats).most_common(1)[0][0]
-
-    def _grid_clustering(self, issues: List[Issue]) -> List[List[Issue]]:
-        """Simple grid-based clustering fallback."""
-        grid = {}
+    def _find_hotspots(self, issues: List[Any]) -> List[Dict[str, Any]]:
+        # Group by approximate location (0.01 degree ~ 1.1km)
+        loc_counter = Counter()
         for issue in issues:
-            if issue.latitude is None or issue.longitude is None:
-                continue
-            # Round to 3 decimal places (approx 100m resolution)
-            key = (round(issue.latitude, 3), round(issue.longitude, 3))
-            if key not in grid:
-                grid[key] = []
-            grid[key].append(issue)
-        return list(grid.values())
+            if issue.latitude and issue.longitude:
+                # Round to 2 decimal places (approx 1.1km resolution)
+                key = (round(issue.latitude, 2), round(issue.longitude, 2))
+                loc_counter[key] += 1
 
-trend_analyzer = TrendAnalyzer()
+        hotspots = []
+        for (lat, lon), count in loc_counter.most_common(5):
+            if count > 1: # Only report if more than 1 issue
+                hotspots.append({
+                    "latitude": lat,
+                    "longitude": lon,
+                    "count": count
+                })
+        return hotspots

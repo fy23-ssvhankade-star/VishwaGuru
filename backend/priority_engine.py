@@ -1,29 +1,25 @@
 import re
 import math
 from typing import List, Dict, Any, Optional
-from backend.adaptive_weights import adaptive_weights
+from backend.adaptive_weights import AdaptiveWeights
 
 class PriorityEngine:
     """
     A rule-based AI engine for prioritizing civic issues.
     Analyzes text descriptions to determine severity, urgency, and category.
+    Now powered by AdaptiveWeights for dynamic refinement.
     """
 
     def __init__(self):
-        # We now access weights dynamically from adaptive_weights
-        pass
+        self.weights_manager = AdaptiveWeights()
+        self.reload_weights()
 
-    @property
-    def severity_keywords(self) -> Dict[str, List[str]]:
-        return adaptive_weights.severity_keywords
-
-    @property
-    def urgency_patterns(self) -> List[Any]:
-        return adaptive_weights.urgency_patterns
-
-    @property
-    def categories(self) -> Dict[str, List[str]]:
-        return adaptive_weights.categories
+    def reload_weights(self):
+        """Reloads weights from the AdaptiveWeights manager."""
+        weights = self.weights_manager.get_weights()
+        self.severity_keywords = weights["severity_keywords"]
+        self.urgency_patterns = weights["urgency_patterns"]
+        self.categories = weights["categories"]
 
     def analyze(self, text: str, image_labels: Optional[List[str]] = None) -> Dict[str, Any]:
         """
@@ -115,14 +111,11 @@ class PriorityEngine:
         reasons = []
 
         # Apply regex modifiers
-        for pattern_data in self.urgency_patterns:
-            # Handle potential variation in storage (list or tuple)
-            if len(pattern_data) >= 2:
-                pattern = pattern_data[0]
-                weight = pattern_data[1]
-                if re.search(pattern, text):
-                    urgency += weight
-                    reasons.append(f"Urgency increased by context matching pattern: '{pattern}'")
+        # urgency_patterns is a list of [pattern, weight] (from JSON, stored as list)
+        for pattern, weight in self.urgency_patterns:
+            if re.search(pattern, text):
+                urgency += weight
+                reasons.append(f"Urgency increased by context matching pattern: '{pattern}'")
 
         # Cap at 100
         urgency = min(100, urgency)
