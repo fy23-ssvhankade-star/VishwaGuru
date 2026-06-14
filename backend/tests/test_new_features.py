@@ -38,7 +38,6 @@ def client_with_mock_http():
          mock_http.__aenter__.return_value = mock_http
          with patch("httpx.AsyncClient", return_value=mock_http):
              with TestClient(app) as c:
-                 c.app.state.http_client = mock_http
                  yield c, mock_http
 
 def create_test_image():
@@ -115,7 +114,7 @@ def test_transcribe_audio(client_with_mock_http):
     audio_content = b"fake audio content"
 
     response = client.post(
-        "/transcribe-audio",
+        "/api/transcribe-audio",
         files={"file": ("test.wav", audio_content, "audio/wav")}
     )
 

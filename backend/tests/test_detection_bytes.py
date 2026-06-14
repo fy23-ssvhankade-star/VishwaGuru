@@ -65,7 +65,6 @@ def client():
     # Let's rely on patching httpx.AsyncClient class constructor
     with patch("httpx.AsyncClient", return_value=mock_client):
          with TestClient(app) as c:
-            c.app.state.http_client = mock_client
             yield c
 
 @pytest.mark.asyncio
