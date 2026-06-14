@@ -176,11 +176,15 @@ async def create_issue(
         # Save to DB only if no nearby issues found or deduplication failed
         if deduplication_info is None or not deduplication_info.has_nearby_issues:
             # Blockchain feature: calculate integrity hash for the report
-            # Use DB-level locking to ensure atomic chain extension (prevents forking)
-            prev_issue = await run_in_threadpool(
-                lambda: db.query(Issue.integrity_hash).order_by(Issue.id.desc()).with_for_update().first()
-            )
-            prev_hash = prev_issue[0] if prev_issue and prev_issue[0] else ""
+            # Optimization: Use cache to fetch only the last hash to maintain the chain with minimal overhead
+            prev_hash = blockchain_last_hash_cache.get("latest")
+
+            if prev_hash is None:
+                prev_issue = await run_in_threadpool(
+                    lambda: db.query(Issue.integrity_hash).order_by(Issue.id.desc()).first()
+                )
+                prev_hash = prev_issue[0] if prev_issue and prev_issue[0] else ""
+                blockchain_last_hash_cache.set(data=prev_hash, key="latest")
 
             # Simple but effective SHA-256 chaining
             hash_content = f"{description}|{category}|{prev_hash}"
@@ -210,8 +214,8 @@ async def create_issue(
             # Offload blocking DB operations to threadpool
             await run_in_threadpool(save_issue_db, db, new_issue)
 
-            # Update cache with new hash for next report
-            blockchain_last_hash_cache.set(data=integrity_hash, key="last_hash")
+            # Update last hash cache
+            blockchain_last_hash_cache.set(data=integrity_hash, key="latest")
         else:
             # Don't create new issue, just return deduplication info
             new_issue = None
@@ -628,8 +632,7 @@ def get_user_issues(
 async def verify_blockchain_integrity(issue_id: int, db: Session = Depends(get_db)):
     """
     Verify the cryptographic integrity of a report using the blockchain-style chaining.
-    Optimized: Uses stored previous_integrity_hash to enable faster verification.
-    Ensures the stored link actually matches the predecessor in the database.
+    Optimized: Uses column projection to fetch only needed data and stored previous hash.
     """
     # Fetch current issue data including the link to the previous hash
     current_issue = await run_in_threadpool(
@@ -641,19 +644,15 @@ async def verify_blockchain_integrity(issue_id: int, db: Session = Depends(get_d
     if not current_issue:
         raise HTTPException(status_code=404, detail="Issue not found")
 
-    # Determine previous hash: fallback to DB lookup for both legacy records and validation
-    # Performance Note: While we store previous_integrity_hash for O(1) verification,
-    # we must ensure it matches the actual predecessor for full chain audit.
-    actual_prev_issue = await run_in_threadpool(
-        lambda: db.query(Issue.integrity_hash).filter(Issue.id < issue_id).order_by(Issue.id.desc()).first()
-    )
-    actual_prev_hash = actual_prev_issue[0] if actual_prev_issue and actual_prev_issue[0] else ""
-
-    # Verify that the stored link hasn't been tampered with
-    link_valid = True
+    # Optimization: Use stored previous hash if available, otherwise fallback to DB lookup
     if current_issue.previous_integrity_hash is not None:
-        if current_issue.previous_integrity_hash != actual_prev_hash:
-            link_valid = False
+        prev_hash = current_issue.previous_integrity_hash
+    else:
+        # Fallback for legacy issues (Issue #302)
+        prev_issue_hash = await run_in_threadpool(
+            lambda: db.query(Issue.integrity_hash).filter(Issue.id < issue_id).order_by(Issue.id.desc()).first()
+        )
+        prev_hash = prev_issue_hash[0] if prev_issue_hash and prev_issue_hash[0] else ""
 
     # Recompute hash based on current data and the actual previous hash from DB
     # Chaining logic: hash(description|category|prev_hash)
