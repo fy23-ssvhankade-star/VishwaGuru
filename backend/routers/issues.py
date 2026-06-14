@@ -12,6 +12,7 @@ import hashlib
 import json
 from datetime import datetime, timezone
 
+from fastapi import Response
 from backend.database import get_db
 from backend.models import Issue, PushSubscription
 from backend.schemas import (
@@ -327,7 +328,8 @@ def get_nearby_issues(
     """
     try:
         # Check cache first
-        cache_key = f"v2_{latitude:.5f}_{longitude:.5f}_{radius}_{limit}"
+        # v2: cache JSON string to avoid conflicts with v1 list data and ensure safe typing
+        cache_key = f"v2_nearby_{latitude:.5f}_{longitude:.5f}_{radius}_{limit}"
         cached_json = nearby_issues_cache.get(cache_key)
         if cached_json:
             return Response(content=cached_json, media_type="application/json")
@@ -375,12 +377,13 @@ def get_nearby_issues(
             for issue, distance in nearby_issues_with_distance[:limit]
         ]
 
-        # Performance Boost: Cache serialized JSON to bypass redundant Pydantic validation
-        # and serialization on cache hits.
-        json_data = json.dumps([r.model_dump(mode='json') for r in nearby_responses])
-        nearby_issues_cache.set(json_data, cache_key)
+        # Update cache
+        # Optimize: Cache serialized JSON string to avoid serialization overhead on subsequent requests
+        data_dicts = [m.model_dump(mode='json') for m in nearby_responses]
+        json_content = json.dumps(data_dicts, default=str)
+        nearby_issues_cache.set(json_content, cache_key)
 
-        return Response(content=json_data, media_type="application/json")
+        return Response(content=json_content, media_type="application/json")
 
     except Exception as e:
         logger.error(f"Error getting nearby issues: {e}", exc_info=True)
@@ -729,8 +732,8 @@ def get_recent_issues(
     category: str = Query(None, description="Filter issues by category"),
     db: Session = Depends(get_db)
 ):
-    # Added category to cache key to support filtering (Issue #FEAT-002)
-    cache_key = f"v2_recent_issues_{limit}_{offset}_{category or 'all'}"
+    # v2: cache JSON string to avoid conflicts with v1 list data and ensure safe typing
+    cache_key = f"v2_recent_issues_{limit}_{offset}"
     cached_json = recent_issues_cache.get(cache_key)
     if cached_json:
         return Response(content=cached_json, media_type="application/json")
@@ -775,8 +778,8 @@ def get_recent_issues(
             "longitude": row.longitude
         })
 
-    # Performance Boost: Cache serialized JSON to bypass redundant Pydantic validation
-    # and serialization on cache hits. Returning Response directly is ~2-3x faster.
-    json_data = json.dumps(data)
-    recent_issues_cache.set(json_data, cache_key)
-    return Response(content=json_data, media_type="application/json")
+    # Thread-safe cache update
+    # Optimize: Cache serialized JSON string to avoid serialization overhead on subsequent requests
+    json_content = json.dumps(data, default=str)
+    recent_issues_cache.set(json_content, cache_key)
+    return Response(content=json_content, media_type="application/json")
