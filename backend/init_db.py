@@ -1,8 +1,8 @@
 import sys
 import os
+import logging
 from pathlib import Path
 from sqlalchemy import text
-import logging
 
 # Add project root to path
 current_file = Path(__file__).resolve()
@@ -91,6 +91,27 @@ def migrate_db():
             try:
                 conn.execute(text("ALTER TABLE issues ADD COLUMN previous_integrity_hash VARCHAR"))
                 print("Migrated database: Added previous_integrity_hash column.")
+            except Exception:
+                pass
+
+            # Add previous_integrity_hash column for blockchain chaining
+            try:
+                conn.execute(text("ALTER TABLE issues ADD COLUMN previous_integrity_hash VARCHAR"))
+                print("Migrated database: Added previous_integrity_hash column.")
+            except Exception:
+                pass
+
+            # Add parent_issue_id column for duplicate tracking
+            try:
+                conn.execute(text("ALTER TABLE issues ADD COLUMN parent_issue_id INTEGER"))
+                print("Migrated database: Added parent_issue_id column.")
+            except Exception:
+                pass
+
+            # Add index on parent_issue_id
+            try:
+                conn.execute(text("CREATE INDEX ix_issues_parent_issue_id ON issues (parent_issue_id)"))
+                print("Migrated database: Added index on parent_issue_id column.")
             except Exception:
                 pass
 

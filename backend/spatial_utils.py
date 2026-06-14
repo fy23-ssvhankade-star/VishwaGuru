@@ -3,6 +3,7 @@ Spatial utilities for geospatial operations and deduplication.
 """
 import math
 from typing import List, Tuple, Optional
+
 try:
     from sklearn.cluster import DBSCAN
     import numpy as np
@@ -146,9 +147,7 @@ def cluster_issues_dbscan(issues: List[Issue], eps_meters: float = 30.0) -> List
         List of clusters, where each cluster is a list of Issue objects
     """
     if not HAS_SKLEARN:
-        logger.warning("Scikit-learn not available, returning unclustered issues.")
-        # Return each issue as its own cluster to ensure visibility
-        return [[issue] for issue in issues if issue.latitude is not None and issue.longitude is not None]
+        return [[issue] for issue in issues] # Fallback: each issue is its own cluster
 
     # Filter issues with valid coordinates
     valid_issues = [

@@ -3,7 +3,6 @@ try:
     HAS_JOBLIB = True
 except ImportError:
     HAS_JOBLIB = False
-
 import os
 import logging
 
@@ -18,7 +17,7 @@ class GrievanceClassifier:
 
     def load_model(self):
         if not HAS_JOBLIB:
-            logger.warning("Joblib not available, skipping grievance model load.")
+            logger.warning("joblib not available. Cannot load grievance model.")
             return
 
         if os.path.exists(MODEL_PATH):
