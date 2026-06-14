@@ -8,6 +8,7 @@
 [build.environment]
   NODE_VERSION = "20"
   CI = "false"
+  NPM_FLAGS = "--no-audit --no-fund"
 
 # Environment variables (set these in Netlify dashboard)
 # VITE_API_URL = https://your-backend.onrender.com

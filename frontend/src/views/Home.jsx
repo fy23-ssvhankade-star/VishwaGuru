@@ -2,7 +2,8 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { AnimatePresence } from 'framer-motion';
+// eslint-disable-next-line no-unused-vars
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertTriangle, MapPin, Search, Activity, Camera, Trash2, ThumbsUp, Brush,
   Droplets, Zap, Truck, Flame, Dog, XCircle, Lightbulb, TreeDeciduous, Bug,
