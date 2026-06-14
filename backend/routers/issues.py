@@ -181,33 +181,20 @@ async def create_issue(
         hash_content = f"{description}|{category}|{prev_hash}"
         integrity_hash = hashlib.sha256(hash_content.encode()).hexdigest()
 
-        # Determine status and parent link based on deduplication
-        issue_status = "open"
-        current_parent_id = None
-
-        if deduplication_info and deduplication_info.has_nearby_issues:
-            issue_status = "duplicate"
-            current_parent_id = linked_issue_id
-
-        new_issue = Issue(
-            reference_id=str(uuid.uuid4()),
-            description=description,
-            category=category,
-            image_path=image_path,
-            source="web",
-            status=issue_status,
-            user_email=user_email,
-            latitude=latitude,
-            longitude=longitude,
-            location=location,
-            action_plan=None,
-            integrity_hash=integrity_hash,
-            previous_integrity_hash=prev_hash,
-            parent_issue_id=current_parent_id
-        )
-
-        # Offload blocking DB operations to threadpool
-        await run_in_threadpool(save_issue_db, db, new_issue)
+            new_issue = Issue(
+                reference_id=str(uuid.uuid4()),
+                description=description,
+                category=category,
+                image_path=image_path,
+                source="web",
+                user_email=user_email,
+                latitude=latitude,
+                longitude=longitude,
+                location=location,
+                action_plan=None,
+                integrity_hash=integrity_hash,
+                previous_integrity_hash=prev_hash
+            )
 
     except Exception as e:
         # Clean up uploaded file if DB save failed
@@ -630,24 +617,19 @@ async def verify_blockchain_integrity(issue_id: int, db: Session = Depends(get_d
     # Optimization: Use column projection and limit(2)
     issues = await run_in_threadpool(
         lambda: db.query(
-            Issue.id, Issue.description, Issue.category,
-            Issue.integrity_hash, Issue.previous_integrity_hash
-        ).filter(Issue.id <= issue_id)
-        .order_by(Issue.id.desc())
-        .limit(2)
-        .all()
+            Issue.id, Issue.description, Issue.category, Issue.integrity_hash, Issue.previous_integrity_hash
+        ).filter(Issue.id == issue_id).first()
     )
 
     if not issues or issues[0].id != issue_id:
         raise HTTPException(status_code=404, detail="Issue not found")
 
-    current_issue = issues[0]
-    # Predecessor is the second item if it exists
-    prev_issue = issues[1] if len(issues) > 1 else None
-    actual_prev_hash = prev_issue.integrity_hash if prev_issue else ""
+    # Use stored previous hash for verification (robust against deletions)
+    prev_hash = current_issue.previous_integrity_hash or ""
 
-    # Recompute hash based on current data and actual predecessor hash
-    hash_content = f"{current_issue.description}|{current_issue.category}|{actual_prev_hash}"
+    # Recompute hash based on current data and previous hash
+    # Chaining logic: hash(description|category|prev_hash)
+    hash_content = f"{current_issue.description}|{current_issue.category}|{prev_hash}"
     computed_hash = hashlib.sha256(hash_content.encode()).hexdigest()
 
     # Integrity is valid if:

@@ -29,10 +29,14 @@ def init_db():
 def migrate_db():
     """
     Perform database migrations.
-    This is an idempotent migration strategy using raw SQL.
+    This is a simple MVP migration strategy.
+    Wraps entire process in try-except to prevent app crash on startup if DB is locked/unavailable.
     """
     try:
+        # Check connection first
         with engine.connect() as conn:
+            logger.info("Database connection successful for migration check.")
+
             # Check for upvotes column and add if missing
             try:
                 conn.execute(text("ALTER TABLE issues ADD COLUMN upvotes INTEGER DEFAULT 0"))
@@ -138,6 +142,27 @@ def migrate_db():
             except Exception:
                 pass
 
+            # Add parent_issue_id column
+            try:
+                conn.execute(text("ALTER TABLE issues ADD COLUMN parent_issue_id INTEGER"))
+                print("Migrated database: Added parent_issue_id column.")
+            except Exception:
+                pass
+
+            # Add previous_integrity_hash column
+            try:
+                conn.execute(text("ALTER TABLE issues ADD COLUMN previous_integrity_hash VARCHAR"))
+                print("Migrated database: Added previous_integrity_hash column.")
+            except Exception:
+                pass
+
+            # Add index on parent_issue_id
+            try:
+                conn.execute(text("CREATE INDEX ix_issues_parent_issue_id ON issues (parent_issue_id)"))
+                logger.info("Migrated database: Added index on parent_issue_id column.")
+            except Exception:
+                pass
+
             # Add index on user_email
             try:
                 conn.execute(text("CREATE INDEX ix_issues_user_email ON issues (user_email)"))
@@ -224,10 +249,6 @@ def migrate_db():
             conn.commit()
             logger.info("Database migration check completed.")
     except Exception as e:
-        logger.error(f"Database migration error: {e}")
-
-if __name__ == "__main__":
-    # Ensure logging is visible when run as script
-    logging.basicConfig(level=logging.INFO)
-    init_db()
-    migrate_db()
+        logger.error(f"Database migration error (Non-fatal): {e}")
+        # We catch the exception but do NOT re-raise it, allowing the app to start
+        # even if migration fails (e.g., due to temporary DB issues or schema conflicts)
