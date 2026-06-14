@@ -24,10 +24,12 @@ def validate_environment():
             missing_vars.append(var)
 
     if missing_vars:
-        print("⚠️  Warning: Missing required environment variables:")
+        print("❌ Missing required environment variables:")
         for var in missing_vars:
             print(f"   - {var}")
-        print("\nThe application may not function correctly. Please set these variables.")
+        print("\nPlease set these variables or create a .env file.")
+        print("See backend/.env.example for reference.")
+        return False
 
     # Set defaults for optional variables
     if not os.getenv("DATABASE_URL"):
@@ -58,7 +60,9 @@ def main():
     """Main startup function"""
     print("🚀 Starting VishwaGuru Backend")
 
-    validate_environment()
+    if not validate_environment():
+        sys.exit(1)
+
     create_data_directory()
 
     # Get port from environment or default to 8000

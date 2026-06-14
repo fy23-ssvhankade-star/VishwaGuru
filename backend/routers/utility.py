@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import func, case
+from sqlalchemy import func
 from datetime import datetime, timezone
 import logging
 
@@ -17,6 +17,7 @@ from backend.ai_service import chat_with_civic_assistant
 from backend.gemini_services import get_ai_services
 from backend.maharashtra_locator import (
     find_constituency_by_pincode,
+    find_mla_by_constituency,
     find_mla_by_constituency
 )
 
@@ -48,36 +49,18 @@ def health():
 
 @router.get("/api/stats", response_model=StatsResponse)
 def get_stats(db: Session = Depends(get_db)):
-    """
-    Get aggregate statistics for the dashboard.
-    Optimized: Uses conditional aggregation to fetch all counts in a single query.
-    (Bolt: Reduces DB roundtrips by ~66% for this endpoint)
-    """
     cached_stats = recent_issues_cache.get("stats")
     if cached_stats:
         return JSONResponse(content=cached_stats)
 
-    # Bolt Optimization: Fetch category and status counts in a single grouped query
-    # to avoid 3 separate database roundtrips.
-    counts = db.query(
-        Issue.category, Issue.status, func.count(Issue.id)
-    ).group_by(Issue.category, Issue.status).all()
-
-    total = 0
-    resolved = 0
-    issues_by_category = {}
-
-    for cat, status, count in counts:
-        # Map None category to 'Uncategorized' for Dict[str, int] schema compliance
-        cat_name = cat if cat else "Uncategorized"
-
-        total += count
-        if status in ['resolved', 'verified']:
-            resolved += count
-
-        issues_by_category[cat_name] = issues_by_category.get(cat_name, 0) + count
-
+    total = db.query(func.count(Issue.id)).scalar()
+    resolved = db.query(func.count(Issue.id)).filter(Issue.status.in_(['resolved', 'verified'])).scalar()
+    # Pending is everything else
     pending = total - resolved
+
+    # By category
+    cat_counts = db.query(Issue.category, func.count(Issue.id)).group_by(Issue.category).all()
+    issues_by_category = {cat: count for cat, count in cat_counts}
 
     response = StatsResponse(
         total_issues=total,
@@ -87,7 +70,6 @@ def get_stats(db: Session = Depends(get_db)):
     )
 
     data = response.model_dump(mode='json')
-    # Note: ThreadSafeCache uses set(data, key) signature.
     recent_issues_cache.set(data, "stats")
 
     return response
@@ -99,23 +81,10 @@ async def ml_status():
     Returns information about which backend is being used (local or HF API).
     """
     status = await get_detection_status()
-
-    # Map UnifiedDetectionService status to MLStatusResponse schema
-    active_backend = status.get("active_backend") or "none"
-
-    # Determine models loaded based on active backend
-    models = []
-    if active_backend == "local":
-        details = status.get("local_backend", {}).get("details", {})
-        if details.get("model_loaded"):
-            models.append("yolov8n")
-    elif active_backend == "huggingface":
-        models.append("clip-vit-base-patch32")
-
     return MLStatusResponse(
-        status="ok" if active_backend != "none" else "degraded",
-        models_loaded=models,
-        memory_usage={"active_backend": active_backend}
+        status="ok",
+        models_loaded=status.get("models_loaded", []),
+        memory_usage=status.get("memory_usage")
     )
 
 @router.post("/api/chat", response_model=ChatResponse)
@@ -167,7 +136,6 @@ def get_leaderboard(db: Session = Depends(get_db)):
 
     response_data = {"leaderboard": leaderboard_data}
     # Cache for 5 minutes to reduce DB load on frequent hits
-    # Note: ThreadSafeCache uses set(data, key) signature.
     recent_issues_cache.set(response_data, cache_key)
 
     return response_data

@@ -8,13 +8,12 @@ psycopg2-binary
 async-lru
 huggingface-hub
 httpx
-# python-magic - removed to avoid libmagic dependency issues on Render
 pywebpush
 Pillow
 firebase-functions
 firebase-admin
 a2wsgi
 scikit-learn
-numpy<2.0.0
+numpy
 python-jose[cryptography]
 passlib[bcrypt]

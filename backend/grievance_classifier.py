@@ -1,13 +1,8 @@
+import joblib
 import os
 import logging
 
 logger = logging.getLogger(__name__)
-
-try:
-    import joblib
-    HAS_JOBLIB = True
-except ImportError:
-    HAS_JOBLIB = False
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), 'ml/grievance_model.joblib')
 
@@ -17,10 +12,6 @@ class GrievanceClassifier:
         self._initialized = False
 
     def load_model(self):
-        if not HAS_JOBLIB:
-            logger.warning("GrievanceClassifier: joblib not installed, model loading skipped")
-            return
-
         if os.path.exists(MODEL_PATH):
             try:
                 self.model = joblib.load(MODEL_PATH)

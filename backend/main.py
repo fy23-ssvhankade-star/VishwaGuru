@@ -117,15 +117,23 @@ for exception_type, handler in EXCEPTION_HANDLERS.items():
     app.add_exception_handler(exception_type, handler)
 
 # CORS Configuration - Security Enhanced
-frontend_url = os.environ.get("FRONTEND_URL", "").strip()
+frontend_url = os.environ.get("FRONTEND_URL")
 is_production = os.environ.get("ENVIRONMENT", "").lower() == "production"
 
 if not frontend_url:
-    logger.warning("FRONTEND_URL not set. Defaulting to http://localhost:5173.")
-    frontend_url = "http://localhost:5173"
+    if is_production:
+        raise ValueError(
+            "FRONTEND_URL environment variable is required for security in production. "
+            "Set it to your frontend URL (e.g., https://your-app.netlify.app)."
+        )
+    else:
+        logger.warning("FRONTEND_URL not set. Defaulting to http://localhost:5173 for development.")
+        frontend_url = "http://localhost:5173"
 
 if not (frontend_url.startswith("http://") or frontend_url.startswith("https://")):
-    logger.error(f"Invalid FRONTEND_URL: {frontend_url}. CORS might not work correctly.")
+    raise ValueError(
+        f"FRONTEND_URL must be a valid HTTP/HTTPS URL. Got: {frontend_url}"
+    )
 
 allowed_origins = [frontend_url]
 
@@ -156,3 +164,15 @@ app.include_router(grievances.router, tags=["Grievances"])
 app.include_router(utility.router, tags=["Utility"])
 app.include_router(auth.router, tags=["Authentication"])
 app.include_router(admin.router)
+
+@app.get("/health")
+def health():
+    return {"status": "healthy"}
+
+@app.get("/")
+def root():
+    return {
+        "status": "ok",
+        "service": "VishwaGuru API",
+        "version": "1.0.0"
+    }
