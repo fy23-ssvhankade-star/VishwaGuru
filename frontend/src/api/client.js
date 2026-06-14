@@ -44,26 +44,21 @@ export const apiClient = {
     return null;
   },
   post: async (endpoint, data) => {
-    try {
-      const response = await fetch(`${API_URL}${endpoint}`, {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify(data),
-      });
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const message = errorData.detail || `HTTP error! status: ${response.status}`;
-        throw new Error(message);
-      }
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        return response.json();
-      }
-      return null;
-    } catch (error) {
-      console.error(`API POST Error [${endpoint}]:`, error);
-      throw error;
+    const response = await fetch(`${API_URL}${endpoint}`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const message = errorData.detail || `HTTP error! status: ${response.status}`;
+      throw new Error(message);
     }
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      return response.json();
+    }
+    return null;
   },
   // For file uploads (FormData)
   postForm: async (endpoint, formData) => {

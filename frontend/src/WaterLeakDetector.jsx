@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { detectorsApi } from './api/detectors';
+
+const API_URL = import.meta.env.VITE_API_URL || '';
 
 const WaterLeakDetector = ({ onBack }) => {
     const videoRef = useRef(null);
@@ -76,8 +77,13 @@ const WaterLeakDetector = ({ onBack }) => {
             formData.append('image', blob, 'frame.jpg');
 
             try {
-                const data = await detectorsApi.waterLeak(formData);
-                if (data.detections) {
+                const response = await fetch(`${API_URL}/api/detect-water-leak`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
                     drawDetections(data.detections, context);
                 }
             } catch (err) {

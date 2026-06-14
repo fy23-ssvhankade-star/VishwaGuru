@@ -1,8 +1,4 @@
-try:
-    import joblib
-    HAS_JOBLIB = True
-except ImportError:
-    HAS_JOBLIB = False
+import joblib
 import os
 import logging
 
@@ -16,16 +12,11 @@ class GrievanceClassifier:
         self._initialized = False
 
     def load_model(self):
-        if not HAS_JOBLIB:
-            logger.warning("joblib not available. Cannot load grievance model.")
-            return
-
         if os.path.exists(MODEL_PATH):
             try:
                 self.model = joblib.load(MODEL_PATH)
                 logger.info("Grievance model loaded successfully.")
             except Exception as e:
-                # This catches both ImportError (missing sklearn) and other load errors
                 logger.error(f"Failed to load grievance model: {e}")
                 self.model = None
         else:
@@ -34,10 +25,7 @@ class GrievanceClassifier:
     def predict(self, text: str):
         if not self.model:
             # Try reloading if it failed previously or file was created later
-            # Only try if we have joblib
-            if HAS_JOBLIB:
-                self.load_model()
-
+            self.load_model()
             if not self.model:
                 return "Unknown (Model Unavailable)"
 

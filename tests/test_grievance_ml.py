@@ -23,8 +23,7 @@ def client():
     # Mock lifespan events to prevent heavy initialization
     with patch("backend.main.create_all_ai_services") as mock_create, \
          patch("backend.main.initialize_ai_services") as mock_init, \
-         patch("backend.main.start_bot_thread") as mock_bot, \
-         patch("backend.main.stop_bot_thread") as mock_stop_bot, \
+         patch("backend.main.run_bot") as mock_bot, \
          patch("backend.main.httpx.AsyncClient", return_value=mock_client_instance) as mock_http, \
          patch("backend.main.migrate_db"), \
          patch("backend.main.load_maharashtra_pincode_data"), \
@@ -35,26 +34,28 @@ def client():
         with TestClient(app) as client:
             yield client
 
-def test_classifier_loading_graceful():
-    """Test that classifier handles loading failures gracefully"""
-    # Force unload
+def test_classifier_loading():
     classifier = get_grievance_classifier()
-    classifier.model = None
+    # It might be None if file not found, but we ran the training script so it should be there.
+    assert classifier.model is not None
 
-    # Try to load (it might fail if dependencies missing, but shouldn't raise)
+def test_classifier_prediction():
+    classifier = get_grievance_classifier()
+    # Force reload just in case
     classifier.load_model()
 
-    # If model is not None, it loaded. If None, it handled failure.
-    assert classifier.model is None or classifier.model is not None
+    # "Dirty water coming from tap" -> Water (validated in script run)
+    pred = classifier.predict("Dirty water coming from tap")
+    assert pred == "Water"
 
-def test_classifier_prediction_fallback():
-    """Test prediction fallback when model is unavailable"""
-    classifier = get_grievance_classifier()
+    # "Potholes everywhere" -> Roads (validated logic)
+    pred = classifier.predict("Potholes everywhere")
+    assert pred == "Roads"
 
-    # Simulate missing model
-    classifier.model = None
-    with patch("backend.grievance_classifier.HAS_JOBLIB", False):
-        pred = classifier.predict("Dirty water coming from tap")
-        assert pred == "Unknown (Model Unavailable)"
-
-# Removed test_endpoint as the endpoint /api/classify-grievance does not exist
+def test_endpoint(client):
+    response = client.post("/api/classify-grievance", json={"text": "Street lights are broken"})
+    assert response.status_code == 200
+    data = response.json()
+    assert "category" in data
+    # "Street lights" -> Electricity
+    assert data["category"] == "Electricity"

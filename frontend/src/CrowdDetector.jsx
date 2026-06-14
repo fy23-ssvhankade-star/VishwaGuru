@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { detectorsApi } from './api/detectors';
+
+const API_URL = import.meta.env.VITE_API_URL || '';
 
 const CrowdDetector = ({ onBack }) => {
     const videoRef = useRef(null);
@@ -76,8 +77,13 @@ const CrowdDetector = ({ onBack }) => {
             formData.append('image', blob, 'frame.jpg');
 
             try {
-                const data = await detectorsApi.crowd(formData);
-                if (data.detections) {
+                const response = await fetch(`${API_URL}/api/detect-crowd`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
                     drawDetections(data.detections, context);
                 }
             } catch (err) {
