@@ -4,7 +4,7 @@
 VishwaGuru is an AI-powered platform designed to help users analyze issues and generate actionable solutions using modern web technologies and AI models.
 
 ---
-
+=
 ## ✨ Features
 
 - 🤖 AI-generated action plans using Google Gemini
