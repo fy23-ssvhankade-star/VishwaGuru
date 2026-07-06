@@ -1,0 +1,2 @@
+# Informational only — actual merge gating is handled by auto-merge-jules.yml
+# checking github.event.pull_request.user.login

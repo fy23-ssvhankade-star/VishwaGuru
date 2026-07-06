@@ -1,0 +1,28 @@
+name: Jules Daily Auto-Upgrade
+
+on:
+  schedule:
+    - cron: '30 3 * * *'   # 9:00 AM IST daily (GitHub cron runs in UTC)
+  workflow_dispatch:
+
+jobs:
+  trigger-jules:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Trigger Jules session
+        run: |
+          curl -sS -X POST 'https://jules.googleapis.com/v1alpha/sessions' \
+            -H "X-Goog-Api-Key: ${{ secrets.JULES_API_KEY }}" \
+            -H 'Content-Type: application/json' \
+            -d "$(jq -n \
+              --arg prompt "${{ secrets.JULES_PROMPT }}" \
+              --arg repo "sources/github/${{ github.repository }}" \
+              '{
+                prompt: $prompt,
+                sourceContext: { source: $repo, githubRepoContext: { startingBranch: "main" } },
+                automationMode: "AUTO_CREATE_PR",
+                title: "Daily Auto-Upgrade"
+              }')"
